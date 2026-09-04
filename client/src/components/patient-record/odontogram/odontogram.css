@@ -1,0 +1,253 @@
+/* DentalNova Odontogram — layout & typography refinements only.
+   Tooth SVG artwork is unchanged. Layout: shape -> FDI -> treatment(s). */
+
+.do-chart {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 8px 4px 10px;
+}
+
+.do-arch {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 0;
+}
+
+.do-quadrant {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 6px;
+}
+.do-quadrant--right {
+  justify-content: flex-end;
+}
+.do-quadrant--left {
+  justify-content: flex-start;
+}
+
+.do-vline {
+  width: 0;
+  flex-shrink: 0;
+  align-self: stretch;
+  border-left: 2px solid #cbd5e1;
+  margin: 4px 16px;
+}
+
+/* ── One tooth column ── */
+.do-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  flex: 0 0 auto;
+  box-sizing: border-box;
+}
+
+/* Anterior teeth — slightly more horizontal breathing room. */
+.do-cell--incisor {
+  margin-inline: 3px;
+}
+.do-cell--canine {
+  margin-inline: 2px;
+}
+/* Midline centrals — tiny extra gap toward the suture. */
+.do-cell--midline.do-cell--incisor {
+  margin-inline: 4px;
+}
+
+.do-cell__graphic-slot {
+  width: 100%;
+  display: flex;
+  flex-shrink: 0;
+  justify-content: center;
+}
+.do-cell--upper .do-cell__graphic-slot {
+  align-items: flex-end;
+}
+.do-cell--lower .do-cell__graphic-slot {
+  align-items: flex-start;
+}
+
+.do-cell__btn {
+  width: auto;
+  max-width: 100%;
+  padding: 0;
+  margin: 0;
+  border: 2px solid transparent;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.9);
+  cursor: default;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+  overflow: visible;
+  transition: border-color 0.12s ease, background 0.12s ease, box-shadow 0.12s ease;
+}
+.do-cell__btn--selectable {
+  cursor: pointer;
+}
+.do-cell__btn--selectable:hover {
+  background: rgba(59, 123, 255, 0.07);
+  border-color: rgba(37, 99, 235, 0.2);
+}
+.do-cell__btn--selected {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.08);
+  box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.22);
+}
+
+.do-graphic {
+  display: block;
+  pointer-events: none;
+  flex-shrink: 0;
+}
+.do-graphic > svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+  overflow: visible;
+}
+/* ZoliQua default tooth colors — cosmetic only, paths unchanged */
+.do-graphic #tooth-base {
+  fill: #ebebeb;
+  stroke: #c8c9c9;
+  stroke-width: 1;
+  stroke-miterlimit: 10;
+}
+.do-graphic #tooth-base-beauty {
+  fill: #fefefe;
+  stroke: none;
+}
+.do-graphic #tooth-healthy-pulp {
+  fill: #fcc5bc;
+  stroke: none;
+}
+.do-cell__btn--selectable:hover .do-graphic #tooth-base,
+.do-cell__btn--selected .do-graphic #tooth-base,
+.do-graphic--selected #tooth-base {
+  fill: #e8eeff;
+  stroke: #94a3b8;
+}
+
+/* FDI + treatments — aligned label column under each tooth */
+.do-cell__labels {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 4px;
+  min-height: 16px;
+}
+
+.do-cell__num {
+  width: 100%;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #334155;
+  line-height: 1.2;
+  letter-spacing: 0;
+}
+.do-cell--selected .do-cell__num {
+  color: #2563eb;
+}
+
+.do-cell__treatments {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  width: 100%;
+  margin-top: 4px;
+  padding: 0 2px;
+}
+.do-cell__tx {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.do-cell__tx-check {
+  margin-inline-start: 2px;
+  font-weight: 800;
+}
+
+@media (max-width: 1100px) {
+  .do-arch {
+    min-width: 0;
+  }
+  .do-cell__num {
+    font-size: 12px;
+  }
+  .do-cell__tx {
+    font-size: 10px;
+  }
+}
+
+/* Standalone odontogram preview page */
+.odontogram-preview-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 20px 48px;
+}
+.odontogram-preview-page__header h1 {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+}
+.odontogram-preview-page__header .muted {
+  margin: 0;
+  font-size: 0.9rem;
+  color: #64748b;
+}
+.odontogram-preview-page__reference {
+  margin-top: 24px;
+}
+.odontogram-preview-page__reference h2 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+.odontogram-preview-page__reference-frame {
+  width: 100%;
+  height: 420px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  background: #fff;
+}
+.odontogram-preview-page__chart {
+  margin-top: 24px;
+  padding: 20px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}
+.odontogram-preview-page__strip {
+  margin-top: 32px;
+}
+.odontogram-preview-page__strip h2 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+.odontogram-preview-page__strip-inner {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 16px;
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+}

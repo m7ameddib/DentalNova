@@ -1,0 +1,21 @@
+{
+  "name": "dnt-dental",
+  "version": "1.1.2",
+  "private": true,
+  "description": "DNT Dental Clinic Management System",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev:server": "npm run start:dev --workspace=server",
+    "dev:client": "npm run dev --workspace=client",
+    "build:server": "npm run build --workspace=server",
+    "build:client": "npm run build --workspace=client",
+    "build": "npm run build:server && npm run build:client",
+    "typecheck:server": "npm run typecheck --workspace=server",
+    "typecheck:client": "npm run typecheck --workspace=client",
+    "typecheck": "npm run typecheck:server && npm run typecheck:client",
+    "seed": "npm run seed --workspace=server"
+  }
+}

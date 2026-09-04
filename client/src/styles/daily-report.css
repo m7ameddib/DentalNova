@@ -1,0 +1,73 @@
+
+/* ===== Daily Report ===== */
+.daily-report-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 1200px;
+}
+.daily-report-page__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.daily-report-page__header h1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 1.35rem;
+}
+.daily-report-page__actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.daily-report-page__date {
+  margin: -8px 0 0;
+}
+.daily-report-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+}
+.daily-report-summary__card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.daily-report-summary__value {
+  font-size: 1.25rem;
+  font-weight: 700;
+}
+.daily-report-summary__label {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.daily-report-section h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  font-size: 1rem;
+}
+.daily-report-total {
+  margin-top: 10px;
+  font-size: 14px;
+}
+.daily-report-followup-totals {
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+
+@media (max-width: 800px) {
+  .daily-report-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

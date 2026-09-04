@@ -1,0 +1,824 @@
+/*
+ * DNT Dental — unified A5 print design system
+ * Default: A5 portrait. Wide tabular reports use .print-doc--landscape.
+ */
+
+@page {
+  size: A5 portrait;
+  margin: 8mm 9mm 10mm;
+}
+
+@page landscape {
+  size: A5 landscape;
+  margin: 7mm 9mm 8mm;
+}
+
+/* ---------- Print portal (hidden on screen) ---------- */
+
+.receipt-print-only {
+  display: none;
+}
+
+@media print {
+  html,
+  body {
+    width: auto;
+    height: auto;
+    margin: 0;
+    padding: 0;
+    background: #fff !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  body * {
+    visibility: hidden;
+  }
+
+  .receipt-print-only,
+  .receipt-print-only * {
+    visibility: visible;
+  }
+
+  .receipt-print-only {
+    display: block !important;
+    position: absolute;
+    inset-inline-start: 0;
+    top: 0;
+    width: 100%;
+  }
+
+  /*
+   * Hide app chrome so it doesn't reserve blank space on the printed page.
+   * IMPORTANT: target the chrome elements themselves, never `.app-shell`
+   * (their container) — `.receipt-print-only` (the actual print target,
+   * rendered by PrintPortal) lives inside `.app-shell` too, and `display:
+   * none` on an ancestor would hide it along with everything else,
+   * producing a blank report body.
+   */
+  .top-nav,
+  .app-shell__content,
+  .app-shell__footer,
+  .modal-overlay,
+  .btn,
+  .icon-btn,
+  .form-actions,
+  .prescription-builder__catalog,
+  .prescription-builder__actions,
+  .prescription-preview-item__header button,
+  .prescription-preview-item input,
+  .prescription-preview-item label,
+  .prescription-live-preview__empty {
+    display: none !important;
+  }
+}
+
+/* ---------- Document shell ---------- */
+
+.print-doc {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 148mm;
+  margin: 0 auto;
+  padding: 0;
+  color: var(--print-text, #1a2b32);
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 9pt;
+  line-height: 1.35;
+}
+
+.print-doc--landscape {
+  max-width: 210mm;
+}
+
+@media print {
+  .print-doc {
+    max-width: none;
+    width: 100%;
+  }
+
+  .print-doc--landscape {
+    page: landscape;
+  }
+
+  .print-doc--portrait {
+    page: auto;
+  }
+}
+
+/* On-screen preview (prescription builder, etc.) */
+.print-doc--preview {
+  background: #fff;
+  border: 1px solid var(--print-border, #c5d4d8);
+  border-radius: 4px;
+  padding: 10mm 9mm;
+  box-shadow: 0 1px 4px rgba(26, 43, 50, 0.08);
+}
+
+.print-doc--preview.print-doc--landscape {
+  max-width: 100%;
+}
+
+/* Prescription builder live preview */
+.prescription-live-preview-card .print-doc--preview {
+  min-height: 280px;
+}
+
+.prescription-live-preview__items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 4mm;
+}
+
+.prescription-preview-item {
+  border: 1px solid var(--print-border, #c5d4d8);
+  border-radius: 3px;
+  padding: 8px 10px;
+  background: #fafcfd;
+}
+
+.prescription-preview-item__header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.prescription-preview-item__name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 9pt;
+  border: 1px solid #dde8eb;
+  border-radius: 3px;
+  padding: 4px 6px;
+}
+
+.prescription-preview-item__grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+@media print {
+  .prescription-preview-item {
+    border: none;
+    padding: 0;
+    background: transparent;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  .prescription-preview-item__name {
+    border: none;
+    padding: 0;
+    font-weight: 600;
+  }
+}
+
+/* ---------- Header ---------- */
+
+.print-header {
+  margin-bottom: 6mm;
+  padding-bottom: 3mm;
+  border-bottom: 2px solid var(--print-accent, #156572);
+}
+
+.print-header__brand {
+  display: flex;
+  align-items: center;
+  gap: 4mm;
+  margin-bottom: 3mm;
+}
+
+.print-header__logo {
+  max-height: 14mm;
+  max-width: 32mm;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.print-header__clinic-name {
+  margin: 0;
+  font-size: 12pt;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--print-accent, #156572);
+  line-height: 1.2;
+}
+
+.print-header__clinic-contact {
+  margin: 1mm 0 0;
+  font-size: 7.5pt;
+  color: var(--print-muted, #5a6b73);
+  line-height: 1.3;
+}
+
+.print-header__title-block {
+  text-align: center;
+}
+
+.print-header__title {
+  margin: 0;
+  font-size: 11pt;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--print-text, #1a2b32);
+}
+
+.print-header__meta {
+  margin-top: 2.5mm;
+}
+
+/* ---------- Meta rows ---------- */
+
+.print-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 1mm;
+  font-size: 8pt;
+}
+
+.print-meta--grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1mm 4mm;
+}
+
+.print-meta__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5mm;
+}
+
+.print-meta__label {
+  color: var(--print-muted, #5a6b73);
+  font-weight: 600;
+}
+
+.print-meta__label::after {
+  content: ':';
+}
+
+.print-meta__value {
+  color: var(--print-text, #1a2b32);
+}
+
+.print-meta__date {
+  text-align: center;
+  font-size: 7.5pt;
+  color: var(--print-muted, #5a6b73);
+  margin: -1mm 0 3mm;
+}
+
+.print-note {
+  font-size: 7.5pt;
+  color: var(--print-muted, #5a6b73);
+  font-style: italic;
+  text-align: center;
+  margin: 0 0 3mm;
+  padding: 2mm;
+  background: var(--print-accent-light, #e6f2f4);
+  border-radius: 2px;
+}
+
+/* ---------- Sections ---------- */
+
+.print-section {
+  margin-bottom: 4mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-section__title {
+  margin: 0 0 2mm;
+  padding: 1.5mm 2mm;
+  font-size: 8.5pt;
+  font-weight: 700;
+  color: var(--print-accent, #156572);
+  background: var(--print-accent-light, #e6f2f4);
+  border-inline-start: 3px solid var(--print-accent, #156572);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+/* ---------- Tables ---------- */
+
+.print-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-bottom: 3mm;
+  table-layout: fixed;
+  font-size: 7.5pt;
+}
+
+.print-table--compact {
+  font-size: 7pt;
+}
+
+.print-table thead {
+  display: table-header-group;
+}
+
+.print-table th {
+  background: var(--print-accent, #156572);
+  color: #fff;
+  font-weight: 600;
+  text-align: start;
+  padding: 1.5mm 2mm;
+  border: 1px solid #125a66;
+  vertical-align: middle;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.print-table td {
+  padding: 1.5mm 2mm;
+  border: 1px solid var(--print-border, #c5d4d8);
+  vertical-align: top;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
+.print-table tbody tr:nth-child(even) td {
+  background: #f7fafb;
+}
+
+.print-table tbody tr {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+
+.print-table .muted,
+.print-table td.muted {
+  text-align: center;
+  color: var(--print-muted, #5a6b73);
+  font-style: italic;
+}
+
+@media print {
+  .print-table thead {
+    display: table-header-group;
+  }
+
+  .print-table tr {
+    page-break-inside: avoid;
+  }
+}
+
+/* ---------- Totals ---------- */
+
+.print-totals {
+  margin: 3mm 0 4mm;
+  padding: 2.5mm 3mm;
+  border: 1px solid var(--print-border, #c5d4d8);
+  border-radius: 2px;
+  background: #fafcfd;
+}
+
+.print-totals__row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4mm;
+  padding: 1mm 0;
+  font-size: 8pt;
+  border-bottom: 1px dashed #dde8eb;
+}
+
+.print-totals__row:last-child {
+  border-bottom: none;
+}
+
+.print-totals__label {
+  color: var(--print-muted, #5a6b73);
+  font-weight: 600;
+}
+
+.print-totals__value {
+  font-weight: 600;
+  color: var(--print-text, #1a2b32);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.print-totals__row--emphasis .print-totals__label,
+.print-totals__row--emphasis .print-totals__value {
+  font-weight: 700;
+  font-size: 8.5pt;
+  color: var(--print-accent, #156572);
+}
+
+.print-totals__row--balance {
+  margin-top: 1mm;
+  padding-top: 2mm;
+  border-top: 2px solid var(--print-accent, #156572);
+  border-bottom: none;
+}
+
+.print-totals__row--balance .print-totals__label,
+.print-totals__row--balance .print-totals__value {
+  font-weight: 700;
+  font-size: 9pt;
+  color: var(--print-accent, #156572);
+}
+
+/* ---------- Footer ---------- */
+
+.print-footer {
+  margin-top: 5mm;
+  padding-top: 2.5mm;
+  border-top: 1px solid var(--print-border, #c5d4d8);
+  text-align: center;
+}
+
+.print-footer__note {
+  margin: 0 0 1.5mm;
+  font-size: 8pt;
+  color: var(--print-text, #1a2b32);
+}
+
+.print-footer__brand {
+  margin: 0;
+  font-size: 6.5pt;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--print-muted, #5a6b73);
+}
+
+/* ---------- Prescription sheet (A5 portrait) ---------- */
+
+.prescription-sheet {
+  position: relative;
+  min-height: 130mm;
+  padding: 2mm 1mm;
+  font-size: 10pt;
+  line-height: 1.5;
+  color: var(--print-text, #1a2b32);
+}
+
+.prescription-sheet--medication {
+  font-size: 11pt;
+}
+
+.prescription-sheet__watermark {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  color: var(--print-accent, #156572);
+  opacity: 0.06;
+}
+
+.prescription-sheet__watermark svg {
+  width: 42mm;
+  height: 42mm;
+}
+
+.prescription-sheet__header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4mm;
+  margin-bottom: 4mm;
+  padding-bottom: 2mm;
+  border-bottom: 1.5px solid var(--print-accent, #156572);
+}
+
+.prescription-sheet__header-col--ltr {
+  text-align: start;
+}
+
+.prescription-sheet__header-col--rtl {
+  text-align: end;
+  direction: rtl;
+}
+
+.prescription-sheet__doctor-en,
+.prescription-sheet__doctor-ar {
+  margin: 0 0 1mm;
+  font-size: 10pt;
+  font-weight: 700;
+  color: var(--print-accent, #156572);
+}
+
+.prescription-sheet__title-en,
+.prescription-sheet__title-ar {
+  margin: 0;
+  font-size: 8.5pt;
+  font-weight: 600;
+}
+
+.prescription-sheet__clinic-en,
+.prescription-sheet__clinic-ar {
+  margin: 1mm 0 0;
+  font-size: 7.5pt;
+  color: var(--print-muted, #5a6b73);
+}
+
+.prescription-sheet__patient-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3mm;
+  margin-bottom: 2mm;
+  font-size: 8.5pt;
+}
+
+.prescription-sheet__patient-rtl {
+  text-align: end;
+  direction: rtl;
+}
+
+.prescription-sheet__meta-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 4mm;
+  margin-bottom: 3mm;
+  font-size: 8pt;
+  color: var(--print-muted, #5a6b73);
+}
+
+.prescription-sheet__rx-symbol {
+  font-size: 16pt;
+  font-weight: 700;
+  color: var(--print-accent, #156572);
+  margin-bottom: 2mm;
+}
+
+.prescription-sheet__medicines {
+  margin: 0;
+  padding: 0 0 0 5mm;
+  list-style: decimal;
+}
+
+.prescription-sheet__medicine {
+  margin-bottom: 0;
+  padding-bottom: 3mm;
+  break-inside: avoid;
+}
+
+.prescription-sheet__medicine:not(:last-child) {
+  margin-bottom: 3mm;
+  border-bottom: 1px solid var(--print-border, #c5d4d8);
+}
+
+.prescription-sheet--medication .prescription-sheet__medicine-name {
+  margin: 0 0 1.5mm;
+  font-weight: 700;
+  font-size: 12pt;
+}
+
+.prescription-sheet__medicine-name {
+  margin: 0 0 1mm;
+  font-weight: 700;
+  font-size: 9pt;
+}
+
+.prescription-sheet--medication .prescription-sheet__medicine-details {
+  margin: 0 0 1mm;
+  font-size: 10.5pt;
+  color: var(--print-text, #1a2b32);
+}
+
+.prescription-sheet__medicine-details {
+  margin: 0 0 1mm;
+  font-size: 8pt;
+  color: var(--print-muted, #5a6b73);
+}
+
+.prescription-sheet--medication .prescription-sheet__medicine-instructions {
+  margin: 0;
+  font-size: 10pt;
+  font-style: italic;
+  color: var(--print-text, #1a2b32);
+}
+
+.prescription-sheet__medicine-instructions {
+  margin: 1mm 0 0;
+  font-size: 8pt;
+  font-style: italic;
+}
+
+.prescription-sheet__signature {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6mm;
+  margin-top: 8mm;
+}
+
+.prescription-sheet__stamp-area,
+.prescription-sheet__sign-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2mm;
+}
+
+.prescription-sheet__stamp-label,
+.prescription-sheet__sign-label {
+  font-size: 7.5pt;
+  color: var(--print-muted, #5a6b73);
+}
+
+.prescription-sheet__sign-line {
+  display: block;
+  width: 100%;
+  border-bottom: 1px solid var(--print-border, #c5d4d8);
+  min-height: 10mm;
+}
+
+.prescription-sheet__footer {
+  margin-top: 6mm;
+  padding-top: 2mm;
+  border-top: 1px solid var(--print-border, #c5d4d8);
+  text-align: center;
+  font-size: 7pt;
+  color: var(--print-muted, #5a6b73);
+}
+
+.print-doc--preview .prescription-sheet {
+  min-height: auto;
+}
+
+/* X-ray imaging request sheet */
+.prescription-sheet--xray .prescription-sheet__xray-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 4mm;
+  margin-bottom: 4mm;
+  padding-bottom: 2mm;
+  border-bottom: 2px solid var(--print-accent, #156572);
+}
+
+.prescription-sheet__xray-heading-en,
+.prescription-sheet__xray-heading-ar {
+  font-size: 12pt;
+  font-weight: 700;
+  color: var(--print-accent, #156572);
+}
+
+.prescription-sheet__xray-heading-ar {
+  direction: rtl;
+}
+
+.prescription-sheet__studies {
+  margin: 0;
+  padding: 0 0 0 5mm;
+  list-style: decimal;
+}
+
+.prescription-sheet__study {
+  margin-bottom: 0;
+  padding-bottom: 3mm;
+  break-inside: avoid;
+}
+
+.prescription-sheet__study:not(:last-child) {
+  margin-bottom: 3mm;
+  border-bottom: 1px solid var(--print-border, #c5d4d8);
+}
+
+.prescription-sheet__study-name {
+  margin: 0 0 1.5mm;
+  font-weight: 700;
+  font-size: 11.5pt;
+}
+
+.prescription-sheet__study-teeth {
+  margin: 0 0 1mm;
+  font-size: 10pt;
+}
+
+.prescription-sheet__study-notes {
+  margin: 0;
+  font-size: 10pt;
+  color: var(--print-muted, #5a6b73);
+}
+
+/* Odontogram on A5 patient record print */
+.print-odontogram {
+  width: 100%;
+  overflow: hidden;
+  page-break-inside: avoid;
+}
+.print-odontogram .do-chart {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0;
+  gap: 3px;
+}
+.print-odontogram .do-arch {
+  min-width: 0;
+  max-width: 100%;
+}
+.print-odontogram .do-quadrant {
+  gap: 2px;
+}
+.print-odontogram .do-cell--incisor {
+  margin-inline: 1px;
+}
+.print-odontogram .do-cell--canine {
+  margin-inline: 0;
+}
+.print-odontogram .do-cell--midline.do-cell--incisor {
+  margin-inline: 2px;
+}
+.print-odontogram .do-vline {
+  margin: 2px 5px;
+  border-left-width: 1px;
+}
+.print-odontogram .do-cell__graphic-slot {
+  height: auto !important;
+}
+.print-odontogram .do-cell__btn {
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  border-radius: 0;
+}
+.print-odontogram .do-cell__labels {
+  margin-top: 1px;
+  min-height: 0;
+}
+.print-odontogram .do-cell__num {
+  font-size: 6pt;
+  line-height: 1.1;
+}
+.print-odontogram .do-cell__treatments {
+  gap: 0;
+  margin-top: 0;
+  padding: 0;
+}
+.print-odontogram .do-cell__treatments--print .do-cell__tx {
+  font-size: 5.5pt;
+  font-weight: 700;
+  line-height: 1.15;
+}
+.print-odontogram .do-cell__treatments--print .do-cell__tx-check {
+  font-size: 5.5pt;
+  margin-inline-start: 1px;
+}
+
+/* Patient record — single A5 page */
+.print-doc--patient-record {
+  font-size: 8pt;
+  line-height: 1.3;
+}
+.print-doc--patient-record .print-header {
+  margin-bottom: 3mm;
+  padding-bottom: 2mm;
+}
+.print-doc--patient-record .print-header__title {
+  font-size: 10pt;
+}
+.print-doc--patient-record .print-header__logo {
+  max-height: 11mm;
+}
+.print-doc--patient-record .print-header__clinic-name {
+  font-size: 10pt;
+}
+.print-doc--patient-record .print-meta {
+  font-size: 7pt;
+}
+.print-doc--patient-record .print-section {
+  margin-bottom: 2.5mm;
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+.print-doc--patient-record .print-section__title {
+  margin-bottom: 1mm;
+  padding: 1mm 1.5mm;
+  font-size: 7.5pt;
+}
+.print-doc--patient-record .print-totals {
+  gap: 0.5mm;
+}
+.print-doc--patient-record .print-totals__row {
+  font-size: 7.5pt;
+  padding: 0.5mm 0;
+}
+.print-doc--patient-record .print-table--compact {
+  font-size: 6.5pt;
+}
+.print-doc--patient-record .print-table--compact th,
+.print-doc--patient-record .print-table--compact td {
+  padding: 1mm 1.5mm;
+}
+.print-doc--patient-record .print-footer {
+  margin-top: 2mm;
+  padding-top: 1.5mm;
+  font-size: 6.5pt;
+}
+
+@media print {
+  .print-doc--patient-record {
+    page-break-after: avoid;
+  }
+  .print-doc--patient-record .print-section:last-of-type {
+    margin-bottom: 1mm;
+  }
+}

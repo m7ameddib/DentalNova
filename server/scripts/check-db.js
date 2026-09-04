@@ -1,0 +1,12 @@
+const Database = require('better-sqlite3');
+const db = new Database('C:/Users/USER/DNT-project/server/data/clinic.db');
+const migrations = db.prepare('SELECT name FROM _migrations ORDER BY name').all();
+console.log('Applied migrations:', migrations.map((r) => r.name).join(', '));
+const labCols = db.prepare('PRAGMA table_info(lab_cases)').all().map((c) => c.name);
+console.log('lab_cases columns:', labCols.join(', '));
+const expenseCols = db.prepare('PRAGMA table_info(clinic_expenses)').all().map((c) => c.name);
+console.log('clinic_expenses columns:', expenseCols.join(', '));
+console.log('has source_lab_payment_id:', expenseCols.includes('source_lab_payment_id'));
+console.log('clinic_schedule_exceptions exists:', db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='clinic_schedule_exceptions'").get());
+const perms = db.prepare("SELECT key FROM permissions WHERE key IN ('appointments.book_outside_hours','lab.payments.record','lab.payments.void')").all();
+console.log('new permissions:', perms.map(p => p.key).join(', ') || '(none)');
