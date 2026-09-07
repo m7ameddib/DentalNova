@@ -96,6 +96,8 @@ export function DibNovaAdminPage() {
 
   const status = data?.subscription.status;
   const isOnline = data?.deploymentMode === 'online';
+  const clinicReady = data?.phase === 'ready';
+  const effectiveStatus = clinicReady ? (status ?? 'PENDING') : null;
 
   return (
     <div className="login-page login-page--entry">
@@ -198,7 +200,11 @@ export function DibNovaAdminPage() {
                     <>
                       <div>
                         <dt>{t('dibnovaAdmin.subscriptionStatus')}</dt>
-                        <dd>{status ?? '—'}</dd>
+                        <dd>
+                          {clinicReady
+                            ? (effectiveStatus ?? '—')
+                            : t('dibnovaAdmin.awaitingClinicSetup')}
+                        </dd>
                       </div>
                       <div>
                         <dt>{t('dibnovaAdmin.expiresAt')}</dt>
@@ -212,7 +218,11 @@ export function DibNovaAdminPage() {
                   )}
                 </dl>
 
-                {isOnline && (
+                {isOnline && !clinicReady && (
+                  <p className="form-error-banner">{t('dibnovaAdmin.setupRequiredMessage')}</p>
+                )}
+
+                {isOnline && clinicReady && (
                   <>
                     <label className="form-field">
                       <span className="form-field__label">{t('dibnovaAdmin.notes')}</span>
@@ -228,7 +238,7 @@ export function DibNovaAdminPage() {
                       <button
                         type="button"
                         className="btn btn--primary"
-                        disabled={actionMutation.isPending || status !== 'PENDING'}
+                        disabled={actionMutation.isPending || effectiveStatus !== 'PENDING'}
                         onClick={() => actionMutation.mutate('activate')}
                       >
                         {t('dibnovaAdmin.activate')}
@@ -236,7 +246,7 @@ export function DibNovaAdminPage() {
                       <button
                         type="button"
                         className="btn btn--secondary"
-                        disabled={actionMutation.isPending || status !== 'ACTIVE'}
+                        disabled={actionMutation.isPending || effectiveStatus !== 'ACTIVE'}
                         onClick={() => actionMutation.mutate('extend')}
                       >
                         {t('dibnovaAdmin.extend')}
@@ -245,7 +255,8 @@ export function DibNovaAdminPage() {
                         type="button"
                         className="btn btn--secondary"
                         disabled={
-                          actionMutation.isPending || (status !== 'ACTIVE' && status !== 'PENDING')
+                          actionMutation.isPending ||
+                          (effectiveStatus !== 'ACTIVE' && effectiveStatus !== 'PENDING')
                         }
                         onClick={() => actionMutation.mutate('suspend')}
                       >
@@ -256,7 +267,7 @@ export function DibNovaAdminPage() {
                         className="btn btn--secondary"
                         disabled={
                           actionMutation.isPending ||
-                          (status !== 'SUSPENDED' && status !== 'EXPIRED')
+                          (effectiveStatus !== 'SUSPENDED' && effectiveStatus !== 'EXPIRED')
                         }
                         onClick={() => actionMutation.mutate('reactivate')}
                       >

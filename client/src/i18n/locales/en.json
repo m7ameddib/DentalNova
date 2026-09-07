@@ -143,6 +143,8 @@
     "yes": "Yes",
     "no": "No",
     "backToClinicStatus": "Clinic status page",
+    "awaitingClinicSetup": "Awaiting clinic setup",
+    "setupRequiredMessage": "This online server has no clinic yet. The clinic must complete First Clinic Setup before subscription can be activated.",
     "success": {
       "activate": "Subscription activated for 1 year.",
       "extend": "Subscription extended by 1 year.",

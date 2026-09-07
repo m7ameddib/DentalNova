@@ -118,6 +118,7 @@ export class SubscriptionService {
       clinicName: clinic.clinicName,
       clinicPhone: clinic.clinicPhone,
       setupCompletedAt: installation.setupCompletedAt,
+      phase: this.installation.phase(),
       subscription,
       offlineLicense: this.deployment.isOffline()
         ? {

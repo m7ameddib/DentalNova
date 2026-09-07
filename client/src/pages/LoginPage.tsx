@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
@@ -18,6 +18,7 @@ export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const setSession = useAuthStore((s) => s.setSession);
+  const logout = useAuthStore((s) => s.logout);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const { language, setLanguage } = useUiStore();
 
@@ -27,7 +28,7 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
-  const { data: installStatus } = useQuery({
+  const { data: installStatus, isFetched: installReady } = useQuery({
     queryKey: ['installation-status'],
     queryFn: installationApi.status,
     staleTime: 60_000,
@@ -35,8 +36,17 @@ export function LoginPage() {
 
   const isOnline = installStatus?.deploymentMode === 'online';
   const canCreateClinic = isOnline && installStatus?.phase === 'setup';
+  const clinicReady = installStatus?.phase === 'ready';
 
-  if (isAuthenticated) {
+  // Stale clinic JWT while server is still in setup causes /login ↔ / redirect loop (blank page).
+  useEffect(() => {
+    if (!installReady || !isAuthenticated) return;
+    if (installStatus?.phase === 'setup') {
+      logout();
+    }
+  }, [installReady, installStatus?.phase, isAuthenticated, logout]);
+
+  if (installReady && isAuthenticated && clinicReady) {
     return <Navigate to="/" replace />;
   }
 

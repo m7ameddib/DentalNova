@@ -40,6 +40,7 @@ export interface AdminClinicInfo {
   clinicName: string;
   clinicPhone: string;
   setupCompletedAt: string | null;
+  phase: 'activation' | 'setup' | 'ready';
   subscription: SubscriptionStatus;
   offlineLicense: { activatedAt: string | null; hasLicense: boolean } | null;
 }
