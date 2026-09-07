@@ -5,10 +5,13 @@ import { useQuery } from '@tanstack/react-query';
 import { installationApi, checkServerHealth } from '@/api/installation.api';
 import { isClientMode } from '@/api/api-config';
 import { BrandLogo } from '@/components/common/BrandLogo';
+import { isPublicEntryPath } from '@/routes/public-entry-routes';
 
 export function InstallationGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
+  const path = location.pathname;
+  const isPublic = isPublicEntryPath(path);
   const [serverUp, setServerUp] = useState<boolean | null>(null);
   const [healthCheckKey, setHealthCheckKey] = useState(0);
 
@@ -25,13 +28,14 @@ export function InstallationGate({ children }: { children: ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, [location.pathname, healthCheckKey]);
+  }, [healthCheckKey]);
 
-  const { data: status, isLoading, isError } = useQuery({
+  const { data: status, isLoading, isError, isFetched } = useQuery({
     queryKey: ['installation-status'],
     queryFn: installationApi.status,
     enabled: serverUp === true,
     retry: 1,
+    staleTime: 60_000,
   });
 
   if (serverUp === false) {
@@ -53,11 +57,17 @@ export function InstallationGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (serverUp === null || isLoading) {
+  if (serverUp === null) {
+    if (isPublic) return <>{children}</>;
     return <div className="page-loading">{t('common.loading')}</div>;
   }
 
-  if (isError || !status) {
+  if ((isLoading || !isFetched) && !status) {
+    if (isPublic) return <>{children}</>;
+    return <div className="page-loading">{t('common.loading')}</div>;
+  }
+
+  if ((isError || !status) && !isPublic) {
     return (
       <div className="login-page">
         <div className="login-card setup-card">
@@ -67,7 +77,10 @@ export function InstallationGate({ children }: { children: ReactNode }) {
     );
   }
 
-  const path = location.pathname;
+  if (!status) {
+    return <>{children}</>;
+  }
+
   const isOnline = status.deploymentMode === 'online';
 
   if (status.phase === 'activation' && path !== '/activate') {
@@ -76,14 +89,12 @@ export function InstallationGate({ children }: { children: ReactNode }) {
 
   if (status.phase === 'setup') {
     if (isOnline) {
-      // Online: login is the entry page; setup only when user chooses "Create New Clinic"
       const allowedDuringSetup = ['/login', '/setup', '/subscription-status', '/dibnova-admin'];
       if (allowedDuringSetup.includes(path) || path.startsWith('/dibnova-admin')) {
         return <>{children}</>;
       }
       return <Navigate to="/login" replace />;
     }
-    // Offline: unchanged — first-time setup is mandatory before login
     if (path !== '/setup') {
       return <Navigate to="/setup" replace />;
     }

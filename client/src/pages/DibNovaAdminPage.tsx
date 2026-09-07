@@ -1,14 +1,14 @@
 import { FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, KeyRound, LogOut, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Building2, Lock, LogIn, LogOut, RefreshCw, ShieldCheck, UserRound } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import {
-  clearDibNovaAdminKey,
+  clearDibNovaAdminSession,
   dibnovaAdminApi,
-  getDibNovaAdminKey,
-  setDibNovaAdminKey,
+  isDibNovaAdminAuthenticated,
+  setDibNovaAdminSession,
 } from '@/api/dibnova-admin.api';
 import { getErrorMessage } from '@/utils/errors';
 import { useUiStore } from '@/store/ui.store';
@@ -23,11 +23,13 @@ export function DibNovaAdminPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const { language, setLanguage } = useUiStore();
-  const [adminKey, setAdminKey] = useState(getDibNovaAdminKey() ?? '');
-  const [authenticated, setAuthenticated] = useState(Boolean(getDibNovaAdminKey()));
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [authenticated, setAuthenticated] = useState(isDibNovaAdminAuthenticated);
   const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [loginLoading, setLoginLoading] = useState(false);
 
   const { data, isLoading, refetch, isError } = useQuery({
     queryKey: ['dibnova-admin-installation'],
@@ -65,35 +67,48 @@ export function DibNovaAdminPage() {
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
-  function handleKeySubmit(e: FormEvent) {
+  async function handleLoginSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!adminKey.trim()) return;
-    setDibNovaAdminKey(adminKey.trim());
-    setAuthenticated(true);
+    if (!username.trim() || !password) return;
+    setLoginLoading(true);
     setError(null);
+    try {
+      const { accessToken, user } = await dibnovaAdminApi.login(username.trim(), password);
+      setDibNovaAdminSession(accessToken, user);
+      setAuthenticated(true);
+      setPassword('');
+    } catch (err) {
+      setError(getErrorMessage(err, t('dibnovaAdmin.invalidCredentials')));
+    } finally {
+      setLoginLoading(false);
+    }
   }
 
   function handleLogout() {
-    clearDibNovaAdminKey();
+    clearDibNovaAdminSession();
     setAuthenticated(false);
-    setAdminKey('');
+    setUsername('');
+    setPassword('');
     setError(null);
     setSuccess(null);
+    queryClient.removeQueries({ queryKey: ['dibnova-admin-installation'] });
   }
 
   const status = data?.subscription.status;
   const isOnline = data?.deploymentMode === 'online';
 
   return (
-    <div className="login-page">
+    <div className="login-page login-page--entry">
       <div className="login-page__lang">
         <button
+          type="button"
           className={language === 'en' ? 'lang-btn lang-btn--active' : 'lang-btn'}
           onClick={() => setLanguage('en')}
         >
           EN
         </button>
         <button
+          type="button"
           className={language === 'ar' ? 'lang-btn lang-btn--active' : 'lang-btn'}
           onClick={() => setLanguage('ar')}
         >
@@ -110,22 +125,36 @@ export function DibNovaAdminPage() {
         <p className="login-card__subtitle">{t('dibnovaAdmin.subtitle')}</p>
 
         {!authenticated ? (
-          <form onSubmit={handleKeySubmit}>
+          <form onSubmit={handleLoginSubmit}>
             <label className="form-field">
               <span className="form-field__label">
-                <KeyRound size={14} /> {t('dibnovaAdmin.apiKey')}
+                <UserRound size={14} /> {t('auth.username')}
+              </span>
+              <input
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                autoComplete="username"
+                placeholder={t('auth.usernamePlaceholder')}
+                required
+              />
+            </label>
+            <label className="form-field">
+              <span className="form-field__label">
+                <Lock size={14} /> {t('auth.password')}
               </span>
               <input
                 type="password"
-                value={adminKey}
-                onChange={(e) => setAdminKey(e.target.value)}
-                placeholder={t('dibnovaAdmin.apiKeyPlaceholder')}
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+                placeholder={t('auth.passwordPlaceholder')}
                 required
-                autoComplete="off"
               />
             </label>
-            <button type="submit" className="btn btn--primary btn--block">
-              {t('dibnovaAdmin.unlock')}
+            {error && <div className="form-error-banner">{error}</div>}
+            <button type="submit" className="btn btn--primary btn--block login-card__submit" disabled={loginLoading}>
+              <LogIn size={16} />
+              {loginLoading ? t('auth.signingIn') : t('dibnovaAdmin.signIn')}
             </button>
           </form>
         ) : (
@@ -143,7 +172,7 @@ export function DibNovaAdminPage() {
 
             {isError && (
               <div className="form-error-banner">
-                {t('dibnovaAdmin.invalidKey')}
+                {t('dibnovaAdmin.sessionExpired')}
                 <button type="button" className="btn btn--ghost btn--sm" onClick={handleLogout}>
                   {t('dibnovaAdmin.retryLogin')}
                 </button>
@@ -250,6 +279,14 @@ export function DibNovaAdminPage() {
                         ? t('dibnovaAdmin.yes')
                         : t('dibnovaAdmin.no'),
                     })}
+                    {data.offlineLicense.activatedAt && (
+                      <>
+                        {' '}
+                        ({t('dibnovaAdmin.activatedAt', {
+                          date: formatDate(data.offlineLicense.activatedAt),
+                        })})
+                      </>
+                    )}
                   </p>
                 )}
               </>
@@ -257,7 +294,7 @@ export function DibNovaAdminPage() {
           </>
         )}
 
-        {error && <div className="form-error-banner">{error}</div>}
+        {authenticated && error && <div className="form-error-banner">{error}</div>}
         {success && <div className="form-success-banner">{success}</div>}
 
         <p className="muted dibnova-admin-footer">

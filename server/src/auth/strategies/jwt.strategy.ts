@@ -26,6 +26,9 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(payload: JwtPayload) {
+    if (payload.dibnovaAdmin) {
+      return this.authService.toDibNovaAdminUser(payload.username);
+    }
     try {
       return this.authService.toAuthenticatedUser(payload.sub);
     } catch {

@@ -1,19 +1,37 @@
 import axios from 'axios';
 import { getApiBaseUrl } from '@/api/api-config';
 import { SubscriptionStatus } from '@/api/subscription.api';
+import { AuthenticatedUser } from '@/types/domain';
 
-const ADMIN_KEY_STORAGE = 'dnt-dibnova-admin-key';
+const ADMIN_TOKEN_KEY = 'dnt-dibnova-admin-token';
+const ADMIN_USER_KEY = 'dnt-dibnova-admin-user';
 
-export function getDibNovaAdminKey(): string | null {
-  return sessionStorage.getItem(ADMIN_KEY_STORAGE);
+export function getDibNovaAdminToken(): string | null {
+  return sessionStorage.getItem(ADMIN_TOKEN_KEY);
 }
 
-export function setDibNovaAdminKey(key: string): void {
-  sessionStorage.setItem(ADMIN_KEY_STORAGE, key.trim());
+export function getDibNovaAdminUser(): AuthenticatedUser | null {
+  const raw = sessionStorage.getItem(ADMIN_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthenticatedUser;
+  } catch {
+    return null;
+  }
 }
 
-export function clearDibNovaAdminKey(): void {
-  sessionStorage.removeItem(ADMIN_KEY_STORAGE);
+export function setDibNovaAdminSession(token: string, user: AuthenticatedUser): void {
+  sessionStorage.setItem(ADMIN_TOKEN_KEY, token);
+  sessionStorage.setItem(ADMIN_USER_KEY, JSON.stringify(user));
+}
+
+export function clearDibNovaAdminSession(): void {
+  sessionStorage.removeItem(ADMIN_TOKEN_KEY);
+  sessionStorage.removeItem(ADMIN_USER_KEY);
+}
+
+export function isDibNovaAdminAuthenticated(): boolean {
+  return Boolean(getDibNovaAdminToken());
 }
 
 export interface AdminClinicInfo {
@@ -27,15 +45,33 @@ export interface AdminClinicInfo {
 }
 
 function adminClient() {
-  const key = getDibNovaAdminKey();
-  if (!key) throw new Error('Admin key not set');
-  return axios.create({
+  const token = getDibNovaAdminToken();
+  if (!token) throw new Error('Admin session not set');
+  const client = axios.create({
     baseURL: getApiBaseUrl(),
-    headers: { 'X-DibNova-Admin-Key': key },
+    headers: { Authorization: `Bearer ${token}` },
   });
+  client.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error?.response?.status === 401) {
+        clearDibNovaAdminSession();
+      }
+      return Promise.reject(error);
+    },
+  );
+  return client;
 }
 
 export const dibnovaAdminApi = {
+  login: (username: string, password: string) =>
+    axios
+      .post<{ accessToken: string; user: AuthenticatedUser }>(
+        `${getApiBaseUrl()}/dibnova-admin/auth/login`,
+        { username, password },
+      )
+      .then((r) => r.data),
+
   getInstallation: () =>
     adminClient().get<AdminClinicInfo>('/dibnova-admin/installation').then((r) => r.data),
 

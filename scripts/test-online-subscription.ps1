@@ -5,6 +5,8 @@ $TestDir = Join-Path $Root 'server\data\e2e-online-test'
 $DbFile = Join-Path $TestDir 'clinic.db'
 $Port = 4099
 $AdminKey = 'e2e-test-admin-key-' + [guid]::NewGuid().ToString('N')
+$AdminUser = 'dibnova-admin'
+$AdminPass = 'e2e-admin-pass-' + [guid]::NewGuid().ToString('N')
 $JwtSecret = 'e2e-jwt-' + [guid]::NewGuid().ToString('N')
 $Base = "http://127.0.0.1:$Port/api"
 
@@ -29,6 +31,8 @@ $env:SERVE_CLIENT = '0'
 $env:DATABASE_FILE = $DbFile
 $env:JWT_SECRET = $JwtSecret
 $env:DIBNOVA_ADMIN_API_KEY = $AdminKey
+$env:DIBNOVA_ADMIN_USERNAME = $AdminUser
+$env:DIBNOVA_ADMIN_PASSWORD = $AdminPass
 $env:MIGRATIONS_DIR = Join-Path $Root 'database\migrations'
 
 # Preflight: better-sqlite3 native binding (required for server startup)
@@ -46,7 +50,7 @@ Write-Host "Starting server on port $Port..."
 $logFile = Join-Path $TestDir 'server.log'
 $serverArgs = @(
   '/c',
-  "set DEPLOYMENT_MODE=online&& set NODE_ENV=production&& set PORT=$Port&& set HOST=127.0.0.1&& set SERVE_CLIENT=0&& set DATABASE_FILE=$DbFile&& set JWT_SECRET=$JwtSecret&& set DIBNOVA_ADMIN_API_KEY=$AdminKey&& set MIGRATIONS_DIR=$($Root -replace '\\','\\')\\database\\migrations&& cd /d `"$Root\server`" && node dist\main.js > `"$logFile`" 2>&1"
+  "set DEPLOYMENT_MODE=online&& set NODE_ENV=production&& set PORT=$Port&& set HOST=127.0.0.1&& set SERVE_CLIENT=0&& set DATABASE_FILE=$DbFile&& set JWT_SECRET=$JwtSecret&& set DIBNOVA_ADMIN_API_KEY=$AdminKey&& set DIBNOVA_ADMIN_USERNAME=$AdminUser&& set DIBNOVA_ADMIN_PASSWORD=$AdminPass&& set MIGRATIONS_DIR=$($Root -replace '\\','\\')\\database\\migrations&& cd /d `"$Root\server`" && node dist\main.js > `"$logFile`" 2>&1"
 )
 $serverProc = Start-Process -FilePath 'cmd.exe' -ArgumentList $serverArgs -PassThru -WindowStyle Hidden
 
@@ -102,8 +106,12 @@ try {
     Write-Host 'OK  Protected API blocked (403) while PENDING' -ForegroundColor Green
   }
 
-  # Admin: view installation
-  $headers = @{ 'X-DibNova-Admin-Key' = $AdminKey }
+  # Admin: login with username/password
+  $adminLoginBody = @{ username = $AdminUser; password = $AdminPass } | ConvertTo-Json
+  $adminSession = Invoke-RestMethod -Uri "$Base/dibnova-admin/auth/login" -Method Post -Body $adminLoginBody -ContentType 'application/json'
+  $headers = @{ Authorization = "Bearer $($adminSession.accessToken)" }
+  Write-Host 'OK  DibNova admin login' -ForegroundColor Green
+
   $info = Invoke-RestMethod -Uri "$Base/dibnova-admin/installation" -Headers $headers
   Write-Host "OK  Admin view: clinic=$($info.clinicName) status=$($info.subscription.status)" -ForegroundColor Green
 
@@ -120,8 +128,7 @@ try {
   Write-Host ''
   Write-Host '=== ALL E2E TESTS PASSED ===' -ForegroundColor Green
   Write-Host ''
-  Write-Host 'Admin UI: open /dibnova-admin in the browser on this clinic URL'
-  Write-Host "Admin API key (for UI): $AdminKey"
+  Write-Host 'Admin UI: open /dibnova-admin and sign in with DIBNOVA_ADMIN_USERNAME/PASSWORD'
 } finally {
   if ($serverProc -and -not $serverProc.HasExited) {
     Stop-Process -Id $serverProc.Id -Force -ErrorAction SilentlyContinue

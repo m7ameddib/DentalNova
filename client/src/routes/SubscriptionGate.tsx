@@ -1,47 +1,42 @@
 import { ReactNode } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useTranslation } from 'react-i18next';
 import { subscriptionApi } from '@/api/subscription.api';
 import { installationApi } from '@/api/installation.api';
+import { isPublicEntryPath } from '@/routes/public-entry-routes';
 
 export function SubscriptionGate({ children }: { children: ReactNode }) {
-  const { t } = useTranslation();
   const location = useLocation();
+  const isPublic = isPublicEntryPath(location.pathname);
 
   const { data: installStatus } = useQuery({
     queryKey: ['installation-status'],
     queryFn: installationApi.status,
+    staleTime: 60_000,
   });
 
-  const { data: subStatus, isLoading } = useQuery({
+  const needsSubscriptionCheck =
+    !isPublic &&
+    installStatus?.phase === 'ready' &&
+    installStatus.deploymentMode === 'online';
+
+  const { data: subStatus, isLoading, isFetched } = useQuery({
     queryKey: ['subscription-status'],
     queryFn: subscriptionApi.status,
-    enabled: installStatus?.phase === 'ready' && installStatus.deploymentMode === 'online',
+    enabled: needsSubscriptionCheck,
     refetchInterval: 60_000,
+    staleTime: 30_000,
   });
 
-  if (installStatus?.phase !== 'ready' || installStatus.deploymentMode !== 'online') {
+  if (isPublic || !needsSubscriptionCheck) {
     return <>{children}</>;
   }
 
-  if (isLoading || !subStatus) {
-    return <div className="page-loading">{t('common.loading')}</div>;
+  if ((isLoading || !isFetched) && !subStatus) {
+    return <div className="page-loading" />;
   }
 
-  if (subStatus.canUseSystem) {
-    if (location.pathname === '/subscription-status') {
-      return <Navigate to="/login" replace />;
-    }
-    return <>{children}</>;
-  }
-
-  const allowedWhileBlocked =
-    location.pathname === '/login' ||
-    location.pathname === '/subscription-status' ||
-    location.pathname.startsWith('/dibnova-admin');
-
-  if (!allowedWhileBlocked) {
+  if (!subStatus?.canUseSystem) {
     return <Navigate to="/subscription-status" replace />;
   }
 

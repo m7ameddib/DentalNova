@@ -65,6 +65,9 @@ export const PERMISSIONS = {
 
   /** Void lab case payments. */
   LAB_PAYMENTS_VOID: 'lab.payments.void',
+
+  /** DibNova platform administration (subscriptions, licenses). */
+  DIBNOVA_ADMIN: 'dibnova.admin',
 } as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];

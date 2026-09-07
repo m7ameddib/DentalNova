@@ -201,7 +201,10 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `CORS_ORIGINS` | — | domain URL | Allowed browser origins |
 | `DOMAIN` | — | `dentalnova.dibnova.com` | Caddy HTTPS domain |
 | `GEMINI_API_KEY` | optional | optional | AI assistant |
-| `DIBNOVA_ADMIN_API_KEY` | — | **required** | DibNova admin API authentication |
+| `DIBNOVA_ADMIN_USERNAME` | optional | **required** | DibNova admin sign-in username |
+| `DIBNOVA_ADMIN_PASSWORD` | optional | **required** | DibNova admin sign-in password (server-side only) |
+| `DIBNOVA_ADMIN_API_KEY` | — | optional | Automation/scripts only — not used in the browser UI |
+| `DIBNOVA_ADMIN_JWT_EXPIRES_IN` | — | optional | Admin session length (default `8h`) |
 | `GITHUB_RELEASES_REPO` | optional | — | Offline update source (default: `m7ameddib/DentalNova`) |
 
 See `server/.env.example` (offline) and `deploy/.env.online.example` (online).
@@ -212,7 +215,7 @@ See `server/.env.example` (offline) and `deploy/.env.online.example` (online).
 
 Online clinics start **PENDING** after first setup. Only DibNova admins can activate, extend, suspend, or reactivate subscriptions.
 
-Set `DIBNOVA_ADMIN_API_KEY` on the online server (see `deploy/.env.online.example`).
+Set `DIBNOVA_ADMIN_USERNAME` and `DIBNOVA_ADMIN_PASSWORD` on the online server (see `deploy/.env.online.example`). These credentials are validated server-side only — they are never entered as an API key in the browser.
 
 ### Online entry flow
 
@@ -229,7 +232,7 @@ Offline deployments are unchanged: license activation → mandatory first setup 
 
 Open **`https://<your-clinic-domain>/dibnova-admin`** on the clinic’s DentalNova URL (same app — not a separate admin site).
 
-1. Enter the **Admin API key** (`DIBNOVA_ADMIN_API_KEY` from the server environment).
+1. Sign in at **`/dibnova-admin`** with your **DibNova admin username and password**.
 2. Review clinic name, installation ID, subscription status, and expiry.
 3. Use **Activate (1 year)** when status is `PENDING`.
 4. Use **Extend**, **Suspend**, or **Reactivate** as needed.
@@ -238,7 +241,9 @@ While subscription is not active, the clinic sees **Awaiting activation** at `/s
 
 ### Admin API
 
-Authenticate with header `X-DibNova-Admin-Key: <key>` (or `Authorization: Bearer <key>`).
+**Browser UI:** `POST /api/dibnova-admin/auth/login` with `{ "username", "password" }` → use returned JWT as `Authorization: Bearer <token>`.
+
+**Automation (optional):** header `X-DibNova-Admin-Key: <DIBNOVA_ADMIN_API_KEY>`.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|

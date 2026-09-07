@@ -1,12 +1,11 @@
-import { FormEvent, useEffect, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { FormEvent, useState } from 'react';
+import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Building2, Lock, LogIn, UserRound } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { authApi } from '@/api/auth.api';
 import { installationApi } from '@/api/installation.api';
-import { subscriptionApi } from '@/api/subscription.api';
 import {
   getRememberedUsername,
   setRememberedUsername,
@@ -31,28 +30,15 @@ export function LoginPage() {
   const { data: installStatus } = useQuery({
     queryKey: ['installation-status'],
     queryFn: installationApi.status,
+    staleTime: 60_000,
   });
 
   const isOnline = installStatus?.deploymentMode === 'online';
   const canCreateClinic = isOnline && installStatus?.phase === 'setup';
 
-  useEffect(() => {
-    if (!isAuthenticated) return;
-    (async () => {
-      if (installStatus?.deploymentMode === 'online' && installStatus.phase === 'ready') {
-        try {
-          const sub = await subscriptionApi.status();
-          if (!sub.canUseSystem) {
-            navigate('/subscription-status', { replace: true });
-            return;
-          }
-        } catch {
-          // SubscriptionGate will handle blocked access
-        }
-      }
-      navigate('/', { replace: true });
-    })();
-  }, [isAuthenticated, installStatus, navigate]);
+  if (isAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -66,18 +52,6 @@ export function LoginPage() {
         clearRememberedUsername();
       }
       setSession(accessToken, user, rememberMe);
-
-      if (isOnline && installStatus?.phase === 'ready') {
-        try {
-          const sub = await subscriptionApi.status();
-          if (!sub.canUseSystem) {
-            navigate('/subscription-status', { replace: true });
-            return;
-          }
-        } catch {
-          // fall through to app
-        }
-      }
       navigate('/', { replace: true });
     } catch {
       setError(t('auth.invalidCredentials'));

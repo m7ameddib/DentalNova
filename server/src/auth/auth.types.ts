@@ -2,6 +2,8 @@ export interface JwtPayload {
   sub: number;
   username: string;
   roleName: string;
+  /** Platform admin session — not a clinic database user. */
+  dibnovaAdmin?: boolean;
 }
 
 export interface AuthenticatedUser {
