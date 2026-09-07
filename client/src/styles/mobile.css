@@ -299,6 +299,160 @@ body.top-nav-menu-open {
 
 /* ---------- Appointments calendar ---------- */
 
+@media (max-width: 768px) {
+  .appointments-page {
+    overflow-x: hidden;
+  }
+
+  .agenda-layout__calendar {
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .week-agenda--mobile-week {
+    padding: 8px;
+    min-height: auto;
+  }
+
+  .week-agenda--mobile-week .week-agenda__scroll {
+    overflow-x: auto;
+    overflow-y: visible;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scroll-behavior: smooth;
+    max-width: 100%;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+  }
+
+  .week-agenda--mobile-week .week-agenda__grid {
+    width: max-content;
+    min-width: unset;
+  }
+
+  .week-agenda__mobile-strip {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+    margin-bottom: 8px;
+  }
+
+  .week-agenda__mobile-day {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    padding: 8px 4px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-bg);
+    cursor: pointer;
+    min-height: 44px;
+    font: inherit;
+    color: inherit;
+  }
+
+  .week-agenda__mobile-day-name {
+    font-size: 10px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+    line-height: 1.1;
+  }
+
+  .week-agenda__mobile-day-number {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--color-text);
+    line-height: 1.2;
+    text-align: center;
+  }
+
+  .week-agenda__mobile-day-today {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--color-primary);
+    line-height: 1;
+  }
+
+  .week-agenda__mobile-day--today {
+    background: var(--color-primary-soft);
+    border-color: var(--color-primary);
+    box-shadow: inset 0 0 0 1px rgba(37, 99, 235, 0.2);
+  }
+
+  .week-agenda__mobile-day--focused {
+    outline: 2px solid var(--color-primary);
+    outline-offset: -2px;
+  }
+
+  .week-agenda--mobile-week .week-agenda__day-header {
+    min-width: 136px;
+    padding: 6px 4px 8px;
+  }
+
+  .week-agenda--mobile-week .week-agenda__day-name {
+    font-size: 11px;
+  }
+
+  .week-agenda--mobile-week .week-agenda__day-number {
+    font-size: 13px;
+  }
+
+  .week-agenda__today-badge {
+    font-size: 9px;
+    font-weight: 800;
+    text-transform: uppercase;
+    color: var(--color-primary);
+    background: white;
+    border-radius: 999px;
+    padding: 1px 6px;
+    line-height: 1.4;
+  }
+
+  .week-agenda--mobile-week .week-agenda__day-header--today,
+  .week-agenda--mobile-week .week-agenda__day-body--today {
+    box-shadow: inset 0 0 0 2px var(--color-primary);
+  }
+
+  .week-agenda--mobile-week .week-agenda__day-body--today {
+    background: rgba(37, 99, 235, 0.06);
+  }
+
+  .week-agenda--mobile-week .week-agenda__corner,
+  .week-agenda--mobile-week .week-agenda__time-label {
+    z-index: 3;
+  }
+
+  .week-agenda--mobile-week .week-agenda__time-label {
+    font-size: 11px;
+    padding: 4px 6px 0 0;
+  }
+
+  .week-agenda--mobile-week .week-agenda__day-header {
+    z-index: 2;
+  }
+
+  .week-agenda--mobile-week .appointment-card {
+    min-height: 40px;
+    padding: 6px 8px;
+    touch-action: manipulation;
+  }
+
+  .week-agenda--mobile-week .appointment-card__time {
+    font-size: 10px;
+  }
+
+  .week-agenda--mobile-week .appointment-card__patient {
+    font-size: 12px;
+  }
+
+  .week-agenda--mobile-week .appointment-card__status {
+    font-size: 9px;
+  }
+}
+
 @media (max-width: 900px) {
   .appointments-layout,
   .appointments-page__layout {

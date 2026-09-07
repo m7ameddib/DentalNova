@@ -3,7 +3,19 @@ import { useTranslation } from 'react-i18next';
 import { AppointmentWithPatient, DaySchedule } from '@/types/domain';
 import { minutesToTime, timeToMinutes, formatClockTime } from '@/utils/calendar';
 import { localAddDaysIso } from '@/utils/date';
-import { CALENDAR_HEADER_ROW_PX, CALENDAR_MIN_CARD_HEIGHT_PX, CALENDAR_TIME_COLUMN_PX, DEFAULT_DURATION, DRAG_THRESHOLD_PX, appointmentOverlaps, isEmergencyAppointment } from './constants';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
+import {
+  CALENDAR_HEADER_ROW_PX,
+  CALENDAR_MIN_CARD_HEIGHT_PX,
+  CALENDAR_MOBILE_BREAKPOINT,
+  CALENDAR_MOBILE_DAY_COLUMN_PX,
+  CALENDAR_MOBILE_TIME_COLUMN_PX,
+  CALENDAR_TIME_COLUMN_PX,
+  DEFAULT_DURATION,
+  DRAG_THRESHOLD_PX,
+  appointmentOverlaps,
+  isEmergencyAppointment,
+} from './constants';
 
 export interface WeekDayColumn {
   iso: string;
@@ -220,8 +232,14 @@ export function WeekCalendar({
   isUpdating,
 }: WeekCalendarProps) {
   const { t } = useTranslation();
+  const isMobileWeek = useMediaQuery(CALENDAR_MOBILE_BREAKPOINT);
+  const timeColumnPx = isMobileWeek ? CALENDAR_MOBILE_TIME_COLUMN_PX : CALENDAR_TIME_COLUMN_PX;
+  const dayColumnTemplate = isMobileWeek
+    ? `repeat(7, ${CALENDAR_MOBILE_DAY_COLUMN_PX}px)`
+    : 'repeat(7, minmax(0, 1fr))';
   const [drag, setDrag] = useState<ApptDragState | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
   const pendingDragRef = useRef<PendingApptDrag | null>(null);
   const pendingListenersRef = useRef<{ move: (e: MouseEvent) => void; up: (e: MouseEvent) => void } | null>(null);
   const weekShiftLatchRef = useRef(false);
@@ -241,6 +259,27 @@ export function WeekCalendar({
   dragRef.current = drag;
   const dayIsos = dayColumns.map((d) => d.iso);
   const isDragging = drag !== null;
+  const weekKey = dayColumns[0]?.iso ?? '';
+
+  const scrollToDayColumn = useCallback(
+    (iso: string, behavior: ScrollBehavior = 'smooth') => {
+      const scrollEl = scrollRef.current;
+      if (!scrollEl || !isMobileWeek) return;
+      const idx = dayColumns.findIndex((d) => d.iso === iso);
+      if (idx < 0) return;
+      const offset = timeColumnPx + idx * CALENDAR_MOBILE_DAY_COLUMN_PX;
+      const centered = offset - (scrollEl.clientWidth - CALENDAR_MOBILE_DAY_COLUMN_PX) / 2 + timeColumnPx / 2;
+      scrollEl.scrollTo({ left: Math.max(0, centered), behavior });
+    },
+    [dayColumns, isMobileWeek, timeColumnPx],
+  );
+
+  useEffect(() => {
+    if (!isMobileWeek || !weekKey) return;
+    const targetDay = dayColumns.find((d) => d.isToday) ?? dayColumns[0];
+    if (!targetDay) return;
+    scrollToDayColumn(targetDay.iso, 'auto');
+  }, [dayColumns, isMobileWeek, scrollToDayColumn, weekKey]);
 
   const clearPendingDrag = useCallback(() => {
     if (pendingListenersRef.current) {
@@ -466,7 +505,16 @@ export function WeekCalendar({
       : t('appointmentsPage.overlapBlocked'));
 
   return (
-    <div className={`week-agenda ${dropHighlight ? 'week-agenda--drop-target' : ''}`} ref={gridRef}>
+    <div
+      className={[
+        'week-agenda',
+        dropHighlight ? 'week-agenda--drop-target' : '',
+        isMobileWeek ? 'week-agenda--mobile-week' : '',
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      ref={gridRef}
+    >
       {drag && dropHint && (
         <div
           className={`week-agenda__drop-hint${drag.dropValid ? '' : ' week-agenda__drop-hint--invalid'}`}
@@ -476,11 +524,41 @@ export function WeekCalendar({
         </div>
       )}
 
-      <div className="week-agenda__scroll">
+      {isMobileWeek && (
+        <div className="week-agenda__mobile-strip" aria-label={t('appointmentsPage.weekView') ?? 'Week view'}>
+          {dayColumns.map((d) => {
+            const dateObj = new Date(`${d.iso}T12:00:00`);
+            return (
+              <button
+                key={d.iso}
+                type="button"
+                className={[
+                  'week-agenda__mobile-day',
+                  d.isToday ? 'week-agenda__mobile-day--today' : '',
+                  d.iso === focusDate ? 'week-agenda__mobile-day--focused' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() => scrollToDayColumn(d.iso)}
+              >
+                <span className="week-agenda__mobile-day-name">
+                  {dateObj.toLocaleDateString(language, { weekday: 'short' })}
+                </span>
+                <span className="week-agenda__mobile-day-number">
+                  {dateObj.toLocaleDateString(language, { day: 'numeric', month: 'short' })}
+                </span>
+                {d.isToday && <span className="week-agenda__mobile-day-today">{t('common.today')}</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="week-agenda__scroll" ref={scrollRef}>
         <div
           className="week-agenda__grid"
           style={{
-            gridTemplateColumns: `${CALENDAR_TIME_COLUMN_PX}px repeat(7, minmax(0, 1fr))`,
+            gridTemplateColumns: `${timeColumnPx}px ${dayColumnTemplate}`,
             gridTemplateRows: `${CALENDAR_HEADER_ROW_PX}px repeat(${times.length}, ${rowHeightPx}px)`,
           }}
         >
@@ -510,8 +588,14 @@ export function WeekCalendar({
                   {new Date(`${d.iso}T12:00:00`).toLocaleDateString(language, { weekday: 'short' })}
                 </span>
                 <span className="week-agenda__day-number">
-                  {new Date(`${d.iso}T12:00:00`).toLocaleDateString(language, { month: 'short', day: 'numeric' })}
+                  {new Date(`${d.iso}T12:00:00`).toLocaleDateString(language, {
+                    month: 'short',
+                    day: 'numeric',
+                  })}
                 </span>
+                {d.isToday && isMobileWeek && (
+                  <span className="week-agenda__today-badge">{t('common.today')}</span>
+                )}
                 {closed && <span className="week-agenda__closed-tag">{t('appointmentsPage.closedDay')}</span>}
                 {exceptionNote && <span className="week-agenda__exception-note">{exceptionNote}</span>}
               </div>

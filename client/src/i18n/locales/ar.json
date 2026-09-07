@@ -654,6 +654,7 @@
     "title": "المواعيد",
     "previousWeek": "الأسبوع السابق",
     "nextWeek": "الأسبوع التالي",
+    "weekView": "عرض الأسبوع",
     "newAppointment": "موعد جديد",
     "editAppointment": "تعديل الموعد",
     "remindedAt": "✓ تم التذكير – {{time}}",

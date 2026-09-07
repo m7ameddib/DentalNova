@@ -658,6 +658,7 @@
     "title": "Appointments",
     "previousWeek": "Previous week",
     "nextWeek": "Next week",
+    "weekView": "Week view",
     "newAppointment": "New Appointment",
     "editAppointment": "Edit Appointment",
     "remindedAt": "✓ Reminded – {{time}}",
