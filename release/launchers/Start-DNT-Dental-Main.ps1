@@ -9,7 +9,7 @@ $Port = if ($env:PORT) { $env:PORT } else { '4000' }
 $NodeExe = Join-Path $AppRoot 'runtime\node\node.exe'
 if (-not (Test-Path $NodeExe)) { $NodeExe = 'node' }
 
-foreach ($sub in @('data', 'attachments', 'backups', 'logs', 'config', 'license')) {
+foreach ($sub in @('data', 'attachments', 'backups', 'logs', 'config', 'license', 'downloads')) {
   $path = Join-Path $DataDir $sub
   if (-not (Test-Path $path)) { New-Item -ItemType Directory -Force -Path $path | Out-Null }
 }

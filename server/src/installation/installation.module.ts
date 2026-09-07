@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { APP_GUARD } from '@nestjs/core';
 import { InstallationController } from './installation.controller';
 import { InstallationService } from './installation.service';
@@ -12,10 +12,12 @@ import { UsersRepository } from '../database/repositories/users.repository';
 import { RolesRepository } from '../database/repositories/roles.repository';
 import { HealthController } from '../health/health.controller';
 import { AuthModule } from '../auth/auth.module';
+import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
-  imports: [AuthModule],
-  controllers: [InstallationController, HealthController],  providers: [
+  imports: [AuthModule, forwardRef(() => SubscriptionModule)],
+  controllers: [InstallationController, HealthController],
+  providers: [
     InstallationService,
     InstallationRepository,
     LicenseService,
@@ -29,6 +31,6 @@ import { AuthModule } from '../auth/auth.module';
       useClass: InstallationReadyGuard,
     },
   ],
-  exports: [InstallationService, PathsService, LicenseService, DeploymentService],
+  exports: [InstallationService, PathsService, LicenseService, DeploymentService, InstallationRepository],
 })
 export class InstallationModule {}

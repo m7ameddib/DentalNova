@@ -61,6 +61,21 @@ export class InstallationRepository {
       .run();
   }
 
+  /** Online clinics await DibNova admin activation after first setup. */
+  markOnlineSubscriptionPending(): void {
+    this.db.connection
+      .prepare(
+        `UPDATE app_installation SET
+          online_subscription_status = 'PENDING',
+          online_subscription_started_at = NULL,
+          online_subscription_expires_at = NULL,
+          online_subscription_suspended_at = NULL,
+          online_subscription_suspended_reason = NULL
+         WHERE id = 1`,
+      )
+      .run();
+  }
+
   phase(): InstallationPhase {
     const row = this.get();
     if (this.deployment.requiresLicense() && !row.licenseActivatedAt) return 'activation';

@@ -25,6 +25,9 @@ import { ClinicalModule } from './clinical/clinical.module';
 
 import { InstallationModule } from './installation/installation.module';
 import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
+import { SubscriptionModule } from './subscription/subscription.module';
+import { DibNovaAdminModule } from './dibnova-admin/dibnova-admin.module';
+import { UpdatesModule } from './updates/updates.module';
 
 /** Resolve server/.env whether npm is started from repo root or server/. */
 function resolveServerEnvFile(): string {
@@ -59,6 +62,9 @@ function resolveServerEnvFile(): string {
     LabCasesModule,
     ClinicalModule,
     AiAssistantModule,
+    SubscriptionModule,
+    DibNovaAdminModule,
+    UpdatesModule,
   ],
 })
 export class AppModule {}

@@ -51,6 +51,10 @@ export class PathsService {
     return path.join(this.configDir(), 'jwt.secret');
   }
 
+  downloadsDir(): string {
+    return path.join(this.dataRoot(), 'downloads');
+  }
+
   ensureDataDirs(): void {
     for (const dir of [
       path.dirname(this.dbFile()),
@@ -59,6 +63,7 @@ export class PathsService {
       this.logsDir(),
       this.configDir(),
       this.licenseDir(),
+      this.downloadsDir(),
     ]) {
       fs.mkdirSync(dir, { recursive: true });
     }

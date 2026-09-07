@@ -1,6 +1,7 @@
 import { ReactNode, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Archive, Building2, Clock, CreditCard, FlaskConical, HardDrive, History, MapPin, MessageCircle, Settings as SettingsIcon, Stethoscope, Users, HeartPulse, Shield, Receipt } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
+import { Archive, Building2, Clock, CreditCard, FlaskConical, HardDrive, History, MapPin, MessageCircle, Settings as SettingsIcon, Stethoscope, Users, HeartPulse, Shield, Receipt, Download } from 'lucide-react';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { useUiStore } from '@/store/ui.store';
@@ -18,6 +19,8 @@ import { PatientArchiveSection } from '@/components/settings/PatientArchiveSecti
 import { GuarantorsSection } from '@/components/settings/GuarantorsSection';
 import { ExpenseCategoriesSection } from '@/components/settings/ExpenseCategoriesSection';
 import { LaboratoriesSection } from '@/components/settings/LaboratoriesSection';
+import { UpdatesSection } from '@/components/settings/UpdatesSection';
+import { installationApi } from '@/api/installation.api';
 
 interface NavItem {
   id: string;
@@ -35,6 +38,12 @@ export function SettingsPage() {
   const canViewAudit = usePermission(PERMISSIONS.AUDIT_VIEW);
   const canManageArchive = usePermission(PERMISSIONS.PATIENTS_DELETE);
   const canManageLab = usePermission(PERMISSIONS.LAB_CASES_MANAGE);
+
+  const { data: installStatus } = useQuery({
+    queryKey: ['installation-status'],
+    queryFn: installationApi.status,
+  });
+  const isOfflineMode = installStatus?.deploymentMode !== 'online';
 
   const generalContent = (
     <section className="settings-section">
@@ -115,6 +124,14 @@ export function SettingsPage() {
         icon: <HardDrive size={15} />,
         content: <BackupSection />,
       });
+      if (isOfflineMode) {
+        list.push({
+          id: 'updates',
+          label: t('settings.updates.title'),
+          icon: <Download size={15} />,
+          content: <UpdatesSection />,
+        });
+      }
       list.push({
         id: 'workingHours',
         label: t('settings.workingHours.title'),
@@ -146,7 +163,7 @@ export function SettingsPage() {
     }
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canManageSettings, canManageTreatments, canManageUsers, canViewAudit, canManageArchive, canManageLab, language, t]);
+  }, [canManageSettings, canManageTreatments, canManageUsers, canViewAudit, canManageArchive, canManageLab, isOfflineMode, language, t]);
 
   const [activeId, setActiveId] = useState('general');
   const active = items.find((i) => i.id === activeId) ?? items[0];

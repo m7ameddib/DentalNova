@@ -47,7 +47,11 @@ export function FirstSetupPage() {
       });
       if (result.accessToken && result.user) {
         setSession(result.accessToken, result.user);
-        navigate('/', { replace: true });
+        if (result.deploymentMode === 'online' && result.onlineSubscriptionStatus === 'PENDING') {
+          navigate('/subscription-status', { replace: true });
+        } else {
+          navigate('/', { replace: true });
+        }
       } else {
         navigate('/login', { replace: true });
       }    } catch (err: unknown) {

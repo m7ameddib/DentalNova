@@ -9,6 +9,7 @@ export interface InstallationStatus {
   version: string;
   product: string;
   deploymentMode: 'offline' | 'online';
+  onlineSubscriptionStatus?: 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | null;
 }
 
 export interface SetupCompleteResponse extends InstallationStatus {

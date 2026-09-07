@@ -90,6 +90,16 @@
     "mainServerDown": "حاسوب العيادة الرئيسي غير متاح حاليًا. يرجى التأكد من تشغيله واتصاله بشبكة العيادة.",
     "checkMainComputer": "هذا الجهاز يتصل بالسيرفر الرئيسي عبر Wi-Fi / LAN ولا يخزّن بيانات العيادة محليًا."
   },
+  "subscription": {
+    "pendingTitle": "في انتظار التفعيل",
+    "pendingMessage": "اكتمل إعداد العيادة. يجب على مسؤول DibNova تفعيل اشتراكك الإلكتروني قبل استخدام DentalNova.",
+    "expiredTitle": "انتهى الاشتراك",
+    "expiredMessage": "انتهى اشتراك DentalNova الإلكتروني. تواصل مع DibNova للتجديد.",
+    "expiredOn": "انتهى في {{date}}",
+    "suspendedTitle": "العيادة موقوفة",
+    "suspendedMessage": "تم إيقاف هذه العيادة الإلكترونية من قبل DibNova.",
+    "contactDibNova": "تواصل مع DibNova Technologies للمساعدة."
+  },
   "gender": {
     "MALE": "ذكر",
     "FEMALE": "أنثى",
@@ -1001,6 +1011,25 @@
       "selectFile": "اختر ملف النسخة (.zip)",
       "size": "الحجم",
       "createdAt": "تاريخ الإنشاء"
+    },
+    "updates": {
+      "title": "التحديثات",
+      "subtitle": "تحقق من GitHub Releases للحصول على أحدث مثبت Windows. التحديثات تستبدل ملفات التطبيق فقط — قاعدة بيانات العيادة وبيانات ProgramData محفوظة.",
+      "currentVersion": "الإصدار المثبت",
+      "latestVersion": "أحدث إصدار",
+      "unknown": "لم يتم التحقق بعد",
+      "source": "مصدر التحديث",
+      "available": "يتوفر إصدار أحدث.",
+      "upToDate": "أنت تستخدم أحدث إصدار (أو لم يُعثر على إصدار أحدث).",
+      "releaseNotes": "ملاحظات الإصدار",
+      "check": "التحقق من التحديثات",
+      "download": "تنزيل المثبت",
+      "launch": "تشغيل المثبت",
+      "launchConfirm": "سيتم فتح مثبت التحديث. اختر «تحديث التثبيت الحالي» للاحتفاظ بقاعدة بيانات العيادة. هل تريد المتابعة؟",
+      "downloadSuccess": "تم تنزيل المثبت بنجاح.",
+      "launchSuccess": "تم تشغيل المثبت. اتبع المعالج لإكمال التحديث.",
+      "downloaded": "تم التنزيل: {{name}} ({{size}})",
+      "dataSafety": "التحديثات لا تحذف أبدًا clinic.db أو بيانات العيادة في ProgramData."
     }
   },
   "followUp": {

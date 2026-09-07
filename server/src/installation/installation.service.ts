@@ -19,6 +19,7 @@ import { DeploymentService } from '../common/deployment.service';
 import { ActivateLicenseDto, FirstSetupDto } from './dto/installation.dto';
 import { APP_VERSION } from '../common/version';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { SubscriptionRepository } from '../subscription/subscription.repository';
 
 export interface InstallationStatusResponse {
   phase: InstallationPhase;
@@ -26,6 +27,7 @@ export interface InstallationStatusResponse {
   version: string;
   product: string;
   deploymentMode: 'offline' | 'online';
+  onlineSubscriptionStatus?: 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | null;
 }
 
 export interface SetupCompleteResponse extends InstallationStatusResponse {
@@ -48,16 +50,19 @@ export class InstallationService {
     private readonly db: DatabaseService,
     private readonly paths: PathsService,
     private readonly deployment: DeploymentService,
+    private readonly subscriptionRepo: SubscriptionRepository,
   ) {}
 
   getStatus(): InstallationStatusResponse {
     const row = this.repo.get();
+    const sub = this.deployment.isOnline() ? this.subscriptionRepo.get() : null;
     return {
       phase: this.repo.phase(),
       installationId: row.installationId,
       version: APP_VERSION,
       product: 'DNT Dental',
       deploymentMode: this.deployment.getMode(),
+      onlineSubscriptionStatus: sub?.status ?? null,
     };
   }
 
@@ -125,6 +130,10 @@ export class InstallationService {
       });
 
       this.repo.markSetupComplete();
+      if (this.deployment.isOnline()) {
+        this.repo.markOnlineSubscriptionPending();
+        this.logger.log('Online clinic setup complete — subscription PENDING admin activation.');
+      }
       return user;
     })();
     this.logger.log('First clinic setup completed.');

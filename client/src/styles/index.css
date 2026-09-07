@@ -448,6 +448,68 @@ textarea {
   margin-bottom: 8px;
 }
 
+.form-success-banner {
+  background: #ecfdf5;
+  color: var(--color-success);
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius-sm);
+  padding: 8px 10px;
+  font-size: 13px;
+  margin-bottom: 8px;
+}
+
+.updates-info-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.updates-info-grid dt {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  margin-bottom: 2px;
+}
+
+.updates-info-grid dd {
+  font-weight: 600;
+  margin: 0;
+}
+
+.updates-banner--available {
+  color: var(--color-primary);
+  font-weight: 600;
+  margin: 12px 0;
+}
+
+.updates-release-notes pre {
+  white-space: pre-wrap;
+  font-family: inherit;
+  font-size: 13px;
+  background: var(--color-surface-2);
+  padding: 12px;
+  border-radius: var(--radius-sm);
+  max-height: 200px;
+  overflow: auto;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
+.updates-safety-note {
+  margin-top: 12px;
+  font-size: 12px;
+}
+
+.subscription-status-icon {
+  color: var(--color-primary);
+  margin: 8px auto;
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;

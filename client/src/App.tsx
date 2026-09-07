@@ -40,6 +40,10 @@ import { ClinicExpensesPage } from '@/pages/ClinicExpensesPage';
 
 import { AiAssistantPage } from '@/pages/AiAssistantPage';
 
+import { SubscriptionGate } from '@/routes/SubscriptionGate';
+
+import { SubscriptionStatusPage } from '@/pages/SubscriptionStatusPage';
+
 import { OdontogramPreviewPage } from '@/pages/OdontogramPreviewPage';
 
 export default function App() {
@@ -50,6 +54,8 @@ export default function App() {
 
       <InstallationGate>
 
+        <SubscriptionGate>
+
         <Routes>
 
           <Route path="/server-config" element={<ServerConfigPage />} />
@@ -57,6 +63,8 @@ export default function App() {
           <Route path="/activate" element={<ActivationPage />} />
 
           <Route path="/setup" element={<FirstSetupPage />} />
+
+          <Route path="/subscription-status" element={<SubscriptionStatusPage />} />
 
           <Route path="/login" element={<LoginPage />} />
 
@@ -155,6 +163,8 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
 
         </Routes>
+
+        </SubscriptionGate>
 
       </InstallationGate>
 

@@ -90,6 +90,16 @@
     "mainServerDown": "DentalNova main clinic computer is currently unavailable. Please make sure the main computer is running and connected to the clinic network.",
     "checkMainComputer": "This workstation connects to the main clinic server over your clinic Wi-Fi / LAN. It does not store clinic data locally."
   },
+  "subscription": {
+    "pendingTitle": "Awaiting activation",
+    "pendingMessage": "Your clinic setup is complete. A DibNova administrator must activate your online subscription before you can use DentalNova.",
+    "expiredTitle": "Subscription expired",
+    "expiredMessage": "Your DentalNova online subscription has expired. Contact DibNova to renew.",
+    "expiredOn": "Expired on {{date}}",
+    "suspendedTitle": "Clinic suspended",
+    "suspendedMessage": "This online clinic has been suspended by DibNova.",
+    "contactDibNova": "Contact DibNova Technologies for assistance."
+  },
   "gender": {
     "MALE": "Male",
     "FEMALE": "Female",
@@ -1005,6 +1015,25 @@
       "selectFile": "Select backup file (.zip)",
       "size": "Size",
       "createdAt": "Created"
+    },
+    "updates": {
+      "title": "Updates",
+      "subtitle": "Check GitHub Releases for the latest Windows installer. Updates replace application files only — your clinic database and data in ProgramData are preserved.",
+      "currentVersion": "Installed version",
+      "latestVersion": "Latest release",
+      "unknown": "Not checked yet",
+      "source": "Update source",
+      "available": "A newer version is available.",
+      "upToDate": "You are on the latest release (or no newer release was found).",
+      "releaseNotes": "Release notes",
+      "check": "Check for updates",
+      "download": "Download installer",
+      "launch": "Run installer",
+      "launchConfirm": "The update installer will open. Choose \"Update Existing Installation\" to keep your clinic database and data. Continue?",
+      "downloadSuccess": "Installer downloaded successfully.",
+      "launchSuccess": "Installer launched. Follow the wizard to complete the update.",
+      "downloaded": "Downloaded: {{name}} ({{size}})",
+      "dataSafety": "Updates never delete C:\\ProgramData\\DibNova\\DNTDental\\data\\clinic.db or other clinic data."
     }
   },
   "followUp": {

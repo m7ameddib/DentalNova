@@ -201,8 +201,36 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `CORS_ORIGINS` | — | domain URL | Allowed browser origins |
 | `DOMAIN` | — | `dentalnova.dibnova.com` | Caddy HTTPS domain |
 | `GEMINI_API_KEY` | optional | optional | AI assistant |
+| `DIBNOVA_ADMIN_API_KEY` | — | **required** | DibNova admin API authentication |
+| `GITHUB_RELEASES_REPO` | optional | — | Offline update source (default: `m7ameddib/DentalNova`) |
 
 See `server/.env.example` (offline) and `deploy/.env.online.example` (online).
+
+---
+
+## Online subscription management (DibNova admin)
+
+Online clinics start **PENDING** after first setup. Only DibNova admins can activate, extend, suspend, or reactivate subscriptions via the admin API (used by the existing DibNova admin system — no separate website in DentalNova).
+
+Set `DIBNOVA_ADMIN_API_KEY` on the online server. Authenticate with header `X-DibNova-Admin-Key: <key>`.
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/dibnova-admin/installation` | Clinic + subscription/license info |
+| POST | `/api/dibnova-admin/subscription/activate` | PENDING → ACTIVE (1 year) |
+| POST | `/api/dibnova-admin/subscription/extend` | Extend active subscription by 1 year |
+| POST | `/api/dibnova-admin/subscription/suspend` | Suspend clinic (`{ "reason": "..." }`) |
+| POST | `/api/dibnova-admin/subscription/reactivate` | SUSPENDED/EXPIRED → ACTIVE (1 year) |
+
+Offline licensing is unchanged — use the existing `tools/dibnova-license-generator` (separate from online subscriptions).
+
+---
+
+## Offline updates (GitHub Releases)
+
+In **offline desktop mode**, open **Settings → Updates** to check [GitHub Releases](https://github.com/m7ameddib/DentalNova/releases) for `DNT-Dental-Main-Clinic-Setup-v*.exe`.
+
+Updates download to `ProgramData\DibNova\DNTDental\downloads\` and launch the existing Inno Setup installer. Choose **Update Existing Installation** — clinic data at `ProgramData\DibNova\DNTDental\data\clinic.db` is never deleted.
 
 ---
 
