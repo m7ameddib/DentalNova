@@ -12,7 +12,14 @@
     "clinicExpenses": "Clinic Expenses",
     "reports": "Reports",
     "settings": "Settings",
-    "aiAssistant": "AI Assistant"
+    "aiAssistant": "AI Assistant",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "pwa": {
+    "offlineMessage": "No internet connection. DentalNova requires an active connection to your clinic server.",
+    "installHint": "Install DentalNova on this device for quick access.",
+    "installAction": "Install app"
   },
   "common": {
     "search": "Search",

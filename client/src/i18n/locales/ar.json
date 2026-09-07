@@ -12,7 +12,14 @@
     "clinicExpenses": "مصروفات العيادة",
     "reports": "التقارير",
     "settings": "الإعدادات",
-    "aiAssistant": "المساعد الذكي"
+    "aiAssistant": "المساعد الذكي",
+    "openMenu": "فتح القائمة",
+    "closeMenu": "إغلاق القائمة"
+  },
+  "pwa": {
+    "offlineMessage": "لا يوجد اتصال بالإنترنت. يتطلب DentalNova اتصالاً نشطاً بخادم العيادة.",
+    "installHint": "ثبّت DentalNova على هذا الجهاز للوصول السريع.",
+    "installAction": "تثبيت التطبيق"
   },
   "common": {
     "search": "بحث",

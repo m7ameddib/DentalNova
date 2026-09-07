@@ -47,12 +47,16 @@ import { SubscriptionStatusPage } from '@/pages/SubscriptionStatusPage';
 import { DibNovaAdminPage } from '@/pages/DibNovaAdminPage';
 
 import { OdontogramPreviewPage } from '@/pages/OdontogramPreviewPage';
+import { OnlineStatusBanner } from '@/components/common/OnlineStatusBanner';
+import { PwaInstallBanner } from '@/components/common/PwaInstallBanner';
 
 export default function App() {
 
   return (
 
     <BrowserRouter>
+      <OnlineStatusBanner />
+      <PwaInstallBanner />
 
       <InstallationGate>
 

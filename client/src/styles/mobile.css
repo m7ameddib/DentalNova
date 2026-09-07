@@ -1,0 +1,357 @@
+/* Mobile-first responsive utilities and touch-friendly controls */
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+html,
+body {
+  overflow-x: clip;
+}
+
+body.top-nav-menu-open {
+  overflow: hidden;
+}
+
+/* Touch-friendly controls on coarse pointers */
+@media (pointer: coarse) {
+  .btn,
+  .lang-btn,
+  .top-nav__link,
+  select,
+  input[type='checkbox'],
+  input[type='radio'] {
+    min-height: 44px;
+  }
+
+  .icon-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .icon-btn--small {
+    width: 36px;
+    height: 36px;
+  }
+}
+
+/* ---------- Top navigation (mobile drawer) ---------- */
+
+.top-nav__menu-btn {
+  display: none;
+  margin-inline-start: auto;
+}
+
+.top-nav__backdrop {
+  display: none;
+}
+
+.top-nav__drawer-footer {
+  display: none;
+}
+
+.top-nav__lang--desktop,
+.top-nav__user--desktop {
+  display: flex;
+}
+
+@media (max-width: 1024px) {
+  .top-nav {
+    gap: 12px;
+    padding: 8px 12px;
+    flex-wrap: nowrap;
+  }
+
+  .top-nav__menu-btn {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+
+  .top-nav__lang--desktop,
+  .top-nav__user--desktop {
+    display: none;
+  }
+
+  .top-nav__backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 19;
+    border: none;
+    background: rgba(15, 23, 42, 0.45);
+    cursor: pointer;
+  }
+
+  .top-nav__links {
+    display: none;
+    position: fixed;
+    top: 0;
+    inset-inline-end: 0;
+    width: min(320px, 88vw);
+    height: 100dvh;
+    max-height: 100dvh;
+    padding: 72px 16px 20px;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    background: var(--color-surface);
+    border-inline-start: 1px solid var(--color-border);
+    box-shadow: -8px 0 24px rgba(15, 23, 42, 0.12);
+    overflow-y: auto;
+    z-index: 20;
+    flex: none;
+  }
+
+  .top-nav__links--open {
+    display: flex;
+  }
+
+  .top-nav__link {
+    width: 100%;
+    padding: 12px 14px;
+    white-space: normal;
+  }
+
+  .top-nav__drawer-footer {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    margin-top: auto;
+    padding-top: 20px;
+    border-top: 1px solid var(--color-border);
+  }
+
+  .top-nav__drawer-footer .top-nav__user {
+    justify-content: space-between;
+    white-space: normal;
+  }
+
+  .top-nav__drawer-footer .top-nav__user-info {
+    text-align: start;
+  }
+}
+
+@media (max-width: 480px) {
+  .brand-logo--nav {
+    height: 34px;
+  }
+}
+
+/* ---------- App shell ---------- */
+
+@media (max-width: 768px) {
+  .app-shell__content {
+    padding: 12px;
+  }
+
+  .app-shell__footer {
+    padding: 8px 12px  calc(12px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* ---------- PWA banners ---------- */
+
+.online-status-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: #fef3c7;
+  color: #92400e;
+  border-bottom: 1px solid #fcd34d;
+  font-size: 13px;
+  font-weight: 600;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+}
+
+.pwa-install-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 16px;
+  background: var(--color-primary-soft);
+  border-bottom: 1px solid rgba(37, 99, 235, 0.15);
+  font-size: 13px;
+  position: sticky;
+  top: 0;
+  z-index: 29;
+}
+
+.pwa-install-banner__content {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pwa-install-banner__actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ---------- Tables ---------- */
+
+@media (max-width: 768px) {
+  table {
+    min-width: 560px;
+  }
+
+  .table-wrap,
+  .data-table-wrap,
+  .patients-table-wrap,
+  .appointments-table-wrap,
+  .reports-table-wrap,
+  .settings-table-wrap,
+  .lab-cases-table-wrap,
+  .admin-table-wrap,
+  .dibnova-admin-dashboard table,
+  .patient-record__table-wrap,
+  .billing-table-wrap,
+  .expenses-table-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    max-width: 100%;
+  }
+}
+
+/* ---------- Forms & toolbars ---------- */
+
+@media (max-width: 768px) {
+  .form-grid,
+  .form-row,
+  .toolbar,
+  .page-header,
+  .patients-toolbar,
+  .appointments-toolbar,
+  .lab-cases-toolbar,
+  .reports-toolbar,
+  .settings-toolbar,
+  .patient-record__header,
+  .patient-record__toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .form-grid > *,
+  .form-row > * {
+    width: 100%;
+  }
+
+  .page-header h1,
+  .lab-cases-page__header {
+    flex-wrap: wrap;
+  }
+
+  input[type='text'],
+  input[type='email'],
+  input[type='password'],
+  input[type='number'],
+  input[type='tel'],
+  input[type='date'],
+  input[type='time'],
+  input[type='search'],
+  select,
+  textarea {
+    max-width: 100%;
+  }
+
+  .modal,
+  .dialog,
+  .modal__panel {
+    width: min(100vw - 24px, 100%);
+    max-height: calc(100dvh - 24px);
+    overflow-y: auto;
+  }
+}
+
+/* ---------- Patient workspace ---------- */
+
+@media (max-width: 768px) {
+  .patient-workspace {
+    flex-direction: column;
+  }
+
+  .patient-sidebar,
+  .patient-list-panel {
+    width: 100%;
+    max-width: none;
+    min-width: 0;
+  }
+
+  .patient-record__tabs {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+
+  .patient-record__tab {
+    flex-shrink: 0;
+  }
+}
+
+/* ---------- Appointments calendar ---------- */
+
+@media (max-width: 900px) {
+  .appointments-layout,
+  .appointments-page__layout {
+    flex-direction: column;
+  }
+
+  .appointments-sidebar,
+  .appointments-calendar-panel {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+/* ---------- Auth & public pages ---------- */
+
+@media (max-width: 768px) {
+  .login-page,
+  .subscription-status-page,
+  .activation-page,
+  .setup-page,
+  .server-config-page {
+    padding: 16px;
+    padding-top: calc(16px + env(safe-area-inset-top, 0px));
+  }
+
+  .login-card,
+  .subscription-status-card,
+  .activation-card,
+  .setup-card {
+    padding: 24px 20px;
+    width: 100%;
+  }
+
+  .dibnova-admin-dashboard {
+    padding: 16px 12px;
+  }
+
+  .admin-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Standalone PWA safe areas ---------- */
+
+@supports (padding: env(safe-area-inset-top)) {
+  .top-nav {
+    padding-top: calc(6px + env(safe-area-inset-top, 0px));
+  }
+
+  @media (max-width: 1024px) {
+    .top-nav__links {
+      padding-top: calc(72px + env(safe-area-inset-top, 0px));
+      padding-bottom: calc(20px + env(safe-area-inset-bottom, 0px));
+    }
+  }
+}
