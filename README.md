@@ -1,10 +1,31 @@
-# DNT Dental — Clinic Management System (Phase 1)
+# DNT Dental — Clinic Management System
 
-Desktop-first, offline-first dental clinic management system. This is the
-first working phase: base architecture, EN/AR i18n, authentication/RBAC,
-the main desktop shell, patients, the approved Patient Record screen, the
-dental chart, treatment entry, an appointment calendar foundation, and
-patient payments/account foundation.
+Unified **online** (cloud browser) and **offline** (Windows desktop) dental clinic management system in a single codebase.
+
+## Deployment modes
+
+| Mode | Use case | Docs |
+|------|----------|------|
+| **Online** | Browser at `https://dentalnova.dibnova.com`, cloud Docker deployment | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#online-deployment-production) |
+| **Offline** | Windows desktop installer, no internet required, local SQLite | [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md#offline-deployment-windows-installer) |
+
+Quick commands:
+
+```bash
+# Development
+npm install
+npm run dev:server          # offline mode (default)
+npm run dev:client
+
+# Online production (Docker)
+cp deploy/.env.online.example .env   # set JWT_SECRET first
+npm run docker:up
+
+# Offline Windows installer
+npm run release:offline
+```
+
+See **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)** for full build, deploy, and configuration details.
 
 ## Architecture
 

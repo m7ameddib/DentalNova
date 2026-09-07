@@ -1,6 +1,6 @@
-# DNT Dental v1.1.2 — Build production release package
+# DNT Dental v1.1.3 — Build production release package
 param(
-  [string]$Version = '1.1.2'
+  [string]$Version = '1.1.3'
 )
 
 $ErrorActionPreference = 'Stop'

@@ -1,5 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
+import { DeploymentService } from '../common/deployment.service';
 
 export type InstallationPhase = 'activation' | 'setup' | 'ready';
 
@@ -15,7 +16,10 @@ export interface InstallationRow {
 
 @Injectable()
 export class InstallationRepository {
-  constructor(private readonly db: DatabaseService) {}
+  constructor(
+    private readonly db: DatabaseService,
+    private readonly deployment: DeploymentService,
+  ) {}
 
   get(): InstallationRow {
     const row = this.db.connection
@@ -59,7 +63,7 @@ export class InstallationRepository {
 
   phase(): InstallationPhase {
     const row = this.get();
-    if (!row.licenseActivatedAt) return 'activation';
+    if (this.deployment.requiresLicense() && !row.licenseActivatedAt) return 'activation';
     if (!row.setupCompletedAt) return 'setup';
     return 'ready';
   }

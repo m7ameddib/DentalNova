@@ -32,7 +32,7 @@ export class InstallationReadyGuard implements CanActivate {
     if (!this.installation.isReady()) {
       throw new ServiceUnavailableException({
         code: 'INSTALLATION_NOT_READY',
-        message: 'Clinic installation is not complete. Finish activation and first setup.',
+        message: 'Clinic installation is not complete. Finish setup to continue.',
       });
     }
     return true;

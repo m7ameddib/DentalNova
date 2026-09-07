@@ -15,6 +15,7 @@ foreach ($sub in @('data', 'attachments', 'backups', 'logs', 'config', 'license'
 }
 
 $env:DNT_DATA_DIR = $DataDir
+$env:DEPLOYMENT_MODE = 'offline'
 $env:HOST = '0.0.0.0'
 $env:SERVE_CLIENT = '1'
 $env:NODE_ENV = 'production'
@@ -101,7 +102,7 @@ if (-not (Test-DntHealth)) {
       $psi.EnvironmentVariables[$entry.Key] = $entry.Value
     }
   }
-  foreach ($key in @('DNT_DATA_DIR', 'HOST', 'SERVE_CLIENT', 'NODE_ENV', 'PORT', 'MIGRATIONS_DIR')) {
+  foreach ($key in @('DNT_DATA_DIR', 'DEPLOYMENT_MODE', 'HOST', 'SERVE_CLIENT', 'NODE_ENV', 'PORT', 'MIGRATIONS_DIR')) {
     $psi.EnvironmentVariables[$key] = [Environment]::GetEnvironmentVariable($key)
   }
 

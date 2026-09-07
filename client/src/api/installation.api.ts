@@ -8,6 +8,7 @@ export interface InstallationStatus {
   installationId: string;
   version: string;
   product: string;
+  deploymentMode: 'offline' | 'online';
 }
 
 export interface SetupCompleteResponse extends InstallationStatus {

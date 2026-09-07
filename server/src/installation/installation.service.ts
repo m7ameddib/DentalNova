@@ -15,6 +15,7 @@ import { UsersRepository } from '../database/repositories/users.repository';
 import { RolesRepository } from '../database/repositories/roles.repository';
 import { DatabaseService } from '../database/database.service';
 import { PathsService } from '../common/paths.service';
+import { DeploymentService } from '../common/deployment.service';
 import { ActivateLicenseDto, FirstSetupDto } from './dto/installation.dto';
 import { APP_VERSION } from '../common/version';
 import { AuthenticatedUser } from '../auth/auth.types';
@@ -24,6 +25,7 @@ export interface InstallationStatusResponse {
   installationId: string;
   version: string;
   product: string;
+  deploymentMode: 'offline' | 'online';
 }
 
 export interface SetupCompleteResponse extends InstallationStatusResponse {
@@ -45,6 +47,7 @@ export class InstallationService {
     private readonly rolesRepo: RolesRepository,
     private readonly db: DatabaseService,
     private readonly paths: PathsService,
+    private readonly deployment: DeploymentService,
   ) {}
 
   getStatus(): InstallationStatusResponse {
@@ -54,10 +57,14 @@ export class InstallationService {
       installationId: row.installationId,
       version: APP_VERSION,
       product: 'DNT Dental',
+      deploymentMode: this.deployment.getMode(),
     };
   }
 
   activate(dto: ActivateLicenseDto) {
+    if (!this.deployment.requiresLicense()) {
+      throw new ConflictException('License activation is not required in online deployment mode.');
+    }
     if (this.repo.phase() !== 'activation') {
       throw new ConflictException('License is already activated on this installation.');
     }

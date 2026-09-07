@@ -6,6 +6,7 @@ import { InstallationRepository } from './installation.repository';
 import { InstallationReadyGuard } from './guards/installation-ready.guard';
 import { LicenseService } from '../common/license.service';
 import { PathsService } from '../common/paths.service';
+import { DeploymentService } from '../common/deployment.service';
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
 import { UsersRepository } from '../database/repositories/users.repository';
 import { RolesRepository } from '../database/repositories/roles.repository';
@@ -19,6 +20,7 @@ import { AuthModule } from '../auth/auth.module';
     InstallationRepository,
     LicenseService,
     PathsService,
+    DeploymentService,
     ClinicSettingsRepository,
     UsersRepository,
     RolesRepository,
@@ -27,6 +29,6 @@ import { AuthModule } from '../auth/auth.module';
       useClass: InstallationReadyGuard,
     },
   ],
-  exports: [InstallationService, PathsService, LicenseService],
+  exports: [InstallationService, PathsService, LicenseService, DeploymentService],
 })
 export class InstallationModule {}

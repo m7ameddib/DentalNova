@@ -1,8 +1,8 @@
-# DNT Dental v1.1.1 — Installation Guide
+# DNT Dental v1.1.3 — Installation Guide
 
 ## Package contents
 
-- **DNT-Dental-Main-Clinic-Setup-v1.1.1.exe** — Windows installer for the main clinic computer (recommended)
+- **DNT-Dental-Main-Clinic-Setup-v1.1.3.exe** — Windows installer for the main clinic computer (recommended)
 - **Main-Clinic/** — Portable main clinic package (server + UI + bundled runtime)
 - **Clinic-Client/** — Second laptop launcher (connects via LAN, no local database)
 
@@ -10,7 +10,7 @@
 
 ### Option 1 — Windows installer (recommended)
 
-1. Run **DNT-Dental-Main-Clinic-Setup-v1.1.1.exe**
+1. Run **DNT-Dental-Main-Clinic-Setup-v1.1.3.exe**
 2. Choose installation type:
    - **A) New Installation** — for a new computer; creates ProgramData folders if needed
    - **B) Update Existing Installation** — replaces application files only; **never** deletes or replaces `clinic.db` or patient data
@@ -78,4 +78,4 @@ The update process replaces program files only. Your `clinic.db` and all patient
 
 ---
 
-**DNT Dental v1.1.1** — DibNova Technologies
+**DNT Dental v1.1.3** — DibNova Technologies

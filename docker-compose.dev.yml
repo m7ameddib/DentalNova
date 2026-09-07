@@ -1,0 +1,27 @@
+# Local online development — app only, no Caddy (use http://localhost:4000)
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: dentalnova-app-dev
+    env_file:
+      - .env
+    environment:
+      DEPLOYMENT_MODE: online
+      NODE_ENV: production
+      SERVE_CLIENT: "1"
+      DNT_DATA_DIR: /data
+      MIGRATIONS_DIR: /app/database/migrations
+      HOST: 0.0.0.0
+      PORT: "4000"
+      CORS_ORIGINS: http://localhost:4000
+    ports:
+      - "4000:4000"
+    volumes:
+      - dentalnova-data-dev:/data
+    restart: unless-stopped
+
+volumes:
+  dentalnova-data-dev:
+    name: dentalnova-data-dev

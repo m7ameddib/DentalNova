@@ -1,8 +1,8 @@
 ; DNT Dental — Main Clinic Windows Installer (Inno Setup)
-; Compile: iscc /DMyAppVersion=1.1.2 release\installer\DNT-Dental-Main-Clinic.iss
+; Compile: iscc /DMyAppVersion=1.1.3 release\installer\DNT-Dental-Main-Clinic.iss
 
 #ifndef MyAppVersion
-  #define MyAppVersion "1.1.2"
+  #define MyAppVersion "1.1.3"
 #endif
 
 #define MyAppName "DNT Dental"

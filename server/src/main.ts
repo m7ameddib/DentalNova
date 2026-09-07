@@ -10,6 +10,8 @@ import { AppModule } from './app.module';
 
 import { HttpExceptionFilter } from './common/filters/http-exception.filter';
 
+import { DeploymentService } from './common/deployment.service';
+
 import { APP_VERSION } from './common/version';
 
 import * as fs from 'fs';
@@ -40,11 +42,21 @@ for (const stream of [process.stdout, process.stderr]) {
 
 async function bootstrap() {
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: false });
 
+  const deployment = app.get(DeploymentService);
 
-
-  app.enableCors({ origin: true, credentials: true });
+  if (deployment.isOnline()) {
+    app.set('trust proxy', 1);
+    const origins = deployment.allowedOrigins();
+    app.enableCors({
+      origin: origins.length > 0 ? origins : true,
+      credentials: true,
+    });
+    logger.log(`Online mode — CORS origins: ${origins.join(', ') || '(all)'}`);
+  } else {
+    app.enableCors({ origin: true, credentials: true });
+  }
 
   app.useGlobalPipes(
 
@@ -64,18 +76,21 @@ async function bootstrap() {
 
   app.setGlobalPrefix('api');
 
-  const serveClient = process.env.SERVE_CLIENT === '1' || process.env.NODE_ENV === 'production';
+  const clientDistCandidates = [
+    path.join(__dirname, '..', 'public'),
+    path.join(process.cwd(), 'public'),
+    path.join(__dirname, '..', '..', 'client', 'dist'),
+    path.join(process.cwd(), 'client', 'dist'),
+  ];
+
+  const clientDist = clientDistCandidates.find((p) => fs.existsSync(path.join(p, 'index.html')));
+  const serveClientExplicit = process.env.SERVE_CLIENT === '1';
+  const serveClientDisabled = process.env.SERVE_CLIENT === '0';
+  const serveClient =
+    !serveClientDisabled &&
+    (serveClientExplicit || process.env.NODE_ENV === 'production' || clientDist != null);
 
   if (serveClient) {
-    const candidates = [
-      path.join(__dirname, '..', 'public'),
-      path.join(process.cwd(), 'public'),
-      path.join(__dirname, '..', '..', 'client', 'dist'),
-      path.join(process.cwd(), 'client', 'dist'),
-    ];
-
-    const clientDist = candidates.find((p) => fs.existsSync(path.join(p, 'index.html')));
-
     if (clientDist) {
       const indexHtml = path.join(clientDist, 'index.html');
 
@@ -98,7 +113,7 @@ async function bootstrap() {
 
   await app.listen(port, host);
 
-  logger.log(`DentalNova v${APP_VERSION} API on http://${host}:${port}/api`);
+  logger.log(`DentalNova v${APP_VERSION} [${deployment.getMode()}] API on http://${host}:${port}/api`);
 
 
 
