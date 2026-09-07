@@ -26,6 +26,7 @@ export interface FirstSetupPayload {
   workEndTime: string;
   adminUsername: string;
   adminPassword: string;
+  adminPhone: string;
   address?: string;
 }
 

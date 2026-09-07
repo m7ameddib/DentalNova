@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from 'react';
-import { Link, Navigate, useNavigate } from 'react-router-dom';
+import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Building2, Lock, LogIn, UserRound } from 'lucide-react';
@@ -17,6 +17,7 @@ import {
 export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const setSession = useAuthStore((s) => s.setSession);
   const logout = useAuthStore((s) => s.logout);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
@@ -25,6 +26,7 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(() => Boolean(getRememberedUsername()));
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const { data: installStatus, isFetched: installReady } = useQuery({
@@ -36,6 +38,13 @@ export function LoginPage() {
   const isOnline = installStatus?.deploymentMode === 'online';
   const canCreateClinic = isOnline && installStatus?.phase === 'setup';
   const clinicReady = installStatus?.phase === 'ready';
+
+  useEffect(() => {
+    if ((location.state as { resetSuccess?: boolean } | null)?.resetSuccess) {
+      setSuccess(t('auth.resetSuccess'));
+      navigate('/login', { replace: true, state: null });
+    }
+  }, [location.state, navigate, t]);
 
   useEffect(() => {
     if (!installReady || !isAuthenticated) return;
@@ -128,10 +137,12 @@ export function LoginPage() {
                 />
                 <span>{t('auth.rememberMe')}</span>
               </label>
-              <span className="login-card__forgot-hint" title={t('auth.forgotPasswordHint')}>
+              <Link to="/forgot-password" className="login-card__forgot-link">
                 {t('auth.forgotPassword')}
-              </span>
+              </Link>
             </div>
+
+            {success && <div className="form-info-banner">{success}</div>}
 
             {error && <div className="form-error-banner">{error}</div>}
 

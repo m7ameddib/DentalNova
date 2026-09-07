@@ -9,8 +9,15 @@ export class UsersRepository {
 
   findByUsername(username: string): User | undefined {
     const row = this.db.connection
-      .prepare('SELECT * FROM users WHERE username = ?')
+      .prepare('SELECT * FROM users WHERE username = ? COLLATE NOCASE')
       .get(username) as Record<string, unknown> | undefined;
+    return row ? toCamel<User>(row) : undefined;
+  }
+
+  findByPhoneNormalized(phoneNormalized: string): User | undefined {
+    const row = this.db.connection
+      .prepare('SELECT * FROM users WHERE phone_normalized = ?')
+      .get(phoneNormalized) as Record<string, unknown> | undefined;
     return row ? toCamel<User>(row) : undefined;
   }
 
@@ -33,28 +40,54 @@ export class UsersRepository {
     username: string;
     passwordHash: string;
     roleId: number;
+    phone?: string | null;
+    phoneNormalized?: string | null;
   }): User {
     const result = this.db.connection
       .prepare(
-        `INSERT INTO users (full_name, username, password_hash, role_id) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO users (full_name, username, password_hash, role_id, phone, phone_normalized)
+         VALUES (?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.fullName, input.username, input.passwordHash, input.roleId);
+      .run(
+        input.fullName,
+        input.username,
+        input.passwordHash,
+        input.roleId,
+        input.phone ?? null,
+        input.phoneNormalized ?? null,
+      );
     return this.findById(Number(result.lastInsertRowid))!;
   }
 
   update(
     id: number,
-    input: { fullName?: string; roleId?: number; isActive?: boolean; passwordHash?: string },
+    input: {
+      fullName?: string;
+      roleId?: number;
+      isActive?: boolean;
+      passwordHash?: string;
+      phone?: string | null;
+      phoneNormalized?: string | null;
+    },
   ): User | undefined {
     const existing = this.findById(id);
     if (!existing) return undefined;
     const merged = { ...existing, ...input };
     this.db.connection
       .prepare(
-        `UPDATE users SET full_name = ?, role_id = ?, is_active = ?, password_hash = ?, updated_at = datetime('now')
+        `UPDATE users SET full_name = ?, role_id = ?, is_active = ?, password_hash = ?,
+         phone = ?, phone_normalized = ?, updated_at = datetime('now')
          WHERE id = ?`,
       )
-      .run(merged.fullName, merged.roleId, merged.isActive ? 1 : 0, merged.passwordHash, id);
+      .run(
+        merged.fullName,
+        merged.roleId,
+        merged.isActive ? 1 : 0,
+        merged.passwordHash,
+        merged.phone ?? null,
+        merged.phoneNormalized ?? null,
+        id,
+      );
     return this.findById(id);
   }
 }

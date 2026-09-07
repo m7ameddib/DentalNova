@@ -31,6 +31,8 @@ export interface User {
   fullName: string;
   username: string;
   passwordHash: string;
+  phone: string | null;
+  phoneNormalized: string | null;
   roleId: number;
   isActive: boolean;
   createdAt: string;

@@ -20,6 +20,8 @@ import { ActivateLicenseDto, FirstSetupDto } from './dto/installation.dto';
 import { APP_VERSION } from '../common/version';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { SubscriptionRepository } from '../subscription/subscription.repository';
+import { OnlineClinicAccountsRepository } from '../database/repositories/online-clinic-accounts.repository';
+import { isValidPhone, normalizePhone } from '../common/phone.util';
 
 export interface InstallationStatusResponse {
   phase: InstallationPhase;
@@ -51,6 +53,7 @@ export class InstallationService {
     private readonly paths: PathsService,
     private readonly deployment: DeploymentService,
     private readonly subscriptionRepo: SubscriptionRepository,
+    private readonly onlineAccountsRepo: OnlineClinicAccountsRepository,
   ) {}
 
   getStatus(): InstallationStatusResponse {
@@ -97,8 +100,30 @@ export class InstallationService {
       throw new ConflictException('Clinic setup has already been completed.');
     }
 
-    if (this.usersRepo.findByUsername(dto.adminUsername)) {
+    const username = dto.adminUsername.trim();
+    const phoneNormalized = normalizePhone(dto.adminPhone);
+
+    if (!isValidPhone(dto.adminPhone)) {
+      throw new BadRequestException('Enter a valid administrator phone number.');
+    }
+
+    if (this.usersRepo.findByUsername(username)) {
       throw new ConflictException('Username is already taken.');
+    }
+
+    if (this.usersRepo.findByPhoneNormalized(phoneNormalized)) {
+      throw new ConflictException('This phone number is already registered to another account.');
+    }
+
+    const installationRow = this.repo.get();
+
+    if (this.deployment.isOnline()) {
+      if (this.onlineAccountsRepo.findByUsername(username)) {
+        throw new ConflictException('Username is already taken.');
+      }
+      if (this.onlineAccountsRepo.findByPhoneNormalized(phoneNormalized)) {
+        throw new ConflictException('This phone number is already registered to another clinic account.');
+      }
     }
 
     const doctorRole = this.rolesRepo.findByName('doctor');
@@ -124,10 +149,21 @@ export class InstallationService {
 
       const user = this.usersRepo.create({
         fullName: dto.doctorName.trim(),
-        username: dto.adminUsername.trim(),
+        username,
         passwordHash,
         roleId: doctorRole.id,
+        phone: dto.adminPhone.trim(),
+        phoneNormalized,
       });
+
+      if (this.deployment.isOnline()) {
+        this.onlineAccountsRepo.create({
+          username,
+          phoneNormalized,
+          installationId: installationRow.installationId,
+          adminUserId: user.id,
+        });
+      }
 
       this.repo.markSetupComplete();
       if (this.deployment.isOnline()) {

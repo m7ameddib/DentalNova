@@ -49,6 +49,10 @@ export class FirstSetupDto {
   @MinLength(8)
   adminPassword!: string;
 
+  @IsString()
+  @IsNotEmpty()
+  adminPhone!: string;
+
   @IsOptional()
   @IsString()
   address?: string;

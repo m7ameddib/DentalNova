@@ -10,12 +10,13 @@ import { DeploymentService } from '../common/deployment.service';
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
 import { UsersRepository } from '../database/repositories/users.repository';
 import { RolesRepository } from '../database/repositories/roles.repository';
+import { OnlineClinicAccountsRepository } from '../database/repositories/online-clinic-accounts.repository';
 import { HealthController } from '../health/health.controller';
 import { AuthModule } from '../auth/auth.module';
 import { SubscriptionModule } from '../subscription/subscription.module';
 
 @Module({
-  imports: [AuthModule, forwardRef(() => SubscriptionModule)],
+  imports: [forwardRef(() => AuthModule), forwardRef(() => SubscriptionModule)],
   controllers: [InstallationController, HealthController],
   providers: [
     InstallationService,
@@ -26,6 +27,7 @@ import { SubscriptionModule } from '../subscription/subscription.module';
     ClinicSettingsRepository,
     UsersRepository,
     RolesRepository,
+    OnlineClinicAccountsRepository,
     {
       provide: APP_GUARD,
       useClass: InstallationReadyGuard,

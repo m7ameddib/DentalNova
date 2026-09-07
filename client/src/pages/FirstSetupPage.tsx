@@ -26,6 +26,7 @@ export function FirstSetupPage() {
   const [workStartTime, setWorkStartTime] = useState('09:00');
   const [workEndTime, setWorkEndTime] = useState('18:00');
   const [adminUsername, setAdminUsername] = useState('');
+  const [adminPhone, setAdminPhone] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [adminPasswordConfirm, setAdminPasswordConfirm] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -49,6 +50,7 @@ export function FirstSetupPage() {
         workStartTime,
         workEndTime,
         adminUsername,
+        adminPhone: adminPhone.trim() || doctorPhone.trim(),
         adminPassword,
         address: address.trim() || undefined,
       });
@@ -140,6 +142,17 @@ export function FirstSetupPage() {
           <label className="form-field">
             <span className="form-field__label">{t('auth.username')}</span>
             <input value={adminUsername} onChange={(e) => setAdminUsername(e.target.value)} required autoComplete="username" />
+          </label>
+          <label className="form-field">
+            <span className="form-field__label">{t('auth.accountPhone')}</span>
+            <input
+              value={adminPhone}
+              onChange={(e) => setAdminPhone(e.target.value)}
+              placeholder={doctorPhone || t('auth.accountPhonePlaceholder') || ''}
+              required
+              autoComplete="tel"
+            />
+            <span className="form-field__hint muted">{t('installation.adminPhoneHint')}</span>
           </label>
           <label className="form-field">
             <span className="form-field__label">{t('auth.password')}</span>

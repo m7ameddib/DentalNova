@@ -47,6 +47,7 @@ import { SubscriptionStatusPage } from '@/pages/SubscriptionStatusPage';
 import { DibNovaAdminPage } from '@/pages/DibNovaAdminPage';
 
 import { OdontogramPreviewPage } from '@/pages/OdontogramPreviewPage';
+import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { OnlineStatusBanner } from '@/components/common/OnlineStatusBanner';
 import { PwaInstallBanner } from '@/components/common/PwaInstallBanner';
 
@@ -75,6 +76,8 @@ export default function App() {
           <Route path="/dibnova-admin" element={<DibNovaAdminPage />} />
 
           <Route path="/login" element={<LoginPage />} />
+
+          <Route path="/forgot-password" element={<ForgotPasswordPage />} />
 
           <Route path="/odontogram-preview" element={<OdontogramPreviewPage />} />
 

@@ -5,9 +5,11 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UsersRepository } from '../database/repositories/users.repository';
 import { RolesRepository } from '../database/repositories/roles.repository';
+import { InstallationRepository } from '../installation/installation.repository';
 import { AuthenticatedUser, JwtPayload } from './auth.types';
 import { JwtSecretService } from './jwt-secret.service';
 import { PERMISSIONS } from '../common/rbac.constants';
+import { DeploymentService } from '../common/deployment.service';
 
 @Injectable()
 export class AuthService {
@@ -17,7 +19,10 @@ export class AuthService {
     private readonly jwtService: JwtService,
     private readonly jwtSecret: JwtSecretService,
     private readonly config: ConfigService,
+    private readonly deployment: DeploymentService,
+    private readonly installationRepo: InstallationRepository,
   ) {}
+
   async validateCredentials(username: string, password: string): Promise<AuthenticatedUser> {
     const user = this.usersRepo.findByUsername(username);
     if (!user || !user.isActive) {
@@ -53,6 +58,11 @@ export class AuthService {
       username: authUser.username,
       roleName: authUser.roleName,
     };
+
+    if (this.deployment.isOnline()) {
+      payload.installationId = this.installationRepo.get().installationId;
+    }
+
     return {
       accessToken: this.jwtService.sign(payload, {
         secret: this.jwtSecret.getSecret(),

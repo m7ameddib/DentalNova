@@ -532,13 +532,21 @@ h4 {
   accent-color: var(--color-primary);
 }
 
-.login-card__forgot-hint {
+.login-card__forgot-hint,
+.login-card__forgot-link {
   color: var(--color-primary);
   font-size: 12px;
-  cursor: help;
   text-decoration: underline;
-  text-decoration-style: dotted;
   text-underline-offset: 2px;
+}
+
+.login-card__forgot-hint {
+  cursor: help;
+  text-decoration-style: dotted;
+}
+
+.login-card__forgot-link:hover {
+  color: var(--color-primary-dark);
 }
 
 .login-card__submit {
@@ -997,7 +1005,8 @@ textarea {
   margin-bottom: 8px;
 }
 
-.form-success-banner {
+.form-success-banner,
+.form-info-banner {
   background: #ecfdf5;
   color: var(--color-success);
   border: 1px solid #a7f3d0;
@@ -1005,6 +1014,24 @@ textarea {
   padding: 8px 10px;
   font-size: 13px;
   margin-bottom: 8px;
+}
+
+.form-info-banner {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-color: #bfdbfe;
+}
+
+.form-field__hint {
+  display: block;
+  font-size: 12px;
+  margin-top: 4px;
+}
+
+.login-entry--single {
+  grid-template-columns: minmax(0, 1fr);
+  max-width: 480px;
+  width: 100%;
 }
 
 .updates-info-grid {
