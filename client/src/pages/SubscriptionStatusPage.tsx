@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { AlertCircle, Clock, ShieldOff } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { subscriptionApi } from '@/api/subscription.api';
@@ -73,6 +74,9 @@ export function SubscriptionStatusPage() {
         )}
 
         <p className="muted">{t('subscription.contactDibNova')}</p>
+        <p className="muted">
+          <Link to="/dibnova-admin">{t('dibnovaAdmin.openPanel')}</Link>
+        </p>
       </div>
 
       <p className="login-page__branding">{t('app.poweredBy')}</p>

@@ -68,12 +68,27 @@ export function InstallationGate({ children }: { children: ReactNode }) {
   }
 
   const path = location.pathname;
+  const isOnline = status.deploymentMode === 'online';
+
   if (status.phase === 'activation' && path !== '/activate') {
     return <Navigate to="/activate" replace />;
   }
-  if (status.phase === 'setup' && path !== '/setup') {
-    return <Navigate to="/setup" replace />;
+
+  if (status.phase === 'setup') {
+    if (isOnline) {
+      // Online: login is the entry page; setup only when user chooses "Create New Clinic"
+      const allowedDuringSetup = ['/login', '/setup', '/subscription-status', '/dibnova-admin'];
+      if (allowedDuringSetup.includes(path) || path.startsWith('/dibnova-admin')) {
+        return <>{children}</>;
+      }
+      return <Navigate to="/login" replace />;
+    }
+    // Offline: unchanged — first-time setup is mandatory before login
+    if (path !== '/setup') {
+      return <Navigate to="/setup" replace />;
+    }
   }
+
   if (status.phase === 'ready' && (path === '/activate' || path === '/setup')) {
     return <Navigate to="/login" replace />;
   }

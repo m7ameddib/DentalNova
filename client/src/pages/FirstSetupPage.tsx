@@ -1,7 +1,8 @@
 import { FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
-import { Building2 } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
+import { ArrowLeft, Building2 } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { installationApi } from '@/api/installation.api';
 import { useUiStore } from '@/store/ui.store';
@@ -11,6 +12,12 @@ export function FirstSetupPage() {
   const navigate = useNavigate();
   const { language, setLanguage } = useUiStore();
   const setSession = useAuthStore((s) => s.setSession);
+
+  const { data: installStatus } = useQuery({
+    queryKey: ['installation-status'],
+    queryFn: installationApi.status,
+  });
+  const isOnline = installStatus?.deploymentMode === 'online';
   const [clinicName, setClinicName] = useState('');
   const [doctorName, setDoctorName] = useState('');
   const [clinicPhone, setClinicPhone] = useState('');
@@ -82,11 +89,18 @@ export function FirstSetupPage() {
       </div>
 
       <form className="login-card setup-card setup-card--wide" onSubmit={handleSubmit}>
+        {isOnline && (
+          <Link to="/login" className="setup-back-link">
+            <ArrowLeft size={14} /> {t('auth.backToLogin')}
+          </Link>
+        )}
         <div className="login-card__brand">
           <BrandLogo variant="auth" />
           <h1>{t('installation.setupTitle')}</h1>
         </div>
-        <p className="login-card__subtitle">{t('installation.setupSubtitle')}</p>
+        <p className="login-card__subtitle">
+          {isOnline ? t('installation.setupSubtitleOnline') : t('installation.setupSubtitle')}
+        </p>
 
         <div className="setup-grid">
           <label className="form-field">

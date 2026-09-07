@@ -36,7 +36,12 @@ export function SubscriptionGate({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  if (location.pathname !== '/subscription-status') {
+  const allowedWhileBlocked =
+    location.pathname === '/login' ||
+    location.pathname === '/subscription-status' ||
+    location.pathname.startsWith('/dibnova-admin');
+
+  if (!allowedWhileBlocked) {
     return <Navigate to="/subscription-status" replace />;
   }
 

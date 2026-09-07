@@ -44,6 +44,8 @@ import { SubscriptionGate } from '@/routes/SubscriptionGate';
 
 import { SubscriptionStatusPage } from '@/pages/SubscriptionStatusPage';
 
+import { DibNovaAdminPage } from '@/pages/DibNovaAdminPage';
+
 import { OdontogramPreviewPage } from '@/pages/OdontogramPreviewPage';
 
 export default function App() {
@@ -65,6 +67,8 @@ export default function App() {
           <Route path="/setup" element={<FirstSetupPage />} />
 
           <Route path="/subscription-status" element={<SubscriptionStatusPage />} />
+
+          <Route path="/dibnova-admin" element={<DibNovaAdminPage />} />
 
           <Route path="/login" element={<LoginPage />} />
 

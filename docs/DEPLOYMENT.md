@@ -210,9 +210,35 @@ See `server/.env.example` (offline) and `deploy/.env.online.example` (online).
 
 ## Online subscription management (DibNova admin)
 
-Online clinics start **PENDING** after first setup. Only DibNova admins can activate, extend, suspend, or reactivate subscriptions via the admin API (used by the existing DibNova admin system — no separate website in DentalNova).
+Online clinics start **PENDING** after first setup. Only DibNova admins can activate, extend, suspend, or reactivate subscriptions.
 
-Set `DIBNOVA_ADMIN_API_KEY` on the online server. Authenticate with header `X-DibNova-Admin-Key: <key>`.
+Set `DIBNOVA_ADMIN_API_KEY` on the online server (see `deploy/.env.online.example`).
+
+### Online entry flow
+
+Online deployments use a **login-first** entry experience:
+
+1. **`/login`** — default landing page for all browsers and devices.
+2. **Existing clinics** (server `phase: ready`) always see sign-in — clinic state comes from the server database, not the browser.
+3. **New clinics** — when no clinic exists yet (`phase: setup`), users choose **Create New Clinic** to open **`/setup`** (first-time setup runs once per server).
+4. After sign-in, **subscription status** applies as before: `PENDING` → waiting page; `ACTIVE` → full app; `EXPIRED`/`SUSPENDED` → restricted.
+
+Offline deployments are unchanged: license activation → mandatory first setup → login.
+
+### Admin UI (inside DentalNova)
+
+Open **`https://<your-clinic-domain>/dibnova-admin`** on the clinic’s DentalNova URL (same app — not a separate admin site).
+
+1. Enter the **Admin API key** (`DIBNOVA_ADMIN_API_KEY` from the server environment).
+2. Review clinic name, installation ID, subscription status, and expiry.
+3. Use **Activate (1 year)** when status is `PENDING`.
+4. Use **Extend**, **Suspend**, or **Reactivate** as needed.
+
+While subscription is not active, the clinic sees **Awaiting activation** at `/subscription-status`, with a link to **DibNova administrator access** → `/dibnova-admin`. The admin panel remains reachable even when the clinic is blocked.
+
+### Admin API
+
+Authenticate with header `X-DibNova-Admin-Key: <key>` (or `Authorization: Bearer <key>`).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
