@@ -20,6 +20,7 @@
     "@nestjs/platform-express": "^10.4.0",
     "adm-zip": "^0.6.0",
     "archiver": "^7.0.1",
+    "archiver-utils": "^5.0.2",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^11.3.0",
     "class-transformer": "^0.5.1",
