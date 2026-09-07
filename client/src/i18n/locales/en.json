@@ -114,11 +114,18 @@
     "expiredOn": "Expired on {{date}}",
     "suspendedTitle": "Clinic suspended",
     "suspendedMessage": "This online clinic has been suspended by DibNova.",
-    "contactDibNova": "Contact DibNova Technologies for assistance."
+    "contactDibNova": "Contact DibNova Technologies for assistance.",
+    "contactMessage": "Our team will activate or renew your subscription. Reach out and include your clinic name.",
+    "contactButton": "Contact DibNova"
   },
   "dibnovaAdmin": {
     "title": "DibNova Administration",
     "subtitle": "Manage this DentalNova installation — online subscriptions or offline license status.",
+    "dashboardSubtitle": "Subscription and installation management for this DentalNova server.",
+    "clinicInfo": "Clinic information",
+    "subscriptionManagement": "Subscription management",
+    "startDate": "Start date",
+    "expiryDate": "Expiry date",
     "openPanel": "DibNova administrator access",
     "signIn": "Sign in as DibNova admin",
     "logout": "Sign out",
@@ -145,6 +152,12 @@
     "backToClinicStatus": "Clinic status page",
     "awaitingClinicSetup": "Awaiting clinic setup",
     "setupRequiredMessage": "This online server has no clinic yet. The clinic must complete First Clinic Setup before subscription can be activated.",
+    "status": {
+      "PENDING": "Pending",
+      "ACTIVE": "Active",
+      "EXPIRED": "Expired",
+      "SUSPENDED": "Suspended"
+    },
     "success": {
       "activate": "Subscription activated for 1 year.",
       "extend": "Subscription extended by 1 year.",

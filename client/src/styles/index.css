@@ -182,6 +182,10 @@ h4 {
   width: min(240px, 100%);
   height: auto;
 }
+.brand-logo--auth-lg {
+  width: min(280px, 100%);
+  height: auto;
+}
 .brand-logo--workspace {
   width: min(380px, 100%);
   height: auto;
@@ -367,19 +371,29 @@ h4 {
 
 .login-page--entry {
   padding: 24px;
-  background: linear-gradient(145deg, #e8eefc 0%, #f4f6fb 45%, #eef2f8 100%);
+  background:
+    radial-gradient(ellipse 80% 60% at 20% 10%, rgba(21, 101, 114, 0.08), transparent 60%),
+    radial-gradient(ellipse 70% 50% at 90% 90%, rgba(26, 79, 214, 0.1), transparent 55%),
+    linear-gradient(145deg, #e8eefc 0%, #f4f6fb 45%, #eef2f8 100%);
+}
+
+.login-page--admin {
+  align-items: flex-start;
+  padding-top: 64px;
+  padding-bottom: 48px;
 }
 
 .login-entry {
   display: grid;
-  grid-template-columns: minmax(280px, 1fr) minmax(320px, 420px);
+  grid-template-columns: minmax(260px, 1fr) minmax(340px, 460px);
   gap: 0;
-  width: min(960px, 100%);
-  min-height: min(620px, calc(100vh - 80px));
+  width: min(980px, 100%);
+  min-height: min(600px, calc(100vh - 96px));
   background: var(--color-surface);
-  border-radius: calc(var(--radius-md) + 4px);
+  border-radius: calc(var(--radius-md) + 6px);
   box-shadow: 0 24px 64px rgba(15, 35, 80, 0.12);
   overflow: hidden;
+  border: 1px solid rgba(15, 35, 80, 0.06);
 }
 
 .login-entry__hero {
@@ -390,6 +404,7 @@ h4 {
   padding: 48px 40px;
   background: linear-gradient(160deg, var(--color-primary) 0%, #1a4fd6 55%, #0f3aa8 100%);
   color: #fff;
+  order: 1;
 }
 
 .login-entry__hero .brand-logo {
@@ -398,7 +413,7 @@ h4 {
 }
 
 .login-entry__hero-title {
-  margin: 8px 0 0;
+  margin: 0;
   font-size: 1.65rem;
   font-weight: 700;
   line-height: 1.25;
@@ -407,7 +422,7 @@ h4 {
 .login-entry__hero-text {
   margin: 0;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
   opacity: 0.92;
 }
 
@@ -415,7 +430,7 @@ h4 {
   margin: 8px 0 0;
   padding-inline-start: 18px;
   font-size: 13.5px;
-  line-height: 1.8;
+  line-height: 1.85;
   opacity: 0.95;
 }
 
@@ -424,6 +439,59 @@ h4 {
   align-items: center;
   justify-content: center;
   padding: 40px 36px;
+  order: 2;
+}
+
+.login-entry__main--form {
+  background: linear-gradient(180deg, #fafbff 0%, #ffffff 100%);
+  border-inline-start: 1px solid rgba(15, 35, 80, 0.06);
+}
+
+.login-form-panel {
+  width: 100%;
+  max-width: 380px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.login-form-panel__brand {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.login-form-panel__brand h1 {
+  margin: 0;
+  font-size: 1.45rem;
+  color: var(--color-text);
+}
+
+.login-form-panel__subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  line-height: 1.5;
+}
+
+.login-form-panel__secondary {
+  margin-top: 4px;
+}
+
+.login-form-panel .form-field input {
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--color-border, #dde3ee);
+  background: #fff;
+}
+
+.login-form-panel .form-field input:focus {
+  border-color: var(--color-primary);
+  outline: 2px solid rgba(21, 101, 114, 0.15);
+  outline-offset: 0;
 }
 
 .login-card--entry {
@@ -543,14 +611,304 @@ h4 {
     display: none;
   }
 
-  .login-entry__main {
+  .login-entry__main,
+  .login-entry__main--form {
     padding: 32px 24px;
+    border-inline-start: none;
   }
 
   .login-page--entry {
     padding: 16px;
     align-items: flex-start;
     padding-top: 56px;
+  }
+
+  .dibnova-admin-dashboard {
+    padding: 20px 16px;
+  }
+
+  .admin-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---------- Subscription status (customer-facing) ---------- */
+
+.subscription-status-page {
+  width: min(480px, 100%);
+}
+
+.subscription-status-card {
+  background: var(--color-surface);
+  border-radius: calc(var(--radius-md) + 6px);
+  box-shadow: 0 20px 48px rgba(15, 35, 80, 0.1);
+  border: 1px solid rgba(15, 35, 80, 0.06);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+}
+
+.subscription-status-card__brand .brand-logo {
+  width: min(200px, 100%);
+}
+
+.subscription-status-card__icon {
+  color: var(--color-primary);
+  opacity: 0.9;
+}
+
+.subscription-status-card__title {
+  margin: 4px 0 0;
+  font-size: 1.35rem;
+}
+
+.subscription-status-card__message {
+  margin: 0;
+  color: var(--color-text-muted);
+  font-size: 14px;
+  line-height: 1.65;
+  max-width: 36em;
+}
+
+.subscription-status-card__meta {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.subscription-status-card__contact {
+  margin-top: 12px;
+  padding-top: 16px;
+  border-top: 1px solid var(--color-border, #e2e8f0);
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.subscription-status-card__contact p {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--color-text-muted);
+}
+
+.subscription-status-card__contact-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  text-decoration: none;
+  min-width: 200px;
+}
+
+/* ---------- Status badges ---------- */
+
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.status-badge--pending {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.status-badge--active {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.status-badge--expired {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-badge--suspended {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.status-badge--setup {
+  background: #e0e7ff;
+  color: #3730a3;
+}
+
+.status-badge--muted {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+/* ---------- DibNova admin dashboard ---------- */
+
+.dibnova-admin-login {
+  width: min(440px, 100%);
+}
+
+.dibnova-admin-login__card {
+  background: var(--color-surface);
+  border-radius: calc(var(--radius-md) + 6px);
+  box-shadow: 0 20px 48px rgba(15, 35, 80, 0.1);
+  border: 1px solid rgba(15, 35, 80, 0.06);
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.dibnova-admin-login__brand {
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.dibnova-admin-login__brand h1 {
+  margin: 0;
+  font-size: 1.35rem;
+}
+
+.dibnova-admin-login__brand p {
+  margin: 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.dibnova-admin-login__icon {
+  color: var(--color-primary);
+}
+
+.dibnova-admin-dashboard {
+  width: min(960px, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.dibnova-admin-dashboard__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  background: var(--color-surface);
+  border-radius: calc(var(--radius-md) + 4px);
+  padding: 20px 24px;
+  box-shadow: 0 8px 24px rgba(15, 35, 80, 0.06);
+  border: 1px solid rgba(15, 35, 80, 0.06);
+}
+
+.dibnova-admin-dashboard__title {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  color: var(--color-primary);
+}
+
+.dibnova-admin-dashboard__title h1 {
+  margin: 0;
+  font-size: 1.25rem;
+  color: var(--color-text);
+}
+
+.dibnova-admin-dashboard__title p {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.dibnova-admin-dashboard__alert {
+  margin: 0;
+}
+
+.dibnova-admin-dashboard__loading {
+  margin: 0;
+  padding: 0 4px;
+}
+
+.dibnova-admin-dashboard__footer {
+  text-align: center;
+  margin-top: 8px;
+}
+
+.admin-card {
+  background: var(--color-surface);
+  border-radius: calc(var(--radius-md) + 4px);
+  padding: 20px 24px;
+  box-shadow: 0 8px 24px rgba(15, 35, 80, 0.06);
+  border: 1px solid rgba(15, 35, 80, 0.06);
+}
+
+.admin-card--warning {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.admin-card__title {
+  margin: 0 0 16px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.admin-card__note,
+.admin-card__success {
+  margin: 12px 0 0;
+}
+
+.admin-info-table-wrap {
+  overflow-x: auto;
+}
+
+.admin-info-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.admin-info-table th,
+.admin-info-table td {
+  padding: 12px 14px;
+  text-align: start;
+  border-bottom: 1px solid var(--color-border, #e2e8f0);
+  vertical-align: middle;
+}
+
+.admin-info-table th {
+  width: 34%;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  background: #f8fafc;
+}
+
+.admin-info-table tr:last-child th,
+.admin-info-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+@media (min-width: 720px) {
+  .admin-actions {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
   }
 }
 

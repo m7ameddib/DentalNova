@@ -1,17 +1,27 @@
 import { FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, Lock, LogIn, LogOut, RefreshCw, ShieldCheck, UserRound } from 'lucide-react';
+import {
+  Building2,
+  Lock,
+  LogIn,
+  LogOut,
+  RefreshCw,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { BrandLogo } from '@/components/common/BrandLogo';
+import { AuthLangSwitch } from '@/components/auth/AuthLangSwitch';
+import { SubscriptionStatusBadge } from '@/components/admin/SubscriptionStatusBadge';
 import {
   clearDibNovaAdminSession,
   dibnovaAdminApi,
   isDibNovaAdminAuthenticated,
   setDibNovaAdminSession,
 } from '@/api/dibnova-admin.api';
+import type { OnlineSubscriptionStatus } from '@/api/subscription.api';
 import { getErrorMessage } from '@/utils/errors';
-import { useUiStore } from '@/store/ui.store';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -22,7 +32,6 @@ function formatDate(iso: string | null): string {
 export function DibNovaAdminPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const { language, setLanguage } = useUiStore();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [authenticated, setAuthenticated] = useState(isDibNovaAdminAuthenticated);
@@ -62,7 +71,7 @@ export function DibNovaAdminPage() {
       setError(null);
       setNotes('');
       invalidate();
-      refetch();
+      void refetch();
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
@@ -94,40 +103,26 @@ export function DibNovaAdminPage() {
     queryClient.removeQueries({ queryKey: ['dibnova-admin-installation'] });
   }
 
-  const status = data?.subscription.status;
   const isOnline = data?.deploymentMode === 'online';
   const clinicReady = data?.phase === 'ready';
-  const effectiveStatus = clinicReady ? (status ?? 'PENDING') : null;
+  const effectiveStatus: OnlineSubscriptionStatus | null = clinicReady
+    ? (data?.subscription.status ?? 'PENDING')
+    : null;
 
   return (
-    <div className="login-page login-page--entry">
-      <div className="login-page__lang">
-        <button
-          type="button"
-          className={language === 'en' ? 'lang-btn lang-btn--active' : 'lang-btn'}
-          onClick={() => setLanguage('en')}
-        >
-          EN
-        </button>
-        <button
-          type="button"
-          className={language === 'ar' ? 'lang-btn lang-btn--active' : 'lang-btn'}
-          onClick={() => setLanguage('ar')}
-        >
-          AR
-        </button>
-      </div>
+    <div className="login-page login-page--entry login-page--admin">
+      <AuthLangSwitch />
 
-      <div className="login-card setup-card setup-card--wide dibnova-admin-card">
-        <div className="login-card__brand">
-          <BrandLogo variant="auth" />
-          <ShieldCheck size={28} className="subscription-status-icon" />
-          <h1>{t('dibnovaAdmin.title')}</h1>
-        </div>
-        <p className="login-card__subtitle">{t('dibnovaAdmin.subtitle')}</p>
+      {!authenticated ? (
+        <div className="dibnova-admin-login">
+          <form className="dibnova-admin-login__card" onSubmit={handleLoginSubmit}>
+            <div className="dibnova-admin-login__brand">
+              <BrandLogo variant="auth-lg" />
+              <ShieldCheck size={28} className="dibnova-admin-login__icon" />
+              <h1>{t('dibnovaAdmin.title')}</h1>
+              <p>{t('dibnovaAdmin.subtitle')}</p>
+            </div>
 
-        {!authenticated ? (
-          <form onSubmit={handleLoginSubmit}>
             <label className="form-field">
               <span className="form-field__label">
                 <UserRound size={14} /> {t('auth.username')}
@@ -159,8 +154,17 @@ export function DibNovaAdminPage() {
               {loginLoading ? t('auth.signingIn') : t('dibnovaAdmin.signIn')}
             </button>
           </form>
-        ) : (
-          <>
+        </div>
+      ) : (
+        <div className="dibnova-admin-dashboard">
+          <header className="dibnova-admin-dashboard__header">
+            <div className="dibnova-admin-dashboard__title">
+              <ShieldCheck size={24} />
+              <div>
+                <h1>{t('dibnovaAdmin.title')}</h1>
+                <p>{t('dibnovaAdmin.dashboardSubtitle')}</p>
+              </div>
+            </div>
             <div className="dibnova-admin-toolbar">
               <button type="button" className="btn btn--ghost btn--sm" onClick={() => refetch()}>
                 <RefreshCw size={14} /> {t('common.refresh')}
@@ -169,122 +173,67 @@ export function DibNovaAdminPage() {
                 <LogOut size={14} /> {t('dibnovaAdmin.logout')}
               </button>
             </div>
+          </header>
 
-            {isLoading && <p className="muted">{t('common.loading')}</p>}
+          {success && <div className="form-success-banner dibnova-admin-dashboard__alert">{success}</div>}
+          {error && <div className="form-error-banner dibnova-admin-dashboard__alert">{error}</div>}
 
-            {isError && (
-              <div className="form-error-banner">
-                {t('dibnovaAdmin.sessionExpired')}
-                <button type="button" className="btn btn--ghost btn--sm" onClick={handleLogout}>
-                  {t('dibnovaAdmin.retryLogin')}
-                </button>
-              </div>
-            )}
+          {isLoading && <p className="muted dibnova-admin-dashboard__loading">{t('common.loading')}</p>}
 
-            {data && (
-              <>
-                <dl className="updates-info-grid">
-                  <div>
-                    <dt>{t('dibnovaAdmin.clinicName')}</dt>
-                    <dd>{data.clinicName || '—'}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('dibnovaAdmin.installationId')}</dt>
-                    <dd className="mono-text">{data.installationId}</dd>
-                  </div>
-                  <div>
-                    <dt>{t('dibnovaAdmin.deploymentMode')}</dt>
-                    <dd>{data.deploymentMode}</dd>
-                  </div>
-                  {isOnline && (
-                    <>
-                      <div>
-                        <dt>{t('dibnovaAdmin.subscriptionStatus')}</dt>
-                        <dd>
-                          {clinicReady
-                            ? (effectiveStatus ?? '—')
-                            : t('dibnovaAdmin.awaitingClinicSetup')}
-                        </dd>
-                      </div>
-                      <div>
-                        <dt>{t('dibnovaAdmin.expiresAt')}</dt>
-                        <dd>{formatDate(data.subscription.expiresAt)}</dd>
-                      </div>
-                      <div>
-                        <dt>{t('dibnovaAdmin.startedAt')}</dt>
-                        <dd>{formatDate(data.subscription.startedAt)}</dd>
-                      </div>
-                    </>
-                  )}
-                </dl>
+          {isError && (
+            <div className="form-error-banner dibnova-admin-dashboard__alert">
+              {t('dibnovaAdmin.sessionExpired')}
+              <button type="button" className="btn btn--ghost btn--sm" onClick={handleLogout}>
+                {t('dibnovaAdmin.retryLogin')}
+              </button>
+            </div>
+          )}
 
-                {isOnline && !clinicReady && (
-                  <p className="form-error-banner">{t('dibnovaAdmin.setupRequiredMessage')}</p>
-                )}
-
-                {isOnline && clinicReady && (
-                  <>
-                    <label className="form-field">
-                      <span className="form-field__label">{t('dibnovaAdmin.notes')}</span>
-                      <textarea
-                        value={notes}
-                        onChange={(e) => setNotes(e.target.value)}
-                        rows={2}
-                        placeholder={t('dibnovaAdmin.notesPlaceholder')}
-                      />
-                    </label>
-
-                    <div className="settings-actions">
-                      <button
-                        type="button"
-                        className="btn btn--primary"
-                        disabled={actionMutation.isPending || effectiveStatus !== 'PENDING'}
-                        onClick={() => actionMutation.mutate('activate')}
-                      >
-                        {t('dibnovaAdmin.activate')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--secondary"
-                        disabled={actionMutation.isPending || effectiveStatus !== 'ACTIVE'}
-                        onClick={() => actionMutation.mutate('extend')}
-                      >
-                        {t('dibnovaAdmin.extend')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--secondary"
-                        disabled={
-                          actionMutation.isPending ||
-                          (effectiveStatus !== 'ACTIVE' && effectiveStatus !== 'PENDING')
-                        }
-                        onClick={() => actionMutation.mutate('suspend')}
-                      >
-                        {t('dibnovaAdmin.suspend')}
-                      </button>
-                      <button
-                        type="button"
-                        className="btn btn--secondary"
-                        disabled={
-                          actionMutation.isPending ||
-                          (effectiveStatus !== 'SUSPENDED' && effectiveStatus !== 'EXPIRED')
-                        }
-                        onClick={() => actionMutation.mutate('reactivate')}
-                      >
-                        {t('dibnovaAdmin.reactivate')}
-                      </button>
-                    </div>
-
-                    {data.subscription.canUseSystem && (
-                      <p className="form-success-banner">
-                        <Building2 size={14} /> {t('dibnovaAdmin.clinicCanAccess')}
-                      </p>
-                    )}
-                  </>
-                )}
+          {data && (
+            <>
+              <section className="admin-card">
+                <h2 className="admin-card__title">{t('dibnovaAdmin.clinicInfo')}</h2>
+                <div className="admin-info-table-wrap">
+                  <table className="admin-info-table">
+                    <tbody>
+                      <tr>
+                        <th>{t('dibnovaAdmin.clinicName')}</th>
+                        <td>{data.clinicName || '—'}</td>
+                      </tr>
+                      <tr>
+                        <th>{t('dibnovaAdmin.installationId')}</th>
+                        <td className="mono-text">{data.installationId}</td>
+                      </tr>
+                      <tr>
+                        <th>{t('dibnovaAdmin.deploymentMode')}</th>
+                        <td>{data.deploymentMode}</td>
+                      </tr>
+                      {isOnline && (
+                        <>
+                          <tr>
+                            <th>{t('dibnovaAdmin.subscriptionStatus')}</th>
+                            <td>
+                              <SubscriptionStatusBadge
+                                status={clinicReady ? effectiveStatus : 'SETUP'}
+                              />
+                            </td>
+                          </tr>
+                          <tr>
+                            <th>{t('dibnovaAdmin.startDate')}</th>
+                            <td>{formatDate(data.subscription.startedAt)}</td>
+                          </tr>
+                          <tr>
+                            <th>{t('dibnovaAdmin.expiryDate')}</th>
+                            <td>{formatDate(data.subscription.expiresAt)}</td>
+                          </tr>
+                        </>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
 
                 {!isOnline && data.offlineLicense && (
-                  <p className="muted">
+                  <p className="admin-card__note">
                     {t('dibnovaAdmin.offlineLicenseInfo', {
                       activated: data.offlineLicense.hasLicense
                         ? t('dibnovaAdmin.yes')
@@ -300,20 +249,84 @@ export function DibNovaAdminPage() {
                     )}
                   </p>
                 )}
-              </>
-            )}
-          </>
-        )}
+              </section>
 
-        {authenticated && error && <div className="form-error-banner">{error}</div>}
-        {success && <div className="form-success-banner">{success}</div>}
+              {isOnline && !clinicReady && (
+                <section className="admin-card admin-card--warning">
+                  <p>{t('dibnovaAdmin.setupRequiredMessage')}</p>
+                </section>
+              )}
 
-        <p className="muted dibnova-admin-footer">
-          <Link to="/subscription-status">{t('dibnovaAdmin.backToClinicStatus')}</Link>
-          {' · '}
-          <Link to="/login">{t('nav.login', 'Login')}</Link>
-        </p>
-      </div>
+              {isOnline && clinicReady && (
+                <section className="admin-card">
+                  <h2 className="admin-card__title">{t('dibnovaAdmin.subscriptionManagement')}</h2>
+
+                  <label className="form-field">
+                    <span className="form-field__label">{t('dibnovaAdmin.notes')}</span>
+                    <textarea
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      rows={3}
+                      placeholder={t('dibnovaAdmin.notesPlaceholder')}
+                    />
+                  </label>
+
+                  <div className="admin-actions">
+                    <button
+                      type="button"
+                      className="btn btn--primary"
+                      disabled={actionMutation.isPending || effectiveStatus !== 'PENDING'}
+                      onClick={() => actionMutation.mutate('activate')}
+                    >
+                      {t('dibnovaAdmin.activate')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      disabled={actionMutation.isPending || effectiveStatus !== 'ACTIVE'}
+                      onClick={() => actionMutation.mutate('extend')}
+                    >
+                      {t('dibnovaAdmin.extend')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      disabled={
+                        actionMutation.isPending ||
+                        (effectiveStatus !== 'ACTIVE' && effectiveStatus !== 'PENDING')
+                      }
+                      onClick={() => actionMutation.mutate('suspend')}
+                    >
+                      {t('dibnovaAdmin.suspend')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      disabled={
+                        actionMutation.isPending ||
+                        (effectiveStatus !== 'SUSPENDED' && effectiveStatus !== 'EXPIRED')
+                      }
+                      onClick={() => actionMutation.mutate('reactivate')}
+                    >
+                      {t('dibnovaAdmin.reactivate')}
+                    </button>
+                  </div>
+
+                  {data.subscription.canUseSystem && (
+                    <p className="form-success-banner admin-card__success">
+                      <Building2 size={14} /> {t('dibnovaAdmin.clinicCanAccess')}
+                    </p>
+                  )}
+                </section>
+              )}
+            </>
+          )}
+
+          <footer className="dibnova-admin-dashboard__footer muted">
+            <Link to="/login">{t('nav.login', 'Login')}</Link>
+          </footer>
+        </div>
+      )}
 
       <p className="login-page__branding">{t('app.poweredBy')}</p>
     </div>

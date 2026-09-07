@@ -114,11 +114,18 @@
     "expiredOn": "انتهى في {{date}}",
     "suspendedTitle": "العيادة موقوفة",
     "suspendedMessage": "تم إيقاف هذه العيادة الإلكترونية من قبل DibNova.",
-    "contactDibNova": "تواصل مع DibNova Technologies للمساعدة."
+    "contactDibNova": "تواصل مع DibNova Technologies للمساعدة.",
+    "contactMessage": "سيقوم فريقنا بتفعيل أو تجديد اشتراكك. تواصل معنا مع ذكر اسم العيادة.",
+    "contactButton": "تواصل مع DibNova"
   },
   "dibnovaAdmin": {
     "title": "إدارة DibNova",
     "subtitle": "إدارة هذا التثبيت — اشتراكات Online أو حالة ترخيص Offline.",
+    "dashboardSubtitle": "إدارة الاشتراك والتثبيت لخادم DentalNova هذا.",
+    "clinicInfo": "معلومات العيادة",
+    "subscriptionManagement": "إدارة الاشتراك",
+    "startDate": "تاريخ البدء",
+    "expiryDate": "تاريخ الانتهاء",
     "openPanel": "دخول مسؤول DibNova",
     "signIn": "تسجيل دخول مسؤول DibNova",
     "logout": "تسجيل الخروج",
@@ -145,6 +152,12 @@
     "backToClinicStatus": "صفحة حالة العيادة",
     "awaitingClinicSetup": "بانتظار إعداد العيادة",
     "setupRequiredMessage": "لا توجد عيادة على هذا الخادم بعد. يجب إكمال إعداد العيادة لأول مرة قبل تفعيل الاشتراك.",
+    "status": {
+      "PENDING": "قيد الانتظار",
+      "ACTIVE": "نشط",
+      "EXPIRED": "منتهٍ",
+      "SUSPENDED": "موقوف"
+    },
     "success": {
       "activate": "تم تفعيل الاشتراك لمدة سنة.",
       "extend": "تم تمديد الاشتراك سنة.",

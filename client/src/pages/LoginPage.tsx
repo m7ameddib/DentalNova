@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
 import { Building2, Lock, LogIn, UserRound } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
+import { AuthLangSwitch } from '@/components/auth/AuthLangSwitch';
 import { authApi } from '@/api/auth.api';
 import { installationApi } from '@/api/installation.api';
 import {
@@ -12,7 +13,6 @@ import {
   clearRememberedUsername,
   useAuthStore,
 } from '@/store/auth.store';
-import { useUiStore } from '@/store/ui.store';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -20,7 +20,6 @@ export function LoginPage() {
   const setSession = useAuthStore((s) => s.setSession);
   const logout = useAuthStore((s) => s.logout);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
-  const { language, setLanguage } = useUiStore();
 
   const [username, setUsername] = useState(getRememberedUsername);
   const [password, setPassword] = useState('');
@@ -38,7 +37,6 @@ export function LoginPage() {
   const canCreateClinic = isOnline && installStatus?.phase === 'setup';
   const clinicReady = installStatus?.phase === 'ready';
 
-  // Stale clinic JWT while server is still in setup causes /login ↔ / redirect loop (blank page).
   useEffect(() => {
     if (!installReady || !isAuthenticated) return;
     if (installStatus?.phase === 'setup') {
@@ -72,26 +70,10 @@ export function LoginPage() {
 
   return (
     <div className="login-page login-page--entry">
-      <div className="login-page__lang">
-        <button
-          type="button"
-          className={language === 'en' ? 'lang-btn lang-btn--active' : 'lang-btn'}
-          onClick={() => setLanguage('en')}
-        >
-          EN
-        </button>
-        <button
-          type="button"
-          className={language === 'ar' ? 'lang-btn lang-btn--active' : 'lang-btn'}
-          onClick={() => setLanguage('ar')}
-        >
-          AR
-        </button>
-      </div>
+      <AuthLangSwitch />
 
       <div className="login-entry">
-        <aside className="login-entry__hero" aria-hidden="true">
-          <BrandLogo variant="auth" />
+        <aside className="login-entry__hero">
           <h2 className="login-entry__hero-title">{t('auth.heroTitle')}</h2>
           <p className="login-entry__hero-text">{t('auth.heroSubtitle')}</p>
           <ul className="login-entry__hero-list">
@@ -101,13 +83,13 @@ export function LoginPage() {
           </ul>
         </aside>
 
-        <div className="login-entry__main">
-          <form className="login-card login-card--entry" onSubmit={handleSubmit}>
-            <div className="login-card__brand">
-              <BrandLogo variant="auth" />
+        <div className="login-entry__main login-entry__main--form">
+          <form className="login-form-panel" onSubmit={handleSubmit}>
+            <div className="login-form-panel__brand">
+              <BrandLogo variant="auth-lg" />
               <h1>{t('auth.title')}</h1>
+              <p className="login-form-panel__subtitle">{t('auth.subtitle')}</p>
             </div>
-            <p className="login-card__subtitle">{t('auth.subtitle')}</p>
 
             <label className="form-field">
               <span className="form-field__label">
@@ -159,18 +141,16 @@ export function LoginPage() {
             </button>
 
             {canCreateClinic && (
-              <>
+              <div className="login-form-panel__secondary">
                 <div className="login-card__divider">
                   <span>{t('auth.or')}</span>
                 </div>
-                <div className="login-card__secondary">
-                  <p className="login-card__secondary-label">{t('auth.newClinicPrompt')}</p>
-                  <Link to="/setup" className="btn btn--secondary btn--block login-card__create-clinic">
-                    <Building2 size={16} />
-                    {t('auth.createNewClinic')}
-                  </Link>
-                </div>
-              </>
+                <p className="login-card__secondary-label">{t('auth.newClinicPrompt')}</p>
+                <Link to="/setup" className="btn btn--secondary btn--block login-card__create-clinic">
+                  <Building2 size={16} />
+                  {t('auth.createNewClinic')}
+                </Link>
+              </div>
             )}
           </form>
         </div>

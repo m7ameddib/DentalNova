@@ -1,5 +1,5 @@
 interface BrandLogoProps {
-  variant?: 'nav' | 'auth' | 'workspace';
+  variant?: 'nav' | 'auth' | 'auth-lg' | 'workspace';
 }
 
 /** Official DentalNova logo — used as provided, without a substitute mark. */

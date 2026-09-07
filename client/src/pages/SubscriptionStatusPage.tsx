@@ -1,10 +1,10 @@
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
-import { AlertCircle, Clock, ShieldOff } from 'lucide-react';
+import { AlertCircle, Clock, Mail, ShieldOff } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
+import { AuthLangSwitch } from '@/components/auth/AuthLangSwitch';
+import { SubscriptionStatusBadge } from '@/components/admin/SubscriptionStatusBadge';
 import { subscriptionApi } from '@/api/subscription.api';
-import { useUiStore } from '@/store/ui.store';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -14,7 +14,6 @@ function formatDate(iso: string | null): string {
 
 export function SubscriptionStatusPage() {
   const { t } = useTranslation();
-  const { language, setLanguage } = useUiStore();
   const { data: status } = useQuery({
     queryKey: ['subscription-status'],
     queryFn: subscriptionApi.status,
@@ -41,42 +40,47 @@ export function SubscriptionStatusPage() {
     subStatus === 'PENDING' ? Clock : subStatus === 'EXPIRED' ? AlertCircle : ShieldOff;
 
   return (
-    <div className="login-page">
-      <div className="login-page__lang">
-        <button
-          className={language === 'en' ? 'lang-btn lang-btn--active' : 'lang-btn'}
-          onClick={() => setLanguage('en')}
-        >
-          EN
-        </button>
-        <button
-          className={language === 'ar' ? 'lang-btn lang-btn--active' : 'lang-btn'}
-          onClick={() => setLanguage('ar')}
-        >
-          AR
-        </button>
-      </div>
+    <div className="login-page login-page--entry">
+      <AuthLangSwitch />
 
-      <div className="login-card setup-card">
-        <div className="login-card__brand">
-          <BrandLogo variant="auth" />
-          <Icon size={32} className="subscription-status-icon" />
-          <h1>{t(titleKey)}</h1>
+      <div className="subscription-status-page">
+        <div className="subscription-status-card">
+          <div className="subscription-status-card__brand">
+            <BrandLogo variant="auth" />
+          </div>
+
+          <div className="subscription-status-card__icon">
+            <Icon size={36} aria-hidden="true" />
+          </div>
+
+          <SubscriptionStatusBadge status={subStatus} />
+
+          <h1 className="subscription-status-card__title">{t(titleKey)}</h1>
+          <p className="subscription-status-card__message">{t(messageKey)}</p>
+
+          {status?.expiresAt && subStatus === 'EXPIRED' && (
+            <p className="subscription-status-card__meta">
+              {t('subscription.expiredOn', { date: formatDate(status.expiresAt) })}
+            </p>
+          )}
+
+          {status?.suspendedReason && subStatus === 'SUSPENDED' && (
+            <p className="form-error-banner">{status.suspendedReason}</p>
+          )}
+
+          <div className="subscription-status-card__contact">
+            <p>{t('subscription.contactMessage')}</p>
+            <a
+              href="https://dibnova.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn btn--secondary subscription-status-card__contact-btn"
+            >
+              <Mail size={16} />
+              {t('subscription.contactButton')}
+            </a>
+          </div>
         </div>
-        <p className="login-card__subtitle">{t(messageKey)}</p>
-
-        {status?.expiresAt && subStatus === 'EXPIRED' && (
-          <p className="muted">{t('subscription.expiredOn', { date: formatDate(status.expiresAt) })}</p>
-        )}
-
-        {status?.suspendedReason && subStatus === 'SUSPENDED' && (
-          <p className="form-error-banner">{status.suspendedReason}</p>
-        )}
-
-        <p className="muted">{t('subscription.contactDibNova')}</p>
-        <p className="muted">
-          <Link to="/dibnova-admin">{t('dibnovaAdmin.openPanel')}</Link>
-        </p>
       </div>
 
       <p className="login-page__branding">{t('app.poweredBy')}</p>
