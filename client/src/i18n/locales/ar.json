@@ -104,6 +104,17 @@
     "activateTitle": "تفعيل DentalNova",
     "activateAction": "تفعيل الترخيص",
     "activateError": "فشل تفعيل الترخيص",
+    "activateOnlineTab": "تفعيل عبر الإنترنت",
+    "activateManualTab": "إدخال مفتاح الترخيص",
+    "activateOnlineAction": "تفعيل عبر الإنترنت",
+    "activateOnlineError": "فشل التفعيل عبر الإنترنت",
+    "activateOnlineHint": "أدخل رمز التفعيل المقدّم من DibNova. يلزم اتصال بالإنترنت لهذه الخطوة فقط.",
+    "activateOnlineFootnote": "بعد التفعيل، يعمل DentalNova بالكامل دون إنترنت. يمكنك التبديل إلى إدخال مفتاح الترخيص يدوياً إذا تعذّر التفعيل عبر الإنترنت.",
+    "activateManualHint": "الصق محتوى الترخيص الموقّع المقدّم من DibNova Technologies.",
+    "activationCode": "رمز التفعيل",
+    "activationCodePlaceholder": "DNT-XXXXX-XXXXX",
+    "clinicNameOptional": "اسم العيادة (اختياري)",
+    "clinicNameOptionalPlaceholder": "استخدمه إذا كان مختلفاً عن تسجيل DibNova",
     "licenseKey": "مفتاح الترخيص",
     "licensePlaceholder": "الصق الترخيص الموقّع المقدّم من DibNova Technologies",
     "installationId": "معرّف التثبيت",
@@ -186,8 +197,18 @@
       "activate": "تم تفعيل الاشتراك لمدة سنة.",
       "extend": "تم تمديد الاشتراك سنة.",
       "suspend": "تم إيقاف العيادة.",
-      "reactivate": "تم إعادة تفعيل العيادة لمدة سنة."
-    }
+      "reactivate": "تم إعادة تفعيل العيادة لمدة سنة.",
+      "createOfflineSlot": "تم إنشاء رمز تفعيل دون اتصال."
+    },
+    "offlineLicensingTitle": "رموز تفعيل الترخيص دون اتصال",
+    "offlineLicensingHint": "أنشئ رموز تفعيل لمرة واحدة لتثبيتات العيادات دون اتصال. أعطِ الرمز للعميل لاستخدام «تفعيل عبر الإنترنت» على جهاز العيادة.",
+    "offlineClinicId": "معرّف العيادة",
+    "offlineClinicName": "اسم العيادة",
+    "offlineInstallationIdOptional": "معرّف التثبيت (ربط اختياري مسبقاً)",
+    "createOfflineSlot": "إنشاء رمز تفعيل",
+    "generatedActivationCode": "رمز التفعيل (اعرضه للعميل مرة واحدة)",
+    "offlineSlotsTitle": "رموز التفعيل دون اتصال الأخيرة",
+    "offlineSlotStatus": "الحالة"
   },
   "gender": {
     "MALE": "ذكر",

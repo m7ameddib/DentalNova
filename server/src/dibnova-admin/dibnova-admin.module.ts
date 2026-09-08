@@ -4,10 +4,11 @@ import { DibNovaAdminController } from './dibnova-admin.controller';
 import { DibNovaAdminAuthController } from './dibnova-admin-auth.controller';
 import { DibNovaAdminGuard } from './dibnova-admin.guard';
 import { SubscriptionModule } from '../subscription/subscription.module';
+import { OfflineLicensingModule } from '../offline-licensing/offline-licensing.module';
 import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [SubscriptionModule, AuthModule, JwtModule.register({})],
+  imports: [SubscriptionModule, OfflineLicensingModule, AuthModule, JwtModule.register({})],
   controllers: [DibNovaAdminController, DibNovaAdminAuthController],
   providers: [DibNovaAdminGuard],
 })

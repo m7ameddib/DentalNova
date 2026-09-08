@@ -104,6 +104,17 @@
     "activateTitle": "Activate DentalNova",
     "activateAction": "Activate license",
     "activateError": "License activation failed",
+    "activateOnlineTab": "Activate Online",
+    "activateManualTab": "Enter License Key",
+    "activateOnlineAction": "Activate Online",
+    "activateOnlineError": "Online activation failed",
+    "activateOnlineHint": "Enter the activation code provided by DibNova. An internet connection is required only for this step.",
+    "activateOnlineFootnote": "After activation, DentalNova works fully offline. You can switch to manual license key entry if online activation is unavailable.",
+    "activateManualHint": "Paste the signed license file content provided by DibNova Technologies.",
+    "activationCode": "Activation code",
+    "activationCodePlaceholder": "DNT-XXXXX-XXXXX",
+    "clinicNameOptional": "Clinic name (optional)",
+    "clinicNameOptionalPlaceholder": "Use if different from your DibNova registration",
     "licenseKey": "License key",
     "licensePlaceholder": "Paste the signed license provided by DibNova Technologies",
     "installationId": "Installation ID",
@@ -186,8 +197,18 @@
       "activate": "Subscription activated for 1 year.",
       "extend": "Subscription extended by 1 year.",
       "suspend": "Clinic suspended.",
-      "reactivate": "Clinic reactivated for 1 year."
-    }
+      "reactivate": "Clinic reactivated for 1 year.",
+      "createOfflineSlot": "Offline activation code created."
+    },
+    "offlineLicensingTitle": "Offline license activation codes",
+    "offlineLicensingHint": "Create one-time activation codes for offline clinic installations. Give the code to the customer for Activate Online on their clinic PC.",
+    "offlineClinicId": "Clinic ID",
+    "offlineClinicName": "Clinic name",
+    "offlineInstallationIdOptional": "Installation ID (optional pre-bind)",
+    "createOfflineSlot": "Create activation code",
+    "generatedActivationCode": "Activation code (show customer once)",
+    "offlineSlotsTitle": "Recent offline activation slots",
+    "offlineSlotStatus": "Status"
   },
   "gender": {
     "MALE": "Male",

@@ -952,6 +952,41 @@ h4 {
   font-size: 12px;
 }
 
+.activation-mode-tabs {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin: 12px 0 16px;
+}
+.activation-mode-tabs__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-color, #d8dee9);
+  border-radius: 8px;
+  background: var(--surface-muted, #f6f8fb);
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.activation-mode-tabs__btn--active {
+  border-color: var(--primary, #2563eb);
+  background: color-mix(in srgb, var(--primary, #2563eb) 10%, white);
+  font-weight: 600;
+}
+.activation-mode-hint,
+.activation-mode-footnote {
+  font-size: 13px;
+  line-height: 1.45;
+  margin: 0 0 12px;
+}
+.activation-mode-footnote {
+  margin-top: 12px;
+  margin-bottom: 0;
+}
+
 /* ---------- Forms (shared) ---------- */
 
 .form-field {

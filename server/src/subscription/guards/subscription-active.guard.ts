@@ -32,6 +32,7 @@ export class SubscriptionActiveGuard implements CanActivate {
       path.startsWith('/api/installation') ||
       path.startsWith('/api/health') ||
       path.startsWith('/api/subscription') ||
+      path.startsWith('/api/licensing') ||
       path.startsWith('/api/dibnova-admin') ||
       path.startsWith('/api/auth/login') ||
       path.startsWith('/api/auth/forgot-password') ||

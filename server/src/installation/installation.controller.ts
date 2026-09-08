@@ -1,6 +1,6 @@
 import { Controller, Get, Post, Body } from '@nestjs/common';
 import { InstallationService } from './installation.service';
-import { ActivateLicenseDto, FirstSetupDto } from './dto/installation.dto';
+import { ActivateLicenseDto, ActivateOnlineDto, FirstSetupDto } from './dto/installation.dto';
 
 @Controller('installation')
 export class InstallationController {
@@ -14,6 +14,11 @@ export class InstallationController {
   @Post('activate')
   activate(@Body() dto: ActivateLicenseDto) {
     return this.installation.activate(dto);
+  }
+
+  @Post('activate-online')
+  activateOnline(@Body() dto: ActivateOnlineDto) {
+    return this.installation.activateOnline(dto);
   }
 
   @Post('setup')

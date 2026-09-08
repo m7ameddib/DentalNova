@@ -34,8 +34,13 @@ export const installationApi = {
   status: () => apiClient.get<InstallationStatus>('/installation/status').then((r) => r.data),
   activate: (license: string) =>
     apiClient.post<InstallationStatus>('/installation/activate', { license }).then((r) => r.data),
+  activateOnline: (payload: { activationCode: string; clinicName?: string }) =>
+    apiClient
+      .post<InstallationStatus>('/installation/activate-online', payload)
+      .then((r) => r.data),
   setup: (payload: FirstSetupPayload) =>
-    apiClient.post<SetupCompleteResponse>('/installation/setup', payload).then((r) => r.data),};
+    apiClient.post<SetupCompleteResponse>('/installation/setup', payload).then((r) => r.data),
+};
 
 export async function checkServerHealth(): Promise<boolean> {
   for (let attempt = 0; attempt < 5; attempt += 1) {

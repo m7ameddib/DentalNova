@@ -32,7 +32,8 @@
     "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
     "release:sync-version": "powershell -ExecutionPolicy Bypass -File release/scripts/sync-version.ps1",
     "release:offline": "powershell -ExecutionPolicy Bypass -File release/scripts/build-release.ps1",
-    "release:test-update": "powershell -ExecutionPolicy Bypass -File release/scripts/test-install-update.ps1"
+    "release:test-update": "powershell -ExecutionPolicy Bypass -File release/scripts/test-install-update.ps1",
+    "release:test-licensing": "node release/scripts/test-offline-licensing.js"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"

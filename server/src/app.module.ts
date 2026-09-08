@@ -28,6 +28,7 @@ import { AiAssistantModule } from './ai-assistant/ai-assistant.module';
 import { SubscriptionModule } from './subscription/subscription.module';
 import { DibNovaAdminModule } from './dibnova-admin/dibnova-admin.module';
 import { UpdatesModule } from './updates/updates.module';
+import { OfflineLicensingModule } from './offline-licensing/offline-licensing.module';
 
 /** Resolve server/.env whether npm is started from repo root or server/. */
 function resolveServerEnvFile(): string {
@@ -65,6 +66,7 @@ function resolveServerEnvFile(): string {
     SubscriptionModule,
     DibNovaAdminModule,
     UpdatesModule,
+    OfflineLicensingModule,
   ],
 })
 export class AppModule {}

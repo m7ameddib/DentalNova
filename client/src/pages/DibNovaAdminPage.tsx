@@ -36,6 +36,10 @@ export function DibNovaAdminPage() {
   const [password, setPassword] = useState('');
   const [authenticated, setAuthenticated] = useState(isDibNovaAdminAuthenticated);
   const [notes, setNotes] = useState('');
+  const [offlineClinicId, setOfflineClinicId] = useState('');
+  const [offlineClinicName, setOfflineClinicName] = useState('');
+  const [offlineInstallationId, setOfflineInstallationId] = useState('');
+  const [generatedCode, setGeneratedCode] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -76,6 +80,27 @@ export function DibNovaAdminPage() {
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
+  const createOfflineSlotMutation = useMutation({
+    mutationFn: () =>
+      dibnovaAdminApi.createOfflineLicenseSlot({
+        clinicId: offlineClinicId.trim(),
+        clinicName: offlineClinicName.trim(),
+        installationId: offlineInstallationId.trim() || undefined,
+        adminNotes: notes.trim() || undefined,
+      }),
+    onSuccess: (result) => {
+      setGeneratedCode(result.activationCode);
+      setSuccess(t('dibnovaAdmin.success.createOfflineSlot'));
+      setError(null);
+      setOfflineClinicId('');
+      setOfflineClinicName('');
+      setOfflineInstallationId('');
+      setNotes('');
+      invalidate();
+    },
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+  });
+
   async function handleLoginSubmit(e: FormEvent) {
     e.preventDefault();
     if (!username.trim() || !password) return;
@@ -104,10 +129,17 @@ export function DibNovaAdminPage() {
   }
 
   const isOnline = data?.deploymentMode === 'online';
+  const canIssueOfflineLicenses = Boolean(data?.offlineLicensing?.canIssueOfflineLicenses);
   const clinicReady = data?.phase === 'ready';
   const effectiveStatus: OnlineSubscriptionStatus | null = clinicReady
     ? (data?.subscription.status ?? 'PENDING')
     : null;
+
+  const { data: offlineSlots } = useQuery({
+    queryKey: ['dibnova-admin-offline-slots'],
+    queryFn: dibnovaAdminApi.listOfflineLicenseSlots,
+    enabled: authenticated && canIssueOfflineLicenses,
+  });
 
   return (
     <div className="login-page login-page--entry login-page--admin">
@@ -316,6 +348,85 @@ export function DibNovaAdminPage() {
                     <p className="form-success-banner admin-card__success">
                       <Building2 size={14} /> {t('dibnovaAdmin.clinicCanAccess')}
                     </p>
+                  )}
+                </section>
+              )}
+
+              {canIssueOfflineLicenses && (
+                <section className="admin-card">
+                  <h2 className="admin-card__title">{t('dibnovaAdmin.offlineLicensingTitle')}</h2>
+                  <p className="muted admin-card__note">{t('dibnovaAdmin.offlineLicensingHint')}</p>
+
+                  <div className="setup-grid">
+                    <label className="form-field">
+                      <span className="form-field__label">{t('dibnovaAdmin.offlineClinicId')}</span>
+                      <input
+                        value={offlineClinicId}
+                        onChange={(e) => setOfflineClinicId(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="form-field">
+                      <span className="form-field__label">{t('dibnovaAdmin.offlineClinicName')}</span>
+                      <input
+                        value={offlineClinicName}
+                        onChange={(e) => setOfflineClinicName(e.target.value)}
+                        required
+                      />
+                    </label>
+                    <label className="form-field setup-grid__full">
+                      <span className="form-field__label">{t('dibnovaAdmin.offlineInstallationIdOptional')}</span>
+                      <input
+                        value={offlineInstallationId}
+                        onChange={(e) => setOfflineInstallationId(e.target.value)}
+                        className="mono-text"
+                      />
+                    </label>
+                  </div>
+
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    disabled={
+                      createOfflineSlotMutation.isPending ||
+                      !offlineClinicId.trim() ||
+                      !offlineClinicName.trim()
+                    }
+                    onClick={() => createOfflineSlotMutation.mutate()}
+                  >
+                    {t('dibnovaAdmin.createOfflineSlot')}
+                  </button>
+
+                  {generatedCode && (
+                    <p className="form-success-banner admin-card__success mono-text">
+                      {t('dibnovaAdmin.generatedActivationCode')}: <strong>{generatedCode}</strong>
+                    </p>
+                  )}
+
+                  {offlineSlots && offlineSlots.length > 0 && (
+                    <div className="admin-table-wrap">
+                      <h3 className="admin-card__subtitle">{t('dibnovaAdmin.offlineSlotsTitle')}</h3>
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>{t('dibnovaAdmin.offlineClinicId')}</th>
+                            <th>{t('dibnovaAdmin.offlineClinicName')}</th>
+                            <th>{t('dibnovaAdmin.offlineSlotStatus')}</th>
+                            <th>{t('dibnovaAdmin.installationId')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {offlineSlots.map((slot) => (
+                            <tr key={slot.id}>
+                              <td>{slot.clinicId}</td>
+                              <td>{slot.clinicName}</td>
+                              <td>{slot.status}</td>
+                              <td className="mono-text">{slot.installationId ?? '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   )}
                 </section>
               )}

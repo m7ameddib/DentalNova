@@ -16,7 +16,8 @@ import { RolesRepository } from '../database/repositories/roles.repository';
 import { DatabaseService } from '../database/database.service';
 import { PathsService } from '../common/paths.service';
 import { DeploymentService } from '../common/deployment.service';
-import { ActivateLicenseDto, FirstSetupDto } from './dto/installation.dto';
+import { ConfigService } from '@nestjs/config';
+import { ActivateLicenseDto, ActivateOnlineDto, FirstSetupDto } from './dto/installation.dto';
 import { APP_VERSION } from '../common/version';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { SubscriptionRepository } from '../subscription/subscription.repository';
@@ -54,6 +55,7 @@ export class InstallationService {
     private readonly deployment: DeploymentService,
     private readonly subscriptionRepo: SubscriptionRepository,
     private readonly onlineAccountsRepo: OnlineClinicAccountsRepository,
+    private readonly config: ConfigService,
   ) {}
 
   getStatus(): InstallationStatusResponse {
@@ -70,15 +72,78 @@ export class InstallationService {
   }
 
   activate(dto: ActivateLicenseDto) {
+    this.assertCanActivateOffline();
+    return this.applyLicense(dto.license.trim());
+  }
+
+  async activateOnline(dto: ActivateOnlineDto) {
+    this.assertCanActivateOffline();
+
+    const row = this.repo.get();
+    const licensingBase =
+      this.config.get<string>('DIBNOVA_LICENSING_URL')?.trim() || 'https://dental.dibnova.com';
+    const url = `${licensingBase.replace(/\/$/, '')}/api/licensing/offline-activate`;
+
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          'User-Agent': `DentalNova-Offline/${APP_VERSION}`,
+        },
+        body: JSON.stringify({
+          installationId: row.installationId,
+          activationCode: dto.activationCode.trim(),
+          clinicName: dto.clinicName?.trim() || undefined,
+        }),
+        signal: AbortSignal.timeout(30_000),
+      });
+    } catch (err) {
+      const msg = (err as Error).message ?? 'Network error';
+      this.logger.warn(`Online activation request failed: ${msg}`);
+      throw new BadRequestException(
+        'Could not connect to DibNova licensing server. Check your internet connection and try again, or use manual license key activation.',
+      );
+    }
+
+    let body: { license?: string; message?: string | string[] };
+    try {
+      body = (await res.json()) as { license?: string; message?: string | string[] };
+    } catch {
+      throw new BadRequestException(
+        'DibNova licensing server returned an invalid response. Use manual license key activation.',
+      );
+    }
+
+    if (!res.ok || !body.license?.trim()) {
+      const remoteMsg = body.message;
+      const message = Array.isArray(remoteMsg)
+        ? remoteMsg.join(', ')
+        : remoteMsg ||
+          'Online activation was rejected. Verify your activation code or use manual license key activation.';
+      throw new BadRequestException(message);
+    }
+
+    return this.applyLicense(body.license.trim());
+  }
+
+  private assertCanActivateOffline(): void {
     if (!this.deployment.requiresLicense()) {
       throw new ConflictException('License activation is not required in online deployment mode.');
     }
     if (this.repo.phase() !== 'activation') {
       throw new ConflictException('License is already activated on this installation.');
     }
+  }
 
-    const trimmed = dto.license.trim();
+  private applyLicense(trimmed: string) {
     const dot = trimmed.lastIndexOf('.');
+    if (dot <= 0) {
+      throw new BadRequestException('Invalid license format.');
+    }
+
     const payloadJson = Buffer.from(trimmed.slice(0, dot), 'base64url').toString('utf-8');
     const signaturePart = trimmed.slice(dot + 1);
     const payload = this.license.parseAndVerify(trimmed);

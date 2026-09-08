@@ -43,6 +43,31 @@ export interface AdminClinicInfo {
   phase: 'activation' | 'setup' | 'ready';
   subscription: SubscriptionStatus;
   offlineLicense: { activatedAt: string | null; hasLicense: boolean } | null;
+  offlineLicensing?: { canIssueOfflineLicenses: boolean };
+}
+
+export interface OfflineLicenseSlotSummary {
+  id: number;
+  clinicId: string;
+  clinicName: string;
+  licenseId: string;
+  installationId: string | null;
+  status: 'pending' | 'redeemed' | 'revoked';
+  slotExpiresAt: string | null;
+  licenseExpiresAt: string | null;
+  redeemedAt: string | null;
+  createdAt: string;
+  adminNotes: string | null;
+}
+
+export interface CreateOfflineLicenseSlotResponse {
+  clinicId: string;
+  clinicName: string;
+  licenseId: string;
+  activationCode: string;
+  installationId: string | null;
+  slotExpiresAt: string | null;
+  licenseExpiresAt: string | null;
 }
 
 function adminClient() {
@@ -94,5 +119,22 @@ export const dibnovaAdminApi = {
   reactivate: (notes?: string) =>
     adminClient()
       .post<SubscriptionStatus>('/dibnova-admin/subscription/reactivate', { notes: notes || undefined })
+      .then((r) => r.data),
+
+  createOfflineLicenseSlot: (payload: {
+    clinicId: string;
+    clinicName: string;
+    installationId?: string;
+    licenseExpiresAt?: string;
+    slotExpiresAt?: string;
+    adminNotes?: string;
+  }) =>
+    adminClient()
+      .post<CreateOfflineLicenseSlotResponse>('/dibnova-admin/offline-license/create-slot', payload)
+      .then((r) => r.data),
+
+  listOfflineLicenseSlots: () =>
+    adminClient()
+      .get<OfflineLicenseSlotSummary[]>('/dibnova-admin/offline-license/slots')
       .then((r) => r.data),
 };

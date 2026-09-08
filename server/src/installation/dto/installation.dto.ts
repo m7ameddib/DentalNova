@@ -12,6 +12,16 @@ export class ActivateLicenseDto {
   license!: string;
 }
 
+export class ActivateOnlineDto {
+  @IsString()
+  @IsNotEmpty()
+  activationCode!: string;
+
+  @IsOptional()
+  @IsString()
+  clinicName?: string;
+}
+
 export class FirstSetupDto {
   @IsString()
   @IsNotEmpty()
