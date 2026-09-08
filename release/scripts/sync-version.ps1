@@ -15,6 +15,12 @@ if (-not (Test-Path (Join-Path $Root 'package.json'))) {
   $Root = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
 }
 
+function Write-Utf8NoBom {
+  param([string]$Path, [string]$Content)
+  $utf8NoBom = New-Object System.Text.UTF8Encoding $false
+  [System.IO.File]::WriteAllText($Path, $Content, $utf8NoBom)
+}
+
 function Update-JsonVersion {
   param([string]$Path)
   if (-not (Test-Path $Path)) { return }
@@ -25,7 +31,7 @@ function Update-JsonVersion {
       $json.dependencies.'@dnt/dental-server' = $Version
     }
   }
-  $json | ConvertTo-Json -Depth 20 | Set-Content $Path -Encoding UTF8
+  Write-Utf8NoBom -Path $Path -Content ($json | ConvertTo-Json -Depth 20)
 }
 
 Update-JsonVersion (Join-Path $Root 'package.json')
@@ -33,6 +39,6 @@ Update-JsonVersion (Join-Path $Root 'server\package.json')
 Update-JsonVersion (Join-Path $Root 'client\package.json')
 
 $versionTs = Join-Path $Root 'server\src\common\version.ts'
-Set-Content -Path $versionTs -Encoding UTF8 -Value "export const APP_VERSION = '$Version';`n"
+Write-Utf8NoBom -Path $versionTs -Content "export const APP_VERSION = '$Version';`n"
 
 Write-Host "Synced version $Version in package.json files and server/src/common/version.ts"
