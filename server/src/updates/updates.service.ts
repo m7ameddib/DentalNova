@@ -5,8 +5,12 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
+import { createWriteStream } from 'fs';
 import * as path from 'path';
+import { pipeline } from 'stream/promises';
+import { Readable } from 'stream';
 import { spawn } from 'child_process';
 import { APP_VERSION } from '../common/version';
 import { PathsService } from '../common/paths.service';
@@ -79,24 +83,32 @@ export class UpdatesService {
   }
 
   async downloadLatestInstaller(): Promise<UpdateStatusResponse> {
-    const status = await this.getStatus(true);
-    if (!status.updateAvailable || !status.downloadUrl || !status.installerFileName) {
+    const release = await this.fetchLatestRelease(true);
+    if (!release) {
+      throw new BadRequestException('No GitHub release found.');
+    }
+
+    const asset = this.findInstallerAsset(release);
+    const latestVersion = this.normalizeVersion(release.tag_name);
+    const updateAvailable = this.compareVersions(latestVersion, APP_VERSION) > 0;
+
+    if (!updateAvailable || !asset) {
       throw new BadRequestException('No update installer is available from GitHub Releases.');
     }
 
-    const dest = this.expectedDownloadPath(status.installerFileName);
+    const dest = this.expectedDownloadPath(asset.name);
     fs.mkdirSync(this.downloadsDir(), { recursive: true });
 
-    this.logger.log(`Downloading update ${status.installerFileName} from GitHub Releases...`);
-    const res = await fetch(status.downloadUrl, {
-      headers: { Accept: 'application/octet-stream', 'User-Agent': 'DentalNova-Updater' },
+    this.logger.log(`Downloading update ${asset.name} from GitHub Releases...`);
+    const res = await fetch(asset.browser_download_url, {
+      headers: this.githubRequestHeaders('application/octet-stream'),
     });
-    if (!res.ok) {
+    if (!res.ok || !res.body) {
       throw new InternalServerErrorException(`Failed to download update (${res.status}).`);
     }
 
-    const buffer = Buffer.from(await res.arrayBuffer());
-    fs.writeFileSync(dest, buffer);
+    await pipeline(Readable.fromWeb(res.body as import('stream/web').ReadableStream), createWriteStream(dest));
+    await this.verifyInstallerChecksum(dest, asset.name, release);
     this.logger.log(`Update saved to ${dest}`);
 
     return this.getStatus(false);
@@ -129,6 +141,18 @@ export class UpdatesService {
     return this.config.get<string>('GITHUB_RELEASES_REPO') || 'm7ameddib/DentalNova';
   }
 
+  private githubRequestHeaders(accept: string): Record<string, string> {
+    const headers: Record<string, string> = {
+      Accept: accept,
+      'User-Agent': 'DentalNova-Updater',
+    };
+    const token = this.config.get<string>('GITHUB_TOKEN')?.trim();
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }
+
   private expectedDownloadPath(fileName: string): string {
     return path.join(this.downloadsDir(), fileName);
   }
@@ -144,10 +168,7 @@ export class UpdatesService {
 
     try {
       const res = await fetch(url, {
-        headers: {
-          Accept: 'application/vnd.github+json',
-          'User-Agent': 'DentalNova-Updater',
-        },
+        headers: this.githubRequestHeaders('application/vnd.github+json'),
       });
 
       if (res.status === 404) {
@@ -170,11 +191,43 @@ export class UpdatesService {
   }
 
   private findInstallerAsset(release: GitHubRelease): GitHubReleaseAsset | null {
+    const version = this.normalizeVersion(release.tag_name);
+    const expectedName = `DNT-Dental-Main-Clinic-Setup-v${version}.exe`;
+    const exact = release.assets.find((a) => a.name === expectedName);
+    if (exact) return exact;
+
     return (
       release.assets.find((a) =>
         /^DNT-Dental-Main-Clinic-Setup-v.+\.exe$/i.test(a.name),
       ) ?? null
     );
+  }
+
+  private async verifyInstallerChecksum(
+    installerPath: string,
+    installerFileName: string,
+    release: GitHubRelease,
+  ): Promise<void> {
+    const checksumAssetName = `${installerFileName}.sha256`;
+    const checksumAsset = release.assets.find((a) => a.name === checksumAssetName);
+    if (!checksumAsset) {
+      this.logger.warn(`No checksum asset ${checksumAssetName} on release; skipping verification.`);
+      return;
+    }
+
+    const res = await fetch(checksumAsset.browser_download_url, {
+      headers: this.githubRequestHeaders('application/octet-stream'),
+    });
+    if (!res.ok) {
+      throw new InternalServerErrorException('Failed to download installer checksum.');
+    }
+
+    const expected = (await res.text()).trim().toLowerCase().split(/\s+/)[0];
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(installerPath)).digest('hex');
+    if (expected !== actual) {
+      fs.unlinkSync(installerPath);
+      throw new InternalServerErrorException('Downloaded installer failed checksum verification.');
+    }
   }
 
   private normalizeVersion(tag: string): string {

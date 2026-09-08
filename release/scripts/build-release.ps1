@@ -1,12 +1,21 @@
-# DNT Dental v1.1.3 — Build production release package
+# DNT Dental — Build production release package
 param(
-  [string]$Version = '1.1.3'
+  [string]$Version = '',
+  [switch]$RequireInstaller
 )
 
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 if (-not (Test-Path (Join-Path $Root 'package.json'))) {
   $Root = Split-Path $PSScriptRoot -Parent | Split-Path -Parent
+}
+
+if (-not $Version) {
+  $Version = (Get-Content (Join-Path $Root 'package.json') -Raw | ConvertFrom-Json).version
+}
+
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+  throw "Invalid release version: $Version"
 }
 
 $OutDir = Join-Path $Root "release\DNT-Dental-v$Version"
@@ -199,6 +208,7 @@ $isccCandidates = @(
   "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
   "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
 )
+$compiledInstaller = $false
 foreach ($iscc in $isccCandidates) {
   if (Test-Path $iscc) {
     Write-Host 'Compiling Windows installer with Inno Setup...'
@@ -206,8 +216,13 @@ foreach ($iscc in $isccCandidates) {
     if ($LASTEXITCODE -ne 0) {
       throw "Inno Setup compile failed with exit code $LASTEXITCODE"
     }
+    $compiledInstaller = $true
     break
   }
+}
+
+if ($RequireInstaller -and -not $compiledInstaller) {
+  throw 'Inno Setup (ISCC.exe) is required to build the Windows installer but was not found.'
 }
 
 # Client package — static UI only (connects to main server via browser)
@@ -226,6 +241,9 @@ Copy-Item -Force (Join-Path $OutDir 'INSTALL.md') $UsbDir
 $setupExe = Join-Path $OutDir "DNT-Dental-Main-Clinic-Setup-v$Version.exe"
 if (Test-Path $setupExe) {
   Copy-Item -Force $setupExe $UsbDir
+  $sha256 = (Get-FileHash $setupExe -Algorithm SHA256).Hash.ToLowerInvariant()
+  Set-Content -Path "$setupExe.sha256" -Value $sha256 -Encoding ASCII
+  Write-Host "Installer checksum: $sha256"
 }
 
 $moduleCount = (Get-ChildItem $nodeModulesDest -Directory).Count

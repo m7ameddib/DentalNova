@@ -1,0 +1,91 @@
+name: Release Offline Windows Installer
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (semver, e.g. 1.1.4)'
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release-offline:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Install Inno Setup
+        run: choco install innosetup -y
+
+      - name: Resolve release version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'workflow_dispatch') {
+            $v = '${{ inputs.version }}'.Trim()
+          } else {
+            $v = '${{ github.ref_name }}' -replace '^v',''
+          }
+          if ($v -notmatch '^\d+\.\d+\.\d+$') {
+            throw "Invalid release version: $v"
+          }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          Write-Host "Release version: $v"
+
+      - name: Sync version files
+        shell: pwsh
+        run: ./release/scripts/sync-version.ps1 -Version ${{ steps.version.outputs.version }}
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build application
+        run: npm run build
+
+      - name: Seed test database
+        run: npm run seed
+        env:
+          DEPLOYMENT_MODE: offline
+
+      - name: Build offline release package and installer
+        shell: pwsh
+        run: ./release/scripts/build-release.ps1 -Version ${{ steps.version.outputs.version }} -RequireInstaller
+
+      - name: Verify clinic.db safety (install/update simulation)
+        shell: pwsh
+        run: ./release/scripts/test-install-update.ps1 -Version ${{ steps.version.outputs.version }}
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
+          name: DentalNova Offline v${{ steps.version.outputs.version }}
+          body: |
+            Official offline Windows installer for DentalNova Main Clinic.
+
+            **Install / update**
+            1. In DentalNova: Settings → Updates → Check for Updates → Download → Run installer
+            2. Or download `DNT-Dental-Main-Clinic-Setup-v${{ steps.version.outputs.version }}.exe` below and choose **Update Existing Installation**
+
+            **Data safety:** The installer replaces application files under Program Files only. It never deletes or overwrites `C:\ProgramData\DibNova\DNTDental\data\clinic.db` or other clinic data.
+          files: |
+            release/DNT-Dental-v${{ steps.version.outputs.version }}/DNT-Dental-Main-Clinic-Setup-v${{ steps.version.outputs.version }}.exe
+            release/DNT-Dental-v${{ steps.version.outputs.version }}/DNT-Dental-Main-Clinic-Setup-v${{ steps.version.outputs.version }}.exe.sha256
+          generate_release_notes: true
+          fail_on_unmatched_files: true
