@@ -71,11 +71,15 @@ jobs:
         shell: pwsh
         run: ./release/scripts/test-install-update.ps1 -Version ${{ steps.version.outputs.version }}
 
+      - name: Verify license key rotation compatibility
+        run: npm run release:test-licensing && npm run release:test-license-rotation
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
           name: DentalNova Offline v${{ steps.version.outputs.version }}
+          overwrite_files: true
           body: |
             Official offline Windows installer for DentalNova Main Clinic.
 

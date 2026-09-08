@@ -22,19 +22,24 @@ function Write-Utf8NoBom {
 }
 
 function Update-JsonVersion {
-  param([string]$Path)
+  param(
+    [string]$Path,
+    [switch]$IncludeWorkspaceDependency
+  )
   if (-not (Test-Path $Path)) { return }
-  $json = Get-Content $Path -Raw | ConvertFrom-Json
-  $json.version = $Version
-  if ($json.PSObject.Properties.Name -contains 'dependencies') {
-    if ($json.dependencies.'@dnt/dental-server') {
-      $json.dependencies.'@dnt/dental-server' = $Version
-    }
+  $content = Get-Content $Path -Raw
+  $content = [regex]::Replace($content, '"version"\s*:\s*"[^"]+"', "`"version`": `"$Version`"", 1)
+  if ($IncludeWorkspaceDependency) {
+    $content = [regex]::Replace(
+      $content,
+      '"@dnt/dental-server"\s*:\s*"[^"]+"',
+      "`"@dnt/dental-server`": `"$Version`""
+    )
   }
-  Write-Utf8NoBom -Path $Path -Content ($json | ConvertTo-Json -Depth 20)
+  Write-Utf8NoBom -Path $Path -Content $content
 }
 
-Update-JsonVersion (Join-Path $Root 'package.json')
+Update-JsonVersion (Join-Path $Root 'package.json') -IncludeWorkspaceDependency
 Update-JsonVersion (Join-Path $Root 'server\package.json')
 Update-JsonVersion (Join-Path $Root 'client\package.json')
 

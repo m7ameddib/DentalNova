@@ -17,19 +17,46 @@ export interface LicensePayload {
 @Injectable()
 export class LicenseService {
   private readonly logger = new Logger(LicenseService.name);
-  private publicKeyPem: string | null = null;
+  private publicKeysPem: string[] | null = null;
   private privateKeyPem: string | null = null;
 
   constructor(private readonly config: ConfigService) {}
 
-  private loadPublicKey(): string {
-    if (this.publicKeyPem) return this.publicKeyPem;
-    const keyPath = path.join(process.cwd(), 'keys', 'license-public.pem');
-    if (!fs.existsSync(keyPath)) {
+  private loadPublicKeys(): string[] {
+    if (this.publicKeysPem) return this.publicKeysPem;
+
+    const keysDir = path.join(process.cwd(), 'keys');
+    if (!fs.existsSync(keysDir)) {
       throw new BadRequestException('License verification key is not configured on this server.');
     }
-    this.publicKeyPem = fs.readFileSync(keyPath, 'utf-8');
-    return this.publicKeyPem;
+
+    const keys: string[] = [];
+    const seen = new Set<string>();
+
+    const addKey = (filePath: string) => {
+      if (!fs.existsSync(filePath)) return;
+      const pem = fs.readFileSync(filePath, 'utf-8').trim();
+      if (!pem || seen.has(pem)) return;
+      seen.add(pem);
+      keys.push(pem);
+    };
+
+    // Current production key first, then legacy keys for rotation compatibility.
+    addKey(path.join(keysDir, 'license-public.pem'));
+    addKey(path.join(keysDir, 'license-public-previous.pem'));
+
+    for (const file of fs.readdirSync(keysDir)) {
+      if (/^license-public-.+\.pem$/i.test(file)) {
+        addKey(path.join(keysDir, file));
+      }
+    }
+
+    if (keys.length === 0) {
+      throw new BadRequestException('License verification key is not configured on this server.');
+    }
+
+    this.publicKeysPem = keys;
+    return keys;
   }
 
   /** License file format: base64url(JSON payload) + '.' + base64url(RSA-SHA256 signature) */
@@ -73,11 +100,13 @@ export class LicenseService {
       }
     }
 
-    const verifier = crypto.createVerify('RSA-SHA256');
-    verifier.update(payloadJson);
-    verifier.end();
-    const ok = verifier.verify(this.loadPublicKey(), signature);
-    if (!ok) {
+    const verified = this.loadPublicKeys().some((publicKey) => {
+      const verifier = crypto.createVerify('RSA-SHA256');
+      verifier.update(payloadJson);
+      verifier.end();
+      return verifier.verify(publicKey, signature);
+    });
+    if (!verified) {
       throw new BadRequestException('License signature verification failed.');
     }
 

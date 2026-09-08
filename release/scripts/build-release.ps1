@@ -124,6 +124,8 @@ Get-ChildItem -Path $serverDistDest -Recurse -File -Include '*.map', '*.tsbuildi
   Remove-Item -Force -ErrorAction SilentlyContinue
 Copy-Item -Recurse -Force (Join-Path $Root 'database\migrations\*') (Join-Path $serverDest 'database\migrations')
 Copy-Item -Force (Join-Path $Root 'server\keys\license-public.pem') (Join-Path $serverDest 'keys')
+Get-ChildItem -Path (Join-Path $Root 'server\keys') -Filter 'license-public-*.pem' -ErrorAction SilentlyContinue |
+  ForEach-Object { Copy-Item -Force $_.FullName (Join-Path $serverDest 'keys') }
 Copy-Item -Recurse -Force (Join-Path $Root 'client\dist\*') (Join-Path $serverDest 'public')
 Copy-Item -Force (Join-Path $Root 'server\.env.example') (Join-Path $serverDest '.env.example')
 
