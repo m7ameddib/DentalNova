@@ -22,6 +22,19 @@ $OutDir = Join-Path $Root "release\DNT-Dental-v$Version"
 $MainDir = Join-Path $OutDir 'Main-Clinic'
 $ClientDir = Join-Path $OutDir 'Clinic-Client'
 
+function Remove-DirectoryForce {
+  param([string]$Path)
+  if (-not (Test-Path $Path)) { return }
+  try {
+    Remove-Item -LiteralPath $Path -Recurse -Force -ErrorAction Stop
+  } catch {
+    cmd /c "rmdir /s /q `"$Path`"" | Out-Null
+    if (Test-Path $Path) {
+      throw "Failed to remove directory: $Path"
+    }
+  }
+}
+
 function Optimize-ProductionNodeModules {
   param([string]$Path)
 
@@ -50,8 +63,25 @@ function Install-ProductionNodeModules {
   param(
     [string]$ServerPackageJson,
     [string]$DestNodeModules,
-    [string]$NpmCmd
+    [string]$NpmCmd,
+    [string]$Root
   )
+
+  $workspaceModules = Join-Path $Root 'node_modules'
+  $useWorkspace = ($env:GITHUB_ACTIONS -eq 'true') -or ($env:USE_WORKSPACE_NODE_MODULES -eq '1')
+  if ($useWorkspace -and (Test-Path $workspaceModules)) {
+    $sqliteNative = Get-ChildItem -Path (Join-Path $workspaceModules 'better-sqlite3') -Recurse -Filter '*.node' -ErrorAction SilentlyContinue | Select-Object -First 1
+    if ($sqliteNative) {
+      Write-Host 'Packaging production node_modules from workspace (post npm ci / prune)...'
+      if (Test-Path $DestNodeModules) {
+        Remove-DirectoryForce $DestNodeModules
+      }
+      Copy-Item -Recurse -Force $workspaceModules $DestNodeModules
+      Optimize-ProductionNodeModules -Path $DestNodeModules
+      return
+    }
+    Write-Warning 'Workspace node_modules missing better-sqlite3 native binary; falling back to isolated install.'
+  }
 
   $stageDir = Join-Path ([IO.Path]::GetTempPath()) ("dnt-prod-deps-" + [guid]::NewGuid().ToString())
   New-Item -ItemType Directory -Force -Path $stageDir | Out-Null
@@ -76,7 +106,7 @@ function Install-ProductionNodeModules {
     Pop-Location
 
     if (Test-Path $DestNodeModules) {
-      Remove-Item $DestNodeModules -Recurse -Force
+      Remove-DirectoryForce $DestNodeModules
     }
     Copy-Item -Recurse -Force (Join-Path $stageDir 'node_modules') $DestNodeModules
     Optimize-ProductionNodeModules -Path $DestNodeModules
@@ -110,7 +140,7 @@ Write-Host "Building DNT Dental v$Version..."
 Set-Location $Root
 npm run build
 
-if (Test-Path $OutDir) { Remove-Item $OutDir -Recurse -Force }
+if (Test-Path $OutDir) { Remove-DirectoryForce $OutDir }
 New-Item -ItemType Directory -Force -Path $MainDir, $ClientDir | Out-Null
 
 # Main server package (compiled output only — no source)
@@ -134,7 +164,8 @@ $nodeModulesDest = Join-Path $MainDir 'node_modules'
 Install-ProductionNodeModules `
   -ServerPackageJson (Join-Path $Root 'server\package.json') `
   -DestNodeModules $nodeModulesDest `
-  -NpmCmd $npmCmd
+  -NpmCmd $npmCmd `
+  -Root $Root
 
 # Portable Node 22 runtime (if present)
 if (Test-Path $nodePortable) {

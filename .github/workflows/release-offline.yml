@@ -63,6 +63,25 @@ jobs:
         env:
           DEPLOYMENT_MODE: offline
 
+      - name: Prune dev dependencies for release packaging
+        run: npm prune --omit=dev
+
+      - name: Install portable Node.js 22 runtime for offline package
+        shell: pwsh
+        run: |
+          $dest = Join-Path $env:LOCALAPPDATA 'nodejs-portable\node-v22.23.2-win-x64'
+          if (Test-Path (Join-Path $dest 'node.exe')) {
+            Write-Host "Portable Node already present at $dest"
+            exit 0
+          }
+          New-Item -ItemType Directory -Force -Path (Split-Path $dest -Parent) | Out-Null
+          $zip = Join-Path $env:RUNNER_TEMP 'node-v22.23.2-win-x64.zip'
+          Write-Host 'Downloading Node.js 22 portable runtime...'
+          Invoke-WebRequest -Uri 'https://nodejs.org/dist/v22.23.2/node-v22.23.2-win-x64.zip' -OutFile $zip
+          Expand-Archive -Path $zip -DestinationPath $env:RUNNER_TEMP -Force
+          Move-Item -Force (Join-Path $env:RUNNER_TEMP 'node-v22.23.2-win-x64') $dest
+          Write-Host "Portable Node installed at $dest"
+
       - name: Build offline release package and installer
         shell: pwsh
         run: ./release/scripts/build-release.ps1 -Version ${{ steps.version.outputs.version }} -RequireInstaller
