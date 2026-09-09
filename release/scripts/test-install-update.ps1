@@ -36,14 +36,18 @@ function Get-PatientCount {
   $tmpJs = Join-Path $env:TEMP 'dnt-count-patients.js'
   @'
 const Database = require('better-sqlite3');
-const db = new Database(process.argv[1], { readonly: true });
+const db = new Database(process.argv[2], { readonly: true });
 const row = db.prepare('SELECT COUNT(*) AS c FROM patients').get();
 console.log(row.c);
-'@ | Set-Content -Path $tmpJs -Encoding UTF8
+'@ | Set-Content -Path $tmpJs -Encoding ascii
   $prevNodePath = $env:NODE_PATH
   $env:NODE_PATH = Join-Path $MainClinic 'node_modules'
   try {
-    & $node $tmpJs $DbPath
+    $count = & $node $tmpJs $DbPath
+    if ($LASTEXITCODE -ne 0) {
+      throw "Failed to read patient count from $DbPath (node exit $LASTEXITCODE)"
+    }
+    return $count
   } finally {
     $env:NODE_PATH = $prevNodePath
     Remove-Item $tmpJs -Force -ErrorAction SilentlyContinue
