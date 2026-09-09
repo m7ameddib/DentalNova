@@ -22,6 +22,22 @@ $OutDir = Join-Path $Root "release\DNT-Dental-v$Version"
 $MainDir = Join-Path $OutDir 'Main-Clinic'
 $ClientDir = Join-Path $OutDir 'Clinic-Client'
 
+# Dev-only tooling that must never ship in the packaged runtime node_modules.
+# `npm prune --omit=dev` cannot always remove these on its own: in this npm-workspaces
+# monorepo, `typescript` is a devDependency of the server workspace, but it is ALSO
+# required to satisfy an optional peerDependency of `react-i18next` (a production
+# dependency of the client workspace). Because that peer link is still "in use" by a
+# package prune keeps, npm's arborist does not consider `typescript` extraneous and
+# leaves it installed at the hoisted root node_modules. We explicitly finish that
+# cleanup below — this does NOT weaken the validation later in this script; the
+# forbidden-module check still runs unchanged and will still fail the build if any of
+# these (or anything else unexpected) slip through.
+$forbiddenModules = @(
+  '@nestjs\cli',
+  '@nestjs\schematics',
+  'typescript'
+)
+
 function Remove-DirectoryForce {
   param([string]$Path)
   if (-not (Test-Path $Path)) { return }
@@ -35,8 +51,96 @@ function Remove-DirectoryForce {
   }
 }
 
+function Get-ServerProductionPackageNames {
+  # Reads the SERVER workspace's exact, npm-resolved production dependency closure
+  # (recursively) via a read-only `npm ls` inspection — this never touches/reinstalls
+  # node_modules, so it cannot disturb the already-working better-sqlite3 native binary.
+  # Used to trim client-only packages (react, zustand, lucide-react, etc.) that get
+  # hoisted into the shared workspace node_modules but are never required by the
+  # compiled server (the client ships as pre-built static assets, not as npm packages).
+  param(
+    [string]$Root,
+    [string]$NpmCmd
+  )
+
+  Push-Location $Root
+  try {
+    $json = & $NpmCmd ls --workspace=server --omit=dev --all --json 2>$null
+  } finally {
+    Pop-Location
+  }
+  if ($LASTEXITCODE -ne 0 -or -not $json) {
+    Write-Warning 'Could not compute server production dependency closure via npm ls; skipping client-package trim.'
+    return $null
+  }
+
+  $jsonText = ($json -join "`n") -replace '^\uFEFF', ''
+  try {
+    $data = $jsonText | ConvertFrom-Json
+  } catch {
+    Write-Warning "Failed to parse npm ls output; skipping client-package trim. $_"
+    return $null
+  }
+
+  $names = New-Object 'System.Collections.Generic.HashSet[string]'
+  function Add-DepNames($deps) {
+    if (-not $deps) { return }
+    foreach ($prop in $deps.PSObject.Properties) {
+      [void]$names.Add($prop.Name)
+      if ($prop.Value.dependencies) { Add-DepNames $prop.Value.dependencies }
+    }
+  }
+  Add-DepNames $data.dependencies
+  if ($names.Count -eq 0) {
+    Write-Warning 'npm ls returned no server dependencies; skipping client-package trim.'
+    return $null
+  }
+  return $names
+}
+
+function Remove-NonServerPackages {
+  # Removes top-level node_modules packages that are not part of the server's own
+  # production dependency closure — i.e. packages only needed by the client workspace
+  # (react, react-dom, react-router-dom, zustand, lucide-react, axios, i18next, etc.).
+  # The client is served as pre-built static assets (client/dist), so none of its
+  # npm packages are ever required at server runtime.
+  param(
+    [string]$Path,
+    [System.Collections.Generic.HashSet[string]]$Whitelist
+  )
+  if (-not $Whitelist) { return }
+
+  Get-ChildItem -Path $Path -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
+    if ($_.Name -eq '.bin') { return }
+    if ($_.Name.StartsWith('@')) {
+      $scopeHadKeeper = $false
+      Get-ChildItem -Path $_.FullName -Directory -Force -ErrorAction SilentlyContinue | ForEach-Object {
+        $fullName = "$($_.Parent.Name)/$($_.Name)"
+        if ($Whitelist.Contains($fullName)) {
+          $scopeHadKeeper = $true
+        } else {
+          Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+        }
+      }
+      if (-not $scopeHadKeeper) {
+        Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+      }
+    } elseif (-not $Whitelist.Contains($_.Name)) {
+      Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue
+    }
+  }
+}
+
 function Optimize-ProductionNodeModules {
-  param([string]$Path)
+  param(
+    [string]$Path,
+    [System.Collections.Generic.HashSet[string]]$ServerWhitelist = $null
+  )
+
+  if ($ServerWhitelist) {
+    Write-Host "Trimming client-only packages not required by the production server (whitelist: $($ServerWhitelist.Count) packages)..."
+    Remove-NonServerPackages -Path $Path -Whitelist $ServerWhitelist
+  }
 
   $junkDirs = @(
     'test', 'tests', '__tests__', 'docs', 'doc', '.github',
@@ -56,6 +160,18 @@ function Optimize-ProductionNodeModules {
   $typesRoot = Join-Path $Path '@types'
   if (Test-Path $typesRoot) {
     Remove-Item $typesRoot -Recurse -Force -ErrorAction SilentlyContinue
+  }
+
+  # Finish removing dev-only tooling that `npm prune --omit=dev` could not fully
+  # exclude on its own (see $forbiddenModules comment above for why). Safe to delete
+  # unconditionally: these are compile-time-only tools, never required by the compiled
+  # server (dist/*.js) at runtime.
+  foreach ($rel in $forbiddenModules) {
+    $strayPath = Join-Path $Path $rel
+    if (Test-Path $strayPath) {
+      Write-Host "Removing stray dev-only package from packaged node_modules: $rel"
+      Remove-Item $strayPath -Recurse -Force -ErrorAction SilentlyContinue
+    }
   }
 }
 
@@ -77,7 +193,8 @@ function Install-ProductionNodeModules {
         Remove-DirectoryForce $DestNodeModules
       }
       Copy-Item -Recurse -Force $workspaceModules $DestNodeModules
-      Optimize-ProductionNodeModules -Path $DestNodeModules
+      $serverWhitelist = Get-ServerProductionPackageNames -Root $Root -NpmCmd $NpmCmd
+      Optimize-ProductionNodeModules -Path $DestNodeModules -ServerWhitelist $serverWhitelist
       return
     }
     Write-Warning 'Workspace node_modules missing better-sqlite3 native binary; falling back to isolated install.'
@@ -209,11 +326,6 @@ $requiredModules = @(
   'bcryptjs\package.json',
   'multer\package.json'
 )
-$forbiddenModules = @(
-  '@nestjs\cli',
-  'typescript'
-)
-
 if (-not (Test-Path $mainJs)) { throw "Packaging failed: missing server entrypoint at $mainJs" }
 if (-not (Test-Path $publicIndex)) { throw "Packaging failed: missing frontend at $publicIndex" }
 if (-not (Test-Path $backupServiceJs)) { throw "Packaging failed: missing backup service at $backupServiceJs" }
