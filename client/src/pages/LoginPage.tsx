@@ -36,7 +36,7 @@ export function LoginPage() {
   });
 
   const isOnline = installStatus?.deploymentMode === 'online';
-  const canCreateClinic = isOnline && installStatus?.phase === 'setup';
+  const canCreateClinic = Boolean(isOnline && installStatus?.canCreateClinic !== false);
   const clinicReady = installStatus?.phase === 'ready';
 
   useEffect(() => {

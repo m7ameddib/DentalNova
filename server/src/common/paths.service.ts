@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { getTenantClinicId } from '../platform/tenant-context';
+import { PlatformService } from '../platform/platform.service';
 
 /**
  * Resolves persistent clinic data paths for production installs.
@@ -9,7 +11,10 @@ import * as path from 'path';
  */
 @Injectable()
 export class PathsService {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly platform: PlatformService,
+  ) {}
 
   dataRoot(): string {
     const explicit = this.config.get<string>('DNT_DATA_DIR');
@@ -31,11 +36,11 @@ export class PathsService {
   }
 
   uploadsDir(): string {
-    return path.join(this.dataRoot(), 'attachments');
+    return path.join(this.tenantDataRoot(), 'attachments');
   }
 
   backupsDir(): string {
-    return path.join(this.dataRoot(), 'backups');
+    return path.join(this.tenantDataRoot(), 'backups');
   }
 
   logsDir(): string {
@@ -72,14 +77,24 @@ export class PathsService {
     }
   }
 
+  private tenantDataRoot(): string {
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      return this.platform.clinicDataDir(clinicId);
+    }
+    return this.dataRoot();
+  }
+
   migrationsDir(): string {
+    const candidates: string[] = [];
     const explicit = this.config.get<string>('MIGRATIONS_DIR');
     if (explicit) {
-      return path.isAbsolute(explicit) ? explicit : path.join(process.cwd(), explicit);
+      candidates.push(path.isAbsolute(explicit) ? explicit : path.join(process.cwd(), explicit));
     }
-    const packaged = path.join(process.cwd(), 'database', 'migrations');
-    if (fs.existsSync(packaged)) return packaged;
-    return path.join(process.cwd(), '..', 'database', 'migrations');
+    candidates.push(path.join(process.cwd(), 'database', 'migrations'));
+    candidates.push(path.join(process.cwd(), '..', 'database', 'migrations'));
+    const found = candidates.find((dir) => fs.existsSync(dir));
+    return found ?? candidates[0];
   }
 
   readJwtSecret(): string | null {

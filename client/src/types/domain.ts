@@ -20,6 +20,7 @@ export interface AuthenticatedUser {
   roleName: string;
   roleLabel: string;
   permissions: string[];
+  clinicId?: string;
 }
 
 export type TreatmentScope = 'SINGLE' | 'UPPER_JAW' | 'LOWER_JAW' | 'ALL_TEETH';

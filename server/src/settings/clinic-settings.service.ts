@@ -4,12 +4,15 @@ import * as path from 'path';
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
 import { UploadsService } from '../common/uploads.service';
 import { UpdateClinicSettingsDto } from './dto/update-clinic-settings.dto';
+import { PlatformService } from '../platform/platform.service';
+import { getTenantClinicId } from '../platform/tenant-context';
 
 @Injectable()
 export class ClinicSettingsService {
   constructor(
     private readonly repo: ClinicSettingsRepository,
     private readonly uploads: UploadsService,
+    private readonly platform: PlatformService,
   ) {}
 
   get() {
@@ -35,7 +38,15 @@ export class ClinicSettingsService {
         .filter((d) => Number.isInteger(d) && d >= 0 && d <= 6);
       dto.workingDays = [...new Set(days)].sort().join(',');
     }
-    return this.repo.update(dto);
+    const updated = this.repo.update(dto);
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      this.platform.updateClinicProfile(clinicId, {
+        name: updated.clinicName ?? undefined,
+        phone: updated.clinicPhone,
+      });
+    }
+    return updated;
   }
 
   saveLogo(file: Express.Multer.File) {

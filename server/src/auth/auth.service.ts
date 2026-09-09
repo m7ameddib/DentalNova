@@ -10,6 +10,8 @@ import { AuthenticatedUser, JwtPayload } from './auth.types';
 import { JwtSecretService } from './jwt-secret.service';
 import { PERMISSIONS } from '../common/rbac.constants';
 import { DeploymentService } from '../common/deployment.service';
+import { PlatformService } from '../platform/platform.service';
+import { runInTenant } from '../platform/tenant-context';
 
 @Injectable()
 export class AuthService {
@@ -21,9 +23,24 @@ export class AuthService {
     private readonly config: ConfigService,
     private readonly deployment: DeploymentService,
     private readonly installationRepo: InstallationRepository,
+    private readonly platform: PlatformService,
   ) {}
 
   async validateCredentials(username: string, password: string): Promise<AuthenticatedUser> {
+    if (this.platform.isEnabled()) {
+      const directory = this.platform.findUserByUsername(username);
+      if (!directory) {
+        throw new UnauthorizedException('Invalid username or password');
+      }
+      return runInTenant(directory.clinicId, async () => {
+        const user = await this.validateLocalCredentials(username, password);
+        return { ...user, clinicId: directory.clinicId };
+      });
+    }
+    return this.validateLocalCredentials(username, password);
+  }
+
+  private async validateLocalCredentials(username: string, password: string): Promise<AuthenticatedUser> {
     const user = this.usersRepo.findByUsername(username);
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Invalid username or password');
@@ -35,7 +52,7 @@ export class AuthService {
     return this.toAuthenticatedUser(user.id);
   }
 
-  toAuthenticatedUser(userId: number): AuthenticatedUser {
+  toAuthenticatedUser(userId: number, clinicId?: string): AuthenticatedUser {
     const user = this.usersRepo.findById(userId);
     if (!user) throw new UnauthorizedException('User not found');
     const role = this.rolesRepo.findById(user.roleId);
@@ -49,6 +66,7 @@ export class AuthService {
       roleName: role?.name ?? 'unknown',
       roleLabel: role?.label ?? 'Unknown',
       permissions,
+      clinicId,
     };
   }
 
@@ -60,7 +78,8 @@ export class AuthService {
     };
 
     if (this.deployment.isOnline()) {
-      payload.installationId = this.installationRepo.get().installationId;
+      payload.clinicId = authUser.clinicId;
+      payload.installationId = authUser.clinicId ?? this.installationRepo.get().installationId;
     }
 
     return {

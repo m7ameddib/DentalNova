@@ -4,12 +4,15 @@ import { UsersRepository } from '../database/repositories/users.repository';
 import { RolesRepository } from '../database/repositories/roles.repository';
 import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
+import { PlatformService } from '../platform/platform.service';
+import { getTenantClinicId } from '../platform/tenant-context';
 
 @Injectable()
 export class UsersService {
   constructor(
     private readonly usersRepo: UsersRepository,
     private readonly rolesRepo: RolesRepository,
+    private readonly platform: PlatformService,
   ) {}
 
   listUsers() {
@@ -36,6 +39,15 @@ export class UsersService {
     if (!role) {
       throw new BadRequestException(`Unknown role "${dto.roleName}"`);
     }
+    const clinicId = getTenantClinicId();
+    if (this.platform.isEnabled()) {
+      if (!clinicId) {
+        throw new BadRequestException('Clinic context is required.');
+      }
+      if (this.platform.findUserByUsername(dto.username)) {
+        throw new ConflictException('Username is already taken');
+      }
+    }
     if (this.usersRepo.findByUsername(dto.username)) {
       throw new ConflictException('Username is already taken');
     }
@@ -46,6 +58,13 @@ export class UsersService {
       passwordHash,
       roleId: role.id,
     });
+    if (this.platform.isEnabled() && clinicId) {
+      this.platform.registerUser({
+        username: dto.username,
+        clinicId,
+        userId: user.id,
+      });
+    }
     return { id: user.id, fullName: user.fullName, username: user.username, roleName: role.name };
   }
 

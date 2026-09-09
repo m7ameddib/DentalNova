@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -29,6 +29,8 @@ import { SubscriptionModule } from './subscription/subscription.module';
 import { DibNovaAdminModule } from './dibnova-admin/dibnova-admin.module';
 import { UpdatesModule } from './updates/updates.module';
 import { OfflineLicensingModule } from './offline-licensing/offline-licensing.module';
+import { PlatformModule } from './platform/platform.module';
+import { TenantMiddleware } from './platform/tenant.middleware';
 
 /** Resolve server/.env whether npm is started from repo root or server/. */
 function resolveServerEnvFile(): string {
@@ -43,6 +45,7 @@ function resolveServerEnvFile(): string {
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: resolveServerEnvFile() }),
+    PlatformModule,
     DatabaseModule,
     InstallationModule,    AuditModule,
     AuthModule,
@@ -69,4 +72,8 @@ function resolveServerEnvFile(): string {
     OfflineLicensingModule,
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(TenantMiddleware).forRoutes('*');
+  }
+}

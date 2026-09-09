@@ -10,4 +10,9 @@ export class AdminNotesDto {
   @IsString()
   @MaxLength(500)
   reason?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  clinicId?: string;
 }

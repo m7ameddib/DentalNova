@@ -23,6 +23,8 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { SubscriptionRepository } from '../subscription/subscription.repository';
 import { OnlineClinicAccountsRepository } from '../database/repositories/online-clinic-accounts.repository';
 import { isValidPhone, normalizePhone } from '../common/phone.util';
+import { PlatformService } from '../platform/platform.service';
+import { runInTenant } from '../platform/tenant-context';
 
 export interface InstallationStatusResponse {
   phase: InstallationPhase;
@@ -31,6 +33,7 @@ export interface InstallationStatusResponse {
   product: string;
   deploymentMode: 'offline' | 'online';
   onlineSubscriptionStatus?: 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | null;
+  canCreateClinic?: boolean;
 }
 
 export interface SetupCompleteResponse extends InstallationStatusResponse {
@@ -56,18 +59,30 @@ export class InstallationService {
     private readonly subscriptionRepo: SubscriptionRepository,
     private readonly onlineAccountsRepo: OnlineClinicAccountsRepository,
     private readonly config: ConfigService,
+    private readonly platform: PlatformService,
   ) {}
 
   getStatus(): InstallationStatusResponse {
+    if (this.platform.isEnabled()) {
+      return {
+        phase: 'ready',
+        installationId: '',
+        version: APP_VERSION,
+        product: 'DNT Dental',
+        deploymentMode: 'online',
+        onlineSubscriptionStatus: null,
+        canCreateClinic: true,
+      };
+    }
     const row = this.repo.get();
-    const sub = this.deployment.isOnline() ? this.subscriptionRepo.get() : null;
     return {
       phase: this.repo.phase(),
       installationId: row.installationId,
       version: APP_VERSION,
       product: 'DNT Dental',
       deploymentMode: this.deployment.getMode(),
-      onlineSubscriptionStatus: sub?.status ?? null,
+      onlineSubscriptionStatus: null,
+      canCreateClinic: false,
     };
   }
 
@@ -161,6 +176,10 @@ export class InstallationService {
   }
 
   async completeSetup(dto: FirstSetupDto): Promise<SetupCompleteResponse> {
+    if (this.platform.isEnabled()) {
+      return this.completeOnlineClinicSetup(dto);
+    }
+
     if (this.repo.phase() !== 'setup') {
       throw new ConflictException('Clinic setup has already been completed.');
     }
@@ -178,17 +197,6 @@ export class InstallationService {
 
     if (this.usersRepo.findByPhoneNormalized(phoneNormalized)) {
       throw new ConflictException('This phone number is already registered to another account.');
-    }
-
-    const installationRow = this.repo.get();
-
-    if (this.deployment.isOnline()) {
-      if (this.onlineAccountsRepo.findByUsername(username)) {
-        throw new ConflictException('Username is already taken.');
-      }
-      if (this.onlineAccountsRepo.findByPhoneNormalized(phoneNormalized)) {
-        throw new ConflictException('This phone number is already registered to another clinic account.');
-      }
     }
 
     const doctorRole = this.rolesRepo.findByName('doctor');
@@ -221,20 +229,7 @@ export class InstallationService {
         phoneNormalized,
       });
 
-      if (this.deployment.isOnline()) {
-        this.onlineAccountsRepo.create({
-          username,
-          phoneNormalized,
-          installationId: installationRow.installationId,
-          adminUserId: user.id,
-        });
-      }
-
       this.repo.markSetupComplete();
-      if (this.deployment.isOnline()) {
-        this.repo.markOnlineSubscriptionPending();
-        this.logger.log('Online clinic setup complete — subscription PENDING admin activation.');
-      }
       return user;
     })();
     this.logger.log('First clinic setup completed.');
@@ -247,7 +242,89 @@ export class InstallationService {
     };
   }
 
+  private async completeOnlineClinicSetup(dto: FirstSetupDto): Promise<SetupCompleteResponse> {
+    const username = dto.adminUsername.trim();
+    const phoneNormalized = normalizePhone(dto.adminPhone);
+
+    if (!isValidPhone(dto.adminPhone)) {
+      throw new BadRequestException('Enter a valid administrator phone number.');
+    }
+    if (this.platform.findUserByUsername(username)) {
+      throw new ConflictException('Username is already taken.');
+    }
+    if (this.platform.findUserByPhone(phoneNormalized)) {
+      throw new ConflictException('This phone number is already registered to another clinic account.');
+    }
+
+    const clinic = this.platform.createClinic({
+      name: dto.clinicName.trim(),
+      phone: dto.clinicPhone.trim(),
+    });
+    this.db.ensureClinicConnection(clinic.id);
+
+    const passwordHash = await bcrypt.hash(dto.adminPassword, 10);
+    const created = runInTenant(clinic.id, () => {
+      const doctorRole = this.rolesRepo.findByName('doctor');
+      if (!doctorRole) {
+        throw new BadRequestException('System roles are not initialized.');
+      }
+      this.paths.ensureDataDirs();
+      return this.db.connection.transaction(() => {
+        this.clinicSettings.update({
+          clinicName: dto.clinicName.trim(),
+          clinicPhone: dto.clinicPhone.trim(),
+          doctorPhone: dto.doctorPhone.trim(),
+          address: dto.address?.trim() || null,
+          workingDays: dto.workingDays,
+          workStartTime: dto.workStartTime,
+          workEndTime: dto.workEndTime,
+        });
+        const user = this.usersRepo.create({
+          fullName: dto.doctorName.trim(),
+          username,
+          passwordHash,
+          roleId: doctorRole.id,
+          phone: dto.adminPhone.trim(),
+          phoneNormalized,
+        });
+        this.onlineAccountsRepo.create({
+          username,
+          phoneNormalized,
+          installationId: clinic.id,
+          adminUserId: user.id,
+        });
+        this.repo.markSetupComplete();
+        return user;
+      })();
+    });
+
+    this.platform.registerUser({
+      username,
+      clinicId: clinic.id,
+      userId: created.id,
+      phoneNormalized,
+    });
+    this.platform.setSubscriptionPending(clinic.id);
+    this.logger.log(`Online clinic setup complete for ${clinic.id} — subscription PENDING.`);
+
+    const authUser = runInTenant(clinic.id, () =>
+      this.authService.toAuthenticatedUser(created.id, clinic.id),
+    );
+    const session = this.authService.login(authUser);
+    return {
+      phase: 'ready',
+      installationId: clinic.id,
+      version: APP_VERSION,
+      product: 'DNT Dental',
+      deploymentMode: 'online',
+      onlineSubscriptionStatus: 'PENDING',
+      canCreateClinic: true,
+      ...session,
+    };
+  }
+
   isReady(): boolean {
+    if (this.platform.isEnabled()) return true;
     return this.repo.phase() === 'ready';
   }
 }

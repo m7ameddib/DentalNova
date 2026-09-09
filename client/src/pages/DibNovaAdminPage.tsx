@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -43,6 +43,7 @@ export function DibNovaAdminPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
+  const [selectedClinicId, setSelectedClinicId] = useState<string>('');
 
   const { data, isLoading, refetch, isError } = useQuery({
     queryKey: ['dibnova-admin-installation'],
@@ -50,6 +51,13 @@ export function DibNovaAdminPage() {
     enabled: authenticated,
     retry: false,
   });
+
+  useEffect(() => {
+    if (!data?.clinics?.length) return;
+    if (!selectedClinicId || !data.clinics.some((clinic) => clinic.clinicId === selectedClinicId)) {
+      setSelectedClinicId(data.clinics[0].clinicId);
+    }
+  }, [data, selectedClinicId]);
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['dibnova-admin-installation'] });
@@ -59,15 +67,16 @@ export function DibNovaAdminPage() {
 
   const actionMutation = useMutation({
     mutationFn: async (action: 'activate' | 'extend' | 'suspend' | 'reactivate') => {
+      const clinicId = selectedClinicId || undefined;
       switch (action) {
         case 'activate':
-          return dibnovaAdminApi.activate(notes);
+          return dibnovaAdminApi.activate(notes, clinicId);
         case 'extend':
-          return dibnovaAdminApi.extend(notes);
+          return dibnovaAdminApi.extend(notes, clinicId);
         case 'suspend':
-          return dibnovaAdminApi.suspend(notes);
+          return dibnovaAdminApi.suspend(notes, clinicId);
         case 'reactivate':
-          return dibnovaAdminApi.reactivate(notes);
+          return dibnovaAdminApi.reactivate(notes, clinicId);
       }
     },
     onSuccess: (_result, action) => {
@@ -130,10 +139,15 @@ export function DibNovaAdminPage() {
 
   const isOnline = data?.deploymentMode === 'online';
   const canIssueOfflineLicenses = Boolean(data?.offlineLicensing?.canIssueOfflineLicenses);
-  const clinicReady = data?.phase === 'ready';
-  const effectiveStatus: OnlineSubscriptionStatus | null = clinicReady
-    ? (data?.subscription.status ?? 'PENDING')
-    : null;
+  const onlineClinics = data?.clinics ?? [];
+  const selectedClinic =
+    onlineClinics.find((clinic) => clinic.clinicId === selectedClinicId) ?? onlineClinics[0] ?? null;
+  const clinicReady = Boolean(selectedClinic) || (!isOnline && data?.phase === 'ready');
+  const effectiveStatus: OnlineSubscriptionStatus | null = selectedClinic
+    ? selectedClinic.subscription.status
+    : clinicReady
+      ? (data?.subscription.status ?? 'PENDING')
+      : null;
 
   const { data: offlineSlots } = useQuery({
     queryKey: ['dibnova-admin-offline-slots'],
@@ -225,16 +239,31 @@ export function DibNovaAdminPage() {
             <>
               <section className="admin-card">
                 <h2 className="admin-card__title">{t('dibnovaAdmin.clinicInfo')}</h2>
+                {onlineClinics.length > 0 && (
+                  <label className="form-field">
+                    <span className="form-field__label">{t('dibnovaAdmin.clinicName')}</span>
+                    <select
+                      value={selectedClinic?.clinicId ?? ''}
+                      onChange={(e) => setSelectedClinicId(e.target.value)}
+                    >
+                      {onlineClinics.map((clinic) => (
+                        <option key={clinic.clinicId} value={clinic.clinicId}>
+                          {clinic.clinicName} ({clinic.subscription.status})
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <div className="admin-info-table-wrap">
                   <table className="admin-info-table">
                     <tbody>
                       <tr>
                         <th>{t('dibnovaAdmin.clinicName')}</th>
-                        <td>{data.clinicName || '—'}</td>
+                        <td>{selectedClinic?.clinicName || data.clinicName || '—'}</td>
                       </tr>
                       <tr>
                         <th>{t('dibnovaAdmin.installationId')}</th>
-                        <td className="mono-text">{data.installationId}</td>
+                        <td className="mono-text">{selectedClinic?.clinicId || data.installationId}</td>
                       </tr>
                       <tr>
                         <th>{t('dibnovaAdmin.deploymentMode')}</th>
@@ -252,11 +281,11 @@ export function DibNovaAdminPage() {
                           </tr>
                           <tr>
                             <th>{t('dibnovaAdmin.startDate')}</th>
-                            <td>{formatDate(data.subscription.startedAt)}</td>
+                            <td>{formatDate(selectedClinic?.subscription.startedAt ?? data.subscription.startedAt)}</td>
                           </tr>
                           <tr>
                             <th>{t('dibnovaAdmin.expiryDate')}</th>
-                            <td>{formatDate(data.subscription.expiresAt)}</td>
+                            <td>{formatDate(selectedClinic?.subscription.expiresAt ?? data.subscription.expiresAt)}</td>
                           </tr>
                         </>
                       )}
@@ -344,7 +373,7 @@ export function DibNovaAdminPage() {
                     </button>
                   </div>
 
-                  {data.subscription.canUseSystem && (
+                  {(selectedClinic?.subscription.canUseSystem ?? data.subscription.canUseSystem) && (
                     <p className="form-success-banner admin-card__success">
                       <Building2 size={14} /> {t('dibnovaAdmin.clinicCanAccess')}
                     </p>

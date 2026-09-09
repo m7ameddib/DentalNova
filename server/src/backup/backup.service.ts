@@ -16,6 +16,8 @@ import yauzl from 'yauzl';
 import { DatabaseService } from '../database/database.service';
 import { UploadsService } from '../common/uploads.service';
 import { APP_VERSION } from '../common/version';
+import { PlatformService } from '../platform/platform.service';
+import { getTenantClinicId } from '../platform/tenant-context';
 
 const BACKUP_VERSION = 2;
 
@@ -42,9 +44,16 @@ export class BackupService {
     private readonly db: DatabaseService,
     private readonly uploads: UploadsService,
     private readonly config: ConfigService,
+    private readonly platform: PlatformService,
   ) {}
 
   private backupsDir(): string {
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      const dir = path.join(this.platform.clinicDataDir(clinicId), 'backups');
+      fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    }
     const dataDir = this.config.get<string>('DNT_DATA_DIR');
     const base = dataDir ? path.resolve(dataDir) : path.dirname(this.db.getDbPath());
     const dir = path.join(base, 'backups');

@@ -6,12 +6,15 @@ export interface JwtPayload {
   dibnovaAdmin?: boolean;
   /** Online clinic installation this session belongs to. */
   installationId?: string;
+  /** Online clinic this session is bound to. Server-side tenant key. */
+  clinicId?: string;
 }
 
 export interface PasswordResetJwtPayload {
   sub: number;
   username: string;
   purpose: 'password_reset';
+  clinicId?: string;
 }
 
 export interface AuthenticatedUser {
@@ -23,4 +26,5 @@ export interface AuthenticatedUser {
   roleName: string;
   roleLabel: string;
   permissions: string[];
+  clinicId?: string;
 }

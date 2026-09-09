@@ -7,6 +7,8 @@ import {
   OnlineSubscriptionStatus,
   OnlineSubscriptionStatusResponse,
 } from './subscription.types';
+import { PlatformService } from '../platform/platform.service';
+import { getTenantClinicId } from '../platform/tenant-context';
 
 const SUBSCRIPTION_TERM_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -19,15 +21,21 @@ export class SubscriptionService {
     private readonly installation: InstallationRepository,
     private readonly clinicSettings: ClinicSettingsRepository,
     private readonly deployment: DeploymentService,
+    private readonly platform: PlatformService,
   ) {}
 
   isApplicable(): boolean {
-    return this.deployment.isOnline() && this.installation.phase() === 'ready';
+    if (!this.deployment.isOnline()) return false;
+    return Boolean(this.currentClinicId());
   }
 
   /** Resolve effective status, auto-expiring ACTIVE subscriptions past expiry. */
   effectiveStatus(): OnlineSubscriptionStatus | null {
     if (!this.isApplicable()) return null;
+    const clinicId = this.currentClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      return this.platform.getSubscription(clinicId).status;
+    }
 
     const row = this.repo.get();
     if (!row.status) return 'PENDING';
@@ -51,7 +59,13 @@ export class SubscriptionService {
 
   getStatusResponse(): OnlineSubscriptionStatusResponse {
     const applicable = this.isApplicable();
-    const row = applicable ? this.repo.get() : null;
+    const clinicId = this.currentClinicId();
+    const row =
+      applicable && clinicId && this.platform.isEnabled()
+        ? this.platform.getSubscription(clinicId)
+        : applicable
+          ? this.repo.get()
+          : null;
     const status = applicable ? this.effectiveStatus() : null;
 
     return {
@@ -66,7 +80,13 @@ export class SubscriptionService {
     };
   }
 
-  activate(adminNotes?: string): OnlineSubscriptionStatusResponse {
+  activate(adminNotes?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+    const id = this.requireManagedClinicId(clinicId);
+    if (this.platform.isEnabled()) {
+      this.platform.setSubscriptionActive(id, adminNotes);
+      this.logger.log(`Online subscription activated for clinic ${id}`);
+      return this.statusForClinic(id);
+    }
     this.assertOnlineReady();
     const now = new Date();
     const expires = new Date(now.getTime() + SUBSCRIPTION_TERM_MS);
@@ -75,7 +95,13 @@ export class SubscriptionService {
     return this.getStatusResponse();
   }
 
-  extend(adminNotes?: string): OnlineSubscriptionStatusResponse {
+  extend(adminNotes?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+    const id = this.requireManagedClinicId(clinicId);
+    if (this.platform.isEnabled()) {
+      this.platform.extendSubscription(id, adminNotes);
+      this.logger.log(`Online subscription extended for clinic ${id}`);
+      return this.statusForClinic(id);
+    }
     this.assertOnlineReady();
     const row = this.repo.get();
     const base = row.expiresAt ? new Date(row.expiresAt) : new Date();
@@ -87,7 +113,17 @@ export class SubscriptionService {
     return this.getStatusResponse();
   }
 
-  suspend(reason?: string): OnlineSubscriptionStatusResponse {
+  suspend(reason?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+    const id = this.requireManagedClinicId(clinicId);
+    if (this.platform.isEnabled()) {
+      const status = this.platform.getSubscription(id).status;
+      if (status !== 'ACTIVE' && status !== 'PENDING') {
+        throw new BadRequestException('Only active or pending clinics can be suspended.');
+      }
+      this.platform.setSubscriptionSuspended(id, reason);
+      this.logger.log(`Online subscription suspended for clinic ${id}`);
+      return this.statusForClinic(id);
+    }
     this.assertOnlineReady();
     const status = this.effectiveStatus();
     if (status !== 'ACTIVE' && status !== 'PENDING') {
@@ -98,7 +134,15 @@ export class SubscriptionService {
     return this.getStatusResponse();
   }
 
-  reactivate(adminNotes?: string): OnlineSubscriptionStatusResponse {
+  reactivate(adminNotes?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+    const id = this.requireManagedClinicId(clinicId);
+    if (this.platform.isEnabled()) {
+      const status = this.platform.getSubscription(id).status;
+      if (status !== 'SUSPENDED' && status !== 'EXPIRED') {
+        throw new BadRequestException('Only suspended or expired clinics can be reactivated.');
+      }
+      return this.activate(adminNotes, id);
+    }
     this.assertOnlineReady();
     const status = this.effectiveStatus();
     if (status !== 'SUSPENDED' && status !== 'EXPIRED') {
@@ -108,6 +152,29 @@ export class SubscriptionService {
   }
 
   getAdminClinicInfo() {
+    if (this.platform.isEnabled()) {
+      return {
+        deploymentMode: this.deployment.getMode(),
+        installationId: 'platform',
+        clinicName: '',
+        clinicPhone: '',
+        setupCompletedAt: null,
+        phase: 'ready' as const,
+        clinics: this.listAdminClinics(),
+        subscription: {
+          deploymentMode: 'online' as const,
+          applicable: false,
+          status: null,
+          startedAt: null,
+          expiresAt: null,
+          suspendedAt: null,
+          suspendedReason: null,
+          canUseSystem: false,
+        },
+        offlineLicense: null,
+      };
+    }
+
     const installation = this.installation.get();
     const clinic = this.clinicSettings.get();
     const subscription = this.getStatusResponse();
@@ -127,6 +194,59 @@ export class SubscriptionService {
           }
         : null,
     };
+  }
+
+  listAdminClinics() {
+    if (!this.platform.isEnabled()) return [];
+    return this.platform.listClinics().map((clinic) => {
+      const sub = this.platform.getSubscription(clinic.id);
+      return {
+        clinicId: clinic.id,
+        clinicName: clinic.name,
+        clinicPhone: clinic.phone,
+        createdAt: clinic.createdAt,
+        subscription: {
+          deploymentMode: 'online' as const,
+          applicable: true,
+          status: sub.status,
+          startedAt: sub.startedAt,
+          expiresAt: sub.expiresAt,
+          suspendedAt: sub.suspendedAt,
+          suspendedReason: sub.suspendedReason,
+          canUseSystem: sub.status === 'ACTIVE',
+        },
+      };
+    });
+  }
+
+  private statusForClinic(clinicId: string): OnlineSubscriptionStatusResponse {
+    const sub = this.platform.getSubscription(clinicId);
+    return {
+      deploymentMode: 'online',
+      applicable: true,
+      status: sub.status,
+      startedAt: sub.startedAt,
+      expiresAt: sub.expiresAt,
+      suspendedAt: sub.suspendedAt,
+      suspendedReason: sub.suspendedReason,
+      canUseSystem: sub.status === 'ACTIVE',
+    };
+  }
+
+  private currentClinicId(): string | undefined {
+    return getTenantClinicId();
+  }
+
+  private requireManagedClinicId(clinicId?: string): string {
+    if (!this.deployment.isOnline()) {
+      throw new BadRequestException('Online subscription management applies to online deployments only.');
+    }
+    const id = clinicId?.trim() || this.currentClinicId();
+    if (!id) {
+      throw new BadRequestException('Clinic id is required.');
+    }
+    this.platform.requireClinic(id);
+    return id;
   }
 
   private assertOnlineReady(): void {

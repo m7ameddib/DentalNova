@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import { DibNovaAdminGuard } from './dibnova-admin.guard';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { OfflineLicensingService } from '../offline-licensing/offline-licensing.service';
@@ -29,28 +29,53 @@ export class DibNovaAdminController {
     };
   }
 
+  @Get('clinics')
+  listClinics() {
+    return this.subscription.listAdminClinics();
+  }
+
   /** Activate a PENDING online clinic (1-year subscription). */
   @Post('subscription/activate')
   activate(@Body() dto: AdminNotesDto) {
-    return this.subscription.activate(dto.notes);
+    return this.subscription.activate(dto.notes, dto.clinicId);
+  }
+
+  @Post('clinics/:clinicId/subscription/activate')
+  activateClinic(@Param('clinicId') clinicId: string, @Body() dto: AdminNotesDto) {
+    return this.subscription.activate(dto.notes, clinicId);
   }
 
   /** Extend an active online subscription by 1 year. */
   @Post('subscription/extend')
   extend(@Body() dto: AdminNotesDto) {
-    return this.subscription.extend(dto.notes);
+    return this.subscription.extend(dto.notes, dto.clinicId);
+  }
+
+  @Post('clinics/:clinicId/subscription/extend')
+  extendClinic(@Param('clinicId') clinicId: string, @Body() dto: AdminNotesDto) {
+    return this.subscription.extend(dto.notes, clinicId);
   }
 
   /** Suspend an online clinic. */
   @Post('subscription/suspend')
   suspend(@Body() dto: AdminNotesDto) {
-    return this.subscription.suspend(dto.reason ?? dto.notes);
+    return this.subscription.suspend(dto.reason ?? dto.notes, dto.clinicId);
+  }
+
+  @Post('clinics/:clinicId/subscription/suspend')
+  suspendClinic(@Param('clinicId') clinicId: string, @Body() dto: AdminNotesDto) {
+    return this.subscription.suspend(dto.reason ?? dto.notes, clinicId);
   }
 
   /** Reactivate a suspended or expired online clinic (new 1-year term). */
   @Post('subscription/reactivate')
   reactivate(@Body() dto: AdminNotesDto) {
-    return this.subscription.reactivate(dto.notes);
+    return this.subscription.reactivate(dto.notes, dto.clinicId);
+  }
+
+  @Post('clinics/:clinicId/subscription/reactivate')
+  reactivateClinic(@Param('clinicId') clinicId: string, @Body() dto: AdminNotesDto) {
+    return this.subscription.reactivate(dto.notes, clinicId);
   }
 
   /** Create a one-time offline activation code (licensing server only). */

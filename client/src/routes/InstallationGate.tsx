@@ -100,7 +100,10 @@ export function InstallationGate({ children }: { children: ReactNode }) {
     }
   }
 
-  if (status.phase === 'ready' && (path === '/activate' || path === '/setup')) {
+  if (status.phase === 'ready' && path === '/activate') {
+    return <Navigate to="/login" replace />;
+  }
+  if (status.phase === 'ready' && path === '/setup' && !status.canCreateClinic) {
     return <Navigate to="/login" replace />;
   }
 

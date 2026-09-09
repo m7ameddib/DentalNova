@@ -2,10 +2,15 @@ import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
+import { PlatformService } from '../platform/platform.service';
+import { getTenantClinicId } from '../platform/tenant-context';
 
 @Injectable()
 export class UploadsService {
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly platform: PlatformService,
+  ) {}
 
   private dataRoot(): string {
     const dataDir = this.config.get<string>('DNT_DATA_DIR');
@@ -16,6 +21,12 @@ export class UploadsService {
   }
 
   uploadsRoot(): string {
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      const dir = path.join(this.platform.clinicDataDir(clinicId), 'attachments');
+      fs.mkdirSync(dir, { recursive: true });
+      return dir;
+    }
     const sub = this.config.get<string>('DNT_DATA_DIR') ? 'attachments' : 'uploads';
     const dir = path.join(this.dataRoot(), sub);
     fs.mkdirSync(dir, { recursive: true });

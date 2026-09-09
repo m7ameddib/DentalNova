@@ -34,6 +34,14 @@ export function isDibNovaAdminAuthenticated(): boolean {
   return Boolean(getDibNovaAdminToken());
 }
 
+export interface AdminManagedClinic {
+  clinicId: string;
+  clinicName: string;
+  clinicPhone: string | null;
+  createdAt: string;
+  subscription: SubscriptionStatus;
+}
+
 export interface AdminClinicInfo {
   deploymentMode: 'offline' | 'online';
   installationId: string;
@@ -42,6 +50,7 @@ export interface AdminClinicInfo {
   setupCompletedAt: string | null;
   phase: 'activation' | 'setup' | 'ready';
   subscription: SubscriptionStatus;
+  clinics?: AdminManagedClinic[];
   offlineLicense: { activatedAt: string | null; hasLicense: boolean } | null;
   offlineLicensing?: { canIssueOfflineLicenses: boolean };
 }
@@ -101,24 +110,39 @@ export const dibnovaAdminApi = {
   getInstallation: () =>
     adminClient().get<AdminClinicInfo>('/dibnova-admin/installation').then((r) => r.data),
 
-  activate: (notes?: string) =>
+  listClinics: () =>
+    adminClient().get<AdminManagedClinic[]>('/dibnova-admin/clinics').then((r) => r.data),
+
+  activate: (notes?: string, clinicId?: string) =>
     adminClient()
-      .post<SubscriptionStatus>('/dibnova-admin/subscription/activate', { notes: notes || undefined })
+      .post<SubscriptionStatus>('/dibnova-admin/subscription/activate', {
+        notes: notes || undefined,
+        clinicId,
+      })
       .then((r) => r.data),
 
-  extend: (notes?: string) =>
+  extend: (notes?: string, clinicId?: string) =>
     adminClient()
-      .post<SubscriptionStatus>('/dibnova-admin/subscription/extend', { notes: notes || undefined })
+      .post<SubscriptionStatus>('/dibnova-admin/subscription/extend', {
+        notes: notes || undefined,
+        clinicId,
+      })
       .then((r) => r.data),
 
-  suspend: (reason?: string) =>
+  suspend: (reason?: string, clinicId?: string) =>
     adminClient()
-      .post<SubscriptionStatus>('/dibnova-admin/subscription/suspend', { reason: reason || undefined })
+      .post<SubscriptionStatus>('/dibnova-admin/subscription/suspend', {
+        reason: reason || undefined,
+        clinicId,
+      })
       .then((r) => r.data),
 
-  reactivate: (notes?: string) =>
+  reactivate: (notes?: string, clinicId?: string) =>
     adminClient()
-      .post<SubscriptionStatus>('/dibnova-admin/subscription/reactivate', { notes: notes || undefined })
+      .post<SubscriptionStatus>('/dibnova-admin/subscription/reactivate', {
+        notes: notes || undefined,
+        clinicId,
+      })
       .then((r) => r.data),
 
   createOfflineLicenseSlot: (payload: {

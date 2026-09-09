@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { InstallationService } from '../installation.service';
+import { DeploymentService } from '../../common/deployment.service';
 
 export const SKIP_INSTALLATION_GUARD = 'skipInstallationGuard';
 
@@ -14,6 +15,7 @@ export class InstallationReadyGuard implements CanActivate {
   constructor(
     private readonly installation: InstallationService,
     private readonly reflector: Reflector,
+    private readonly deployment: DeploymentService,
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -22,6 +24,7 @@ export class InstallationReadyGuard implements CanActivate {
       context.getClass(),
     ]);
     if (skip) return true;
+    if (this.deployment.isOnline()) return true;
 
     const req = context.switchToHttp().getRequest<{ path?: string; url?: string }>();
     const path = req.path ?? req.url ?? '';

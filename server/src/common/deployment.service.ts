@@ -52,7 +52,7 @@ export class DeploymentService implements OnModuleInit {
         .filter(Boolean);
     }
     if (this.isOnline()) {
-      return ['https://dentalnova.dibnova.com'];
+      return ['https://dental.dibnova.com', 'https://dentalnova.dibnova.com'];
     }
     return [];
   }

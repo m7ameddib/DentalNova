@@ -1,5 +1,6 @@
 import { Global, Module } from '@nestjs/common';
 import { DatabaseService } from './database.service';
+import { PlatformModule } from '../platform/platform.module';
 
 /**
  * Global module exposing the low-level DatabaseService (raw connection +
@@ -8,6 +9,7 @@ import { DatabaseService } from './database.service';
  */
 @Global()
 @Module({
+  imports: [PlatformModule],
   providers: [DatabaseService],
   exports: [DatabaseService],
 })

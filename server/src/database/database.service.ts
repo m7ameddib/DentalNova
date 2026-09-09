@@ -5,6 +5,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { ensureRolesAndPermissions, seedReferenceData } from './reference-seed';
 import { seedComprehensiveTreatmentCatalog } from './seed-comprehensive-catalog';
+import { getTenantClinicId } from '../platform/tenant-context';
+import { PlatformService } from '../platform/platform.service';
 
 /**
  * Owns the single SQLite connection (persistence layer) and applies SQL
@@ -15,28 +17,56 @@ import { seedComprehensiveTreatmentCatalog } from './seed-comprehensive-catalog'
 export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(DatabaseService.name);
   private db!: Database.Database;
+  private readonly clinicConnections = new Map<string, Database.Database>();
 
-  constructor(private readonly config: ConfigService) {}
+  constructor(
+    private readonly config: ConfigService,
+    private readonly platform: PlatformService,
+  ) {}
 
   onModuleInit() {
     this.openConnection();
   }
 
   onModuleDestroy() {
+    for (const clinicId of [...this.clinicConnections.keys()]) {
+      this.closeClinicConnection(clinicId);
+    }
     this.closeConnection();
   }
 
   get connection(): Database.Database {
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      return this.ensureClinicConnection(clinicId);
+    }
     return this.db;
   }
 
   getDbPath(): string {
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      return this.platform.requireClinic(clinicId).dbPath;
+    }
     return this.resolveDbPath();
+  }
+
+  ensureClinicFile(dbFile: string): Database.Database {
+    return this.openDatabaseFile(dbFile);
+  }
+
+  ensureClinicConnection(clinicId: string): Database.Database {
+    const existing = this.clinicConnections.get(clinicId);
+    if (existing) return existing;
+    const clinic = this.platform.requireClinic(clinicId);
+    const opened = this.openDatabaseFile(clinic.dbPath);
+    this.clinicConnections.set(clinicId, opened);
+    return opened;
   }
 
   /** Consistent snapshot backup while the clinic is running (WAL-safe). */
   async backupToFile(destPath: string): Promise<void> {
-    await this.db.backup(destPath);
+    await this.connection.backup(destPath);
   }
 
   /**
@@ -49,6 +79,34 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
    * up the reopened connection automatically.
    */
   async withConnectionClosed<T>(fn: () => Promise<T> | T): Promise<T> {
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      this.closeClinicConnection(clinicId);
+      let result: T;
+      try {
+        result = await fn();
+      } catch (err) {
+        try {
+          this.ensureClinicConnection(clinicId);
+        } catch (reopenErr) {
+          this.logger.error(
+            'Failed to reopen tenant database connection after a failed operation',
+            reopenErr as Error,
+          );
+        }
+        throw err;
+      }
+      try {
+        this.ensureClinicConnection(clinicId);
+      } catch (reopenErr) {
+        this.logger.error(
+          'Tenant database operation succeeded, but reopening the connection afterwards failed. A restart may be required.',
+          reopenErr as Error,
+        );
+      }
+      return result;
+    }
+
     this.closeConnection();
 
     let result: T;
@@ -85,30 +143,41 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   private openConnection() {
-    const dbFile = this.resolveDbPath();
+    this.db = this.openDatabaseFile(this.resolveDbPath());
+  }
+
+  private openDatabaseFile(dbFile: string): Database.Database {
     fs.mkdirSync(path.dirname(dbFile), { recursive: true });
-
-    this.db = new Database(dbFile);
-    this.db.pragma('journal_mode = WAL');
-    this.db.pragma('foreign_keys = ON');
-    this.db.pragma('busy_timeout = 5000');
-
-    this.runMigrations();
-    this.ensureReferenceData();
-    seedComprehensiveTreatmentCatalog(this.db);
+    const db = new Database(dbFile);
+    db.pragma('journal_mode = WAL');
+    db.pragma('foreign_keys = ON');
+    db.pragma('busy_timeout = 5000');
+    this.runMigrationsOn(db);
+    this.ensureReferenceDataOn(db);
+    seedComprehensiveTreatmentCatalog(db);
     this.logger.log(`SQLite database ready at ${dbFile}`);
+    return db;
+  }
+
+  private closeClinicConnection(clinicId: string) {
+    const db = this.clinicConnections.get(clinicId);
+    if (!db) return;
+    this.closeDb(db);
+    this.clinicConnections.delete(clinicId);
   }
 
   private closeConnection() {
     if (!this.db) return;
+    this.closeDb(this.db);
+  }
+
+  private closeDb(db: Database.Database) {
     try {
-      // Merge the WAL back into the main file and truncate it so no stale
-      // WAL/SHM data is left behind that could shadow a restored database.
-      this.db.pragma('wal_checkpoint(TRUNCATE)');
+      db.pragma('wal_checkpoint(TRUNCATE)');
     } catch (err) {
       this.logger.warn(`WAL checkpoint before close failed: ${(err as Error).message}`);
     }
-    this.db.close();
+    db.close();
   }
 
   private resolveDbPath(): string {
@@ -121,17 +190,20 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   }
 
   private migrationsDir(): string {
+    const candidates: string[] = [];
     const explicit = this.config.get<string>('MIGRATIONS_DIR');
     if (explicit) {
-      return path.isAbsolute(explicit) ? explicit : path.join(process.cwd(), explicit);
+      candidates.push(path.isAbsolute(explicit) ? explicit : path.join(process.cwd(), explicit));
     }
-    const packaged = path.join(process.cwd(), 'database', 'migrations');
-    if (fs.existsSync(packaged)) return packaged;
-    return path.join(process.cwd(), '..', 'database', 'migrations');
+    candidates.push(path.join(process.cwd(), 'database', 'migrations'));
+    candidates.push(path.join(process.cwd(), '..', 'database', 'migrations'));
+    candidates.push(path.join(__dirname, '..', '..', 'database', 'migrations'));
+    const found = candidates.find((dir) => fs.existsSync(dir));
+    return found ?? candidates[0];
   }
 
-  private runMigrations() {
-    this.db.exec(
+  private runMigrationsOn(db: Database.Database) {
+    db.exec(
       `CREATE TABLE IF NOT EXISTS _migrations (
         name TEXT PRIMARY KEY,
         applied_at TEXT NOT NULL DEFAULT (datetime('now'))
@@ -145,9 +217,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
 
     const applied = new Set(
-      (this.db.prepare('SELECT name FROM _migrations').all() as { name: string }[]).map(
-        (r) => r.name,
-      ),
+      (db.prepare('SELECT name FROM _migrations').all() as { name: string }[]).map((r) => r.name),
     );
 
     const files = fs
@@ -159,9 +229,9 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
       if (applied.has(file)) continue;
       const sql = fs.readFileSync(path.join(migrationsDir, file), 'utf-8');
       this.logger.log(`Applying migration ${file}`);
-      const apply = this.db.transaction(() => {
-        this.db.exec(sql);
-        this.db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
+      const apply = db.transaction(() => {
+        db.exec(sql);
+        db.prepare('INSERT INTO _migrations (name) VALUES (?)').run(file);
       });
       try {
         apply();
@@ -172,17 +242,15 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
-  private ensureReferenceData() {
-    const roleCount = (
-      this.db.prepare('SELECT COUNT(*) AS c FROM roles').get() as { c: number }
-    ).c;
+  private ensureReferenceDataOn(db: Database.Database) {
+    const roleCount = (db.prepare('SELECT COUNT(*) AS c FROM roles').get() as { c: number }).c;
     if (roleCount === 0) {
       this.logger.log('Seeding reference data (roles, permissions, treatment catalog)...');
-      seedReferenceData(this.db);
+      seedReferenceData(db);
       return;
     }
     // Existing clinic (Update or reinstall): still grant any new default
     // permissions (e.g. ai.assistant.use) that were added after first setup.
-    ensureRolesAndPermissions(this.db);
+    ensureRolesAndPermissions(db);
   }
 }

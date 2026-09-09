@@ -10,6 +10,7 @@ export interface InstallationStatus {
   product: string;
   deploymentMode: 'offline' | 'online';
   onlineSubscriptionStatus?: 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | null;
+  canCreateClinic?: boolean;
 }
 
 export interface SetupCompleteResponse extends InstallationStatus {

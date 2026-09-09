@@ -13,6 +13,8 @@ import { isValidPhone, maskPhone, normalizePhone } from '../common/phone.util';
 import { JwtSecretService } from './jwt-secret.service';
 import { SmsService } from './sms.service';
 import { PasswordResetJwtPayload } from './auth.types';
+import { PlatformService } from '../platform/platform.service';
+import { runInTenant } from '../platform/tenant-context';
 
 const OTP_LENGTH = 6;
 const OTP_TTL_MINUTES = 10;
@@ -30,7 +32,15 @@ export class PasswordResetService {
     private readonly jwtService: JwtService,
     private readonly jwtSecret: JwtSecretService,
     private readonly deployment: DeploymentService,
+    private readonly platform: PlatformService,
   ) {}
+
+  private inUserClinic<T>(username: string, fn: () => T): T {
+    if (!this.platform.isEnabled()) return fn();
+    const directory = this.platform.findUserByUsername(username);
+    if (!directory) return fn();
+    return runInTenant(directory.clinicId, fn);
+  }
 
   private ensureOnlineRecoveryEnabled(): void {
     if (!this.deployment.isOnline()) {
@@ -49,17 +59,17 @@ export class PasswordResetService {
     const genericMessage =
       'If the account details are correct, a verification code will be sent to the registered phone number.';
 
-    const user = this.usersRepo.findByUsername(username.trim());
-    if (!user || !user.isActive || !user.phoneNormalized) {
-      return { message: genericMessage };
-    }
-
-    if (user.phoneNormalized !== phoneNormalized) {
-      return { message: genericMessage };
-    }
-
-    const since = new Date(Date.now() - OTP_RATE_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
-    if (this.resetRepo.countRecentRequestsForPhone(phoneNormalized, since) >= OTP_RATE_LIMIT) {
+    const prepared = this.inUserClinic(username.trim(), () => {
+      const user = this.usersRepo.findByUsername(username.trim());
+      if (!user || !user.isActive || !user.phoneNormalized) return null;
+      if (user.phoneNormalized !== phoneNormalized) return null;
+      const since = new Date(Date.now() - OTP_RATE_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
+      if (this.resetRepo.countRecentRequestsForPhone(phoneNormalized, since) >= OTP_RATE_LIMIT) {
+        return null;
+      }
+      return user;
+    });
+    if (!prepared) {
       return { message: genericMessage };
     }
 
@@ -67,14 +77,16 @@ export class PasswordResetService {
     const codeHash = await bcrypt.hash(code, 10);
     const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000).toISOString();
 
-    this.resetRepo.create({
-      userId: user.id,
-      phoneNormalized,
-      codeHash,
-      expiresAt,
+    this.inUserClinic(username.trim(), () => {
+      this.resetRepo.create({
+        userId: prepared.id,
+        phoneNormalized,
+        codeHash,
+        expiresAt,
+      });
     });
 
-    await this.smsService.sendPasswordResetOtp(user.phone ?? phone, code);
+    await this.smsService.sendPasswordResetOtp(prepared.phone ?? phone, code);
 
     return { message: genericMessage };
   }
@@ -87,12 +99,18 @@ export class PasswordResetService {
     }
 
     const phoneNormalized = normalizePhone(phone);
-    const user = this.usersRepo.findByUsername(username.trim());
-    if (!user || !user.isActive || user.phoneNormalized !== phoneNormalized) {
+    const directory = this.platform.isEnabled() ? this.platform.findUserByUsername(username.trim()) : undefined;
+    const verified = this.inUserClinic(username.trim(), () => {
+      const user = this.usersRepo.findByUsername(username.trim());
+      if (!user || !user.isActive || user.phoneNormalized !== phoneNormalized) {
+        return { user: null as null, otp: null as null };
+      }
+      return { user, otp: this.resetRepo.findActiveByUserId(user.id) ?? null };
+    });
+    if (!verified.user) {
       throw new UnauthorizedException('Invalid verification code.');
     }
-
-    const otp = this.resetRepo.findActiveByUserId(user.id);
+    const otp = verified.otp;
     if (!otp) {
       throw new UnauthorizedException('Invalid or expired verification code.');
     }
@@ -103,16 +121,17 @@ export class PasswordResetService {
 
     const valid = await bcrypt.compare(code.trim(), otp.codeHash);
     if (!valid) {
-      this.resetRepo.incrementAttempts(otp.id);
+      this.inUserClinic(username.trim(), () => this.resetRepo.incrementAttempts(otp.id));
       throw new UnauthorizedException('Invalid verification code.');
     }
 
-    this.resetRepo.markUsed(otp.id);
+    this.inUserClinic(username.trim(), () => this.resetRepo.markUsed(otp.id));
 
     const payload: PasswordResetJwtPayload = {
-      sub: user.id,
-      username: user.username,
+      sub: verified.user.id,
+      username: verified.user.username,
       purpose: 'password_reset',
+      clinicId: directory?.clinicId,
     };
 
     const resetToken = this.jwtService.sign(payload, {
@@ -143,14 +162,21 @@ export class PasswordResetService {
       throw new UnauthorizedException('Invalid password reset token.');
     }
 
-    const user = this.usersRepo.findById(payload.sub);
-    if (!user || !user.isActive || user.username !== payload.username) {
-      throw new UnauthorizedException('Invalid password reset token.');
-    }
-
+    const apply = () => {
+      const user = this.usersRepo.findById(payload.sub);
+      if (!user || !user.isActive || user.username !== payload.username) {
+        throw new UnauthorizedException('Invalid password reset token.');
+      }
+      return user;
+    };
+    const user = payload.clinicId ? runInTenant(payload.clinicId, apply) : apply();
     const passwordHash = await bcrypt.hash(newPassword, 10);
-    this.usersRepo.update(user.id, { passwordHash });
-    this.resetRepo.invalidateActiveForUser(user.id);
+    const persist = () => {
+      this.usersRepo.update(user.id, { passwordHash });
+      this.resetRepo.invalidateActiveForUser(user.id);
+    };
+    if (payload.clinicId) runInTenant(payload.clinicId, persist);
+    else persist();
 
     return { message: 'Password updated successfully. You can sign in with your new password.' };
   }
