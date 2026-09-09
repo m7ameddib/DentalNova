@@ -241,9 +241,16 @@ function Sync-Directory {
   )
   New-Item -ItemType Directory -Force -Path $Destination | Out-Null
   & robocopy $Source $Destination /MIR /NFL /NDL /NJH /NJS /nc /ns /np | Out-Null
-  if ($LASTEXITCODE -ge 8) {
-    throw "Failed to sync $Source -> $Destination (robocopy exit $LASTEXITCODE)"
+  $robocopyExitCode = $LASTEXITCODE
+  if ($robocopyExitCode -ge 8) {
+    throw "Failed to sync $Source -> $Destination (robocopy exit $robocopyExitCode)"
   }
+  # robocopy uses a bitmask where 0-7 all mean success (files copied/skipped/extra —
+  # see https://learn.microsoft.com/windows-server/administration/windows-commands/robocopy).
+  # GitHub Actions' pwsh step wrapper fails the step if $LASTEXITCODE is non-zero when the
+  # script exits, even without a thrown error, so we must not let robocopy's benign
+  # non-zero code leak out as this script's final exit status.
+  $global:LASTEXITCODE = 0
 }
 
 $nodePortable = Join-Path $env:LOCALAPPDATA 'nodejs-portable\node-v22.23.2-win-x64'
@@ -410,3 +417,10 @@ if (Test-Path $setupExe) {
   $exeSize = (Get-Item $setupExe).Length
   Write-Host "Installer: $setupExe ($([math]::Round($exeSize / 1MB, 1)) MB)"
 }
+
+# Explicit success exit code — see the Sync-Directory comment above for why this
+# matters: GitHub Actions' pwsh step wrapper fails the step based on $LASTEXITCODE
+# even when no exception was thrown. Reaching this line means every check above
+# passed, so the process must report success regardless of any earlier native
+# command's leftover exit code.
+exit 0
