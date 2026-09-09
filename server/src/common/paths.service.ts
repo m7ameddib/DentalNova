@@ -21,10 +21,13 @@ export class PathsService {
   }
 
   dbFile(): string {
+    const dataDir = this.config.get<string>('DNT_DATA_DIR');
     const explicit = this.config.get<string>('DATABASE_FILE');
     if (explicit && path.isAbsolute(explicit)) return explicit;
+    // Match DatabaseService: offline launcher sets DNT_DATA_DIR; bundled .env still has ./data/clinic.db.
+    if (dataDir) return path.join(path.resolve(dataDir), 'data', 'clinic.db');
     if (explicit) return path.join(process.cwd(), explicit);
-    return path.join(this.dataRoot(), 'data', 'clinic.db');
+    return path.join(process.cwd(), 'data', 'clinic.db');
   }
 
   uploadsDir(): string {

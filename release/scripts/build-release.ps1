@@ -138,7 +138,17 @@ $npmCmd = if (Test-Path (Join-Path $nodePortable 'npm.cmd')) {
 
 Write-Host "Building DNT Dental v$Version..."
 Set-Location $Root
-npm run build
+# CI runs npm run build before npm prune; devDependencies (vite, nest) are removed by then.
+if ($env:GITHUB_ACTIONS -eq 'true') {
+  $mainJs = Join-Path $Root 'server\dist\main.js'
+  $clientIndex = Join-Path $Root 'client\dist\index.html'
+  if (-not (Test-Path $mainJs) -or -not (Test-Path $clientIndex)) {
+    throw 'Expected build outputs missing on CI. Run npm run build before build-release.ps1.'
+  }
+  Write-Host 'Using existing build outputs from CI (skip npm run build after npm prune).'
+} else {
+  npm run build
+}
 
 if (Test-Path $OutDir) { Remove-DirectoryForce $OutDir }
 New-Item -ItemType Directory -Force -Path $MainDir, $ClientDir | Out-Null

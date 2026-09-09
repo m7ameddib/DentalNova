@@ -1,14 +1,14 @@
 {
   "name": "dnt-dental",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "private": true,
-  "description": "DNT Dental Clinic Management System â€” unified online & offline codebase",
+  "description": "DNT Dental Clinic Management System أ¢â‚¬â€‌ unified online & offline codebase",
   "workspaces": [
     "server",
     "client"
   ],
   "dependencies": {
-    "@dnt/dental-server": "1.1.6"
+    "@dnt/dental-server": "1.1.7"
   },
   "scripts": {
     "dev:server": "npm run start:dev --workspace=server",
