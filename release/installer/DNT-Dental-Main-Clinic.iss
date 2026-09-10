@@ -5,7 +5,7 @@
   #define MyAppVersion "1.1.3"
 #endif
 
-#define MyAppName "DNT Dental"
+#define MyAppName "DentalNova"
 #define MyAppPublisher "DibNova Technologies"
 #define MyAppExeName "DNT-Dental.vbs"
 #define ReleaseDir "..\DNT-Dental-v" + MyAppVersion
@@ -38,7 +38,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Source: "{#ReleaseDir}\Main-Clinic\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\dnt-dental.ico"; Comment: "DNT Dental — Main Clinic"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\dnt-dental.ico"; Comment: "DentalNova — Main Clinic"
 Name: "{group}\{#MyAppName}"; Filename: "wscript.exe"; Parameters: """{app}\{#MyAppExeName}"""; WorkingDir: "{app}"; IconFilename: "{app}\dnt-dental.ico"
 
 [Run]
@@ -72,7 +72,7 @@ var
   TopPos: Integer;
 begin
   InstallModePage := CreateCustomPage(wpWelcome,
-    'Installation Type', 'Choose how to install DNT Dental on this computer.');
+    'Installation Type', 'Choose how to install DentalNova on this computer.');
 
   TopPos := 0;
 
@@ -109,7 +109,7 @@ begin
       if MsgBox(
         'An existing clinic database was found at:' + #13#10 +
         ExistingClinicDbPath() + #13#10#13#10 +
-        'New Installation will NOT delete your database, but Update Existing Installation is recommended when upgrading DNT Dental.' + #13#10#13#10 +
+        'New Installation will NOT delete your database, but Update Existing Installation is recommended when upgrading DentalNova.' + #13#10#13#10 +
         'Continue with New Installation anyway?',
         mbConfirmation, MB_YESNO) = IDNO then
         Result := False;
@@ -153,7 +153,7 @@ begin
   if CurUninstallStep = usPostUninstall then
   begin
     MsgBox(
-      'DNT Dental has been removed from this computer.' + #13#10#13#10 +
+      'DentalNova has been removed from this computer.' + #13#10#13#10 +
       'Your clinic data was NOT deleted and remains at:' + #13#10 +
       ExpandConstant('{commonappdata}\DibNova\DNTDental'),
       mbInformation, MB_OK);

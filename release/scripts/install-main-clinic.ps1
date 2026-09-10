@@ -14,7 +14,7 @@ if (-not (Test-Path (Join-Path $SourceDir 'server\dist\main.js'))) {
 if (-not $InstallDir) { $InstallDir = $SourceDir }
 
 $DataDir = Join-Path $env:ProgramData 'DibNova\DNTDental'
-Write-Host "DNT Dental Main Clinic"
+Write-Host "DentalNova Main Clinic"
 Write-Host "Program folder: $InstallDir"
 Write-Host "Clinic data:    $DataDir"
 
@@ -58,16 +58,16 @@ function New-DntShortcut {
 }
 
 $desktop = [Environment]::GetFolderPath('Desktop')
-$desktopShortcut = Join-Path $desktop 'DNT Dental.lnk'
-New-DntShortcut -Path $desktopShortcut -Description 'DNT Dental — Main Clinic'
+$desktopShortcut = Join-Path $desktop 'DentalNova.lnk'
+New-DntShortcut -Path $desktopShortcut -Description 'DentalNova — Main Clinic'
 Write-Host "Desktop shortcut: $desktopShortcut"
 
-$startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'DNT Dental'
+$startMenu = Join-Path ([Environment]::GetFolderPath('Programs')) 'DentalNova'
 if (-not (Test-Path $startMenu)) {
   New-Item -ItemType Directory -Force -Path $startMenu | Out-Null
 }
-$startMenuShortcut = Join-Path $startMenu 'DNT Dental.lnk'
-New-DntShortcut -Path $startMenuShortcut -Description 'DNT Dental — Main Clinic'
+$startMenuShortcut = Join-Path $startMenu 'DentalNova.lnk'
+New-DntShortcut -Path $startMenuShortcut -Description 'DentalNova — Main Clinic'
 Write-Host "Start Menu shortcut: $startMenuShortcut"
 
 if (-not $SkipFirewall) {
@@ -83,4 +83,4 @@ if (-not $SkipFirewall) {
 }
 
 Write-Host ''
-Write-Host 'Ready. Launch DNT Dental from the desktop shortcut.'
+Write-Host 'Ready. Launch DentalNova from the desktop shortcut.'

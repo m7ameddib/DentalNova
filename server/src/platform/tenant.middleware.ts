@@ -1,17 +1,32 @@
 import { Injectable, NestMiddleware } from '@nestjs/common';
 import { NextFunction, Request, Response } from 'express';
-import { tenantAls } from './tenant-context';
+import { bindTenant, clearTenant, getTenantClinicId } from './tenant-context';
 import { JwtPayload } from '../auth/auth.types';
 
+/**
+ * Seeds tenant context early so subscription/auth guards can resolve the clinic.
+ * Uses enterWith (not als.run(next)) so the store survives Nest's async
+ * guard/interceptor/controller hop. JwtStrategy overwrites this with the
+ * verified clinicId after the token is authenticated.
+ */
 @Injectable()
 export class TenantMiddleware implements NestMiddleware {
-  use(req: Request, _res: Response, next: NextFunction): void {
+  use(req: Request, res: Response, next: NextFunction): void {
     const clinicId = this.readClinicId(req);
     if (!clinicId) {
       next();
       return;
     }
-    tenantAls.run({ clinicId }, () => next());
+
+    bindTenant(clinicId);
+    const restore = () => {
+      if (getTenantClinicId() === clinicId) {
+        clearTenant();
+      }
+    };
+    res.once('finish', restore);
+    res.once('close', restore);
+    next();
   }
 
   private readClinicId(req: Request): string | undefined {

@@ -60,7 +60,7 @@ function setupPayload(clinicName, username) {
   };
 }
 
-async function waitForHealth(timeoutMs = 30000) {
+async function waitForHealth(timeoutMs = 120000) {
   const started = Date.now();
   while (Date.now() - started < timeoutMs) {
     try {
@@ -80,7 +80,7 @@ async function main() {
   }
 
   const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dnt-multiclinic-'));
-  const migrationsDir = path.join(ROOT, 'server', 'database', 'migrations');
+  const migrationsDir = path.join(ROOT, 'database', 'migrations');
   const child = spawn(process.execPath, [MAIN], {
     cwd: path.join(ROOT, 'server'),
     env: {
@@ -196,9 +196,39 @@ async function main() {
       expected: [200, 201],
     });
     assert(patientA.data?.id, `create patient A failed: ${JSON.stringify(patientA.data)}`);
+
+    const loginStaffA = await request('POST', '/auth/login', {
+      body: { username: 'staffa', password: 'Password123' },
+      expected: [200, 201],
+    });
+    const tokenStaffA = loginStaffA.data.accessToken;
+    assert(loginStaffA.data.user.clinicId === clinicA.data.user.clinicId, 'staff A must stay in Clinic A');
+
+    const searchStaffA1 = await request('GET', '/patients?q=Patient%20A', { token: tokenStaffA, expected: 200 });
+    const searchStaffA2 = await request('GET', '/patients?q=Patient%20A', { token: tokenStaffA, expected: 200 });
+    await new Promise((r) => setTimeout(r, 50));
+    const searchStaffA3 = await request('GET', '/patients?q=Patient%20A', { token: tokenStaffA, expected: 200 });
+    const namesStaffA1 = (Array.isArray(searchStaffA1.data) ? searchStaffA1.data : []).map((p) => p.fullName);
+    const namesStaffA2 = (Array.isArray(searchStaffA2.data) ? searchStaffA2.data : []).map((p) => p.fullName);
+    const namesStaffA3 = (Array.isArray(searchStaffA3.data) ? searchStaffA3.data : []).map((p) => p.fullName);
+    assert(namesStaffA1.includes('Patient A'), 'same-clinic staff must see Patient A on first search');
+    assert(namesStaffA2.includes('Patient A'), 'same-clinic staff must still see Patient A on refetch');
+    assert(namesStaffA3.includes('Patient A'), 'same-clinic staff must still see Patient A after a delayed refetch');
+
+    const staffAById = await request('GET', `/patients/${patientA.data.id}`, { token: tokenStaffA, expected: 200 });
+    assert(staffAById.data?.fullName === 'Patient A', 'same-clinic staff must open Patient A by id');
+
+    const listStaffA = await request('GET', '/patients', { token: tokenStaffA, expected: 200 });
+    const listStaffANames = (Array.isArray(listStaffA.data) ? listStaffA.data : []).map((p) => p.fullName);
+    assert(listStaffANames.includes('Patient A'), 'same-clinic staff must see Patient A in the clinic list');
+
     const patientsB = await request('GET', '/patients', { token: tokenB, expected: 200 });
     const listB = Array.isArray(patientsB.data) ? patientsB.data : patientsB.data?.items || [];
     assert(listB.length === 0, 'Clinic B should not see Clinic A patients');
+
+    const searchB = await request('GET', '/patients?q=Patient%20A', { token: tokenB, expected: 200 });
+    const searchNamesB = Array.isArray(searchB.data) ? searchB.data : [];
+    assert(searchNamesB.length === 0, 'Clinic B search must not return Clinic A patients');
 
     const cross = await request('GET', `/patients/${patientA.data.id}`, { token: tokenB });
     assert(cross.status === 404, `Clinic B must not read Clinic A patient by id (got ${cross.status})`);

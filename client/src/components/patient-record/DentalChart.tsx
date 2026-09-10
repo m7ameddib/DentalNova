@@ -59,7 +59,7 @@ function SimpleToothButton({
       {lower && <span className="tooth__number">{number}</span>}
       <span className="tooth__codes">
         {treatments.map((tr, i) => (
-          <span key={i} className="tooth__code" style={{ backgroundColor: tr.colorHex }}>
+          <span key={i} className="tooth__code" style={{ backgroundColor: tr.colorHex }} title={tr.abbreviation}>
             {tr.abbreviation}
           </span>
         ))}

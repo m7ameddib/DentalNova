@@ -11,7 +11,7 @@ import { JwtSecretService } from './jwt-secret.service';
 import { PERMISSIONS } from '../common/rbac.constants';
 import { DeploymentService } from '../common/deployment.service';
 import { PlatformService } from '../platform/platform.service';
-import { runInTenant } from '../platform/tenant-context';
+import { bindTenant, runInTenant } from '../platform/tenant-context';
 
 @Injectable()
 export class AuthService {
@@ -33,6 +33,7 @@ export class AuthService {
         throw new UnauthorizedException('Invalid username or password');
       }
       return runInTenant(directory.clinicId, async () => {
+        bindTenant(directory.clinicId);
         const user = await this.validateLocalCredentials(username, password);
         return { ...user, clinicId: directory.clinicId };
       });

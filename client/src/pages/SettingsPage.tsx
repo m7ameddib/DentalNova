@@ -172,6 +172,22 @@ export function SettingsPage() {
     <div className="settings-page">
       <h1>{t('settings.title')}</h1>
       <div className="settings-layout">
+        <div className="settings-nav-mobile">
+          <label className="settings-nav-mobile__label">
+            <span className="settings-nav-mobile__caption">{t('settings.mobileNavLabel')}</span>
+            <select
+              className="settings-nav-mobile__select"
+              value={active.id}
+              onChange={(e) => setActiveId(e.target.value)}
+            >
+              {items.map((item) => (
+                <option key={item.id} value={item.id}>
+                  {item.label}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <nav className="settings-nav">
           {items.map((item) => (
             <button

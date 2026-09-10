@@ -26,6 +26,8 @@ interface GitHubRelease {
   name: string;
   body: string;
   published_at: string;
+  draft?: boolean;
+  prerelease?: boolean;
   assets: GitHubReleaseAsset[];
 }
 
@@ -41,6 +43,7 @@ export interface UpdateStatusResponse {
   downloadedPath: string | null;
   downloadedSizeBytes: number | null;
   githubRepo: string;
+  checkError: string | null;
 }
 
 @Injectable()
@@ -60,34 +63,53 @@ export class UpdatesService {
 
   async getStatus(forceRefresh: boolean): Promise<UpdateStatusResponse> {
     const repo = this.githubRepo();
-    const release = await this.fetchLatestRelease(forceRefresh);
-    const asset = release ? this.findInstallerAsset(release) : null;
-    const latestVersion = release ? this.normalizeVersion(release.tag_name) : null;
-    const updateAvailable = Boolean(latestVersion && this.compareVersions(latestVersion, APP_VERSION) > 0);
-    const downloadedPath = asset ? this.expectedDownloadPath(asset.name) : null;
-    const downloaded = downloadedPath ? fs.existsSync(downloadedPath) : false;
+    try {
+      const release = await this.fetchLatestRelease(forceRefresh);
+      const asset = this.findInstallerAsset(release);
+      const latestVersion = this.normalizeVersion(release.tag_name);
+      const updateAvailable = this.compareVersions(latestVersion, APP_VERSION) > 0;
+      const downloadedPath = asset ? this.expectedDownloadPath(asset.name) : null;
+      const downloaded = downloadedPath ? fs.existsSync(downloadedPath) : false;
 
-    return {
-      currentVersion: APP_VERSION,
-      latestVersion,
-      updateAvailable,
-      releaseNotes: release?.body ?? null,
-      releasePublishedAt: release?.published_at ?? null,
-      downloadUrl: asset?.browser_download_url ?? null,
-      installerFileName: asset?.name ?? null,
-      downloaded,
-      downloadedPath: downloaded ? downloadedPath : null,
-      downloadedSizeBytes: downloaded && downloadedPath ? fs.statSync(downloadedPath).size : null,
-      githubRepo: repo,
-    };
+      return {
+        currentVersion: APP_VERSION,
+        latestVersion,
+        updateAvailable,
+        releaseNotes: release.body ?? null,
+        releasePublishedAt: release.published_at ?? null,
+        downloadUrl: asset?.browser_download_url ?? null,
+        installerFileName: asset?.name ?? null,
+        downloaded,
+        downloadedPath: downloaded ? downloadedPath : null,
+        downloadedSizeBytes: downloaded && downloadedPath ? fs.statSync(downloadedPath).size : null,
+        githubRepo: repo,
+        checkError: null,
+      };
+    } catch (err) {
+      const checkError = (err as Error).message || 'GitHub Releases check failed.';
+      this.logger.warn(checkError);
+      if (forceRefresh) {
+        throw new InternalServerErrorException(checkError);
+      }
+      return {
+        currentVersion: APP_VERSION,
+        latestVersion: null,
+        updateAvailable: false,
+        releaseNotes: null,
+        releasePublishedAt: null,
+        downloadUrl: null,
+        installerFileName: null,
+        downloaded: false,
+        downloadedPath: null,
+        downloadedSizeBytes: null,
+        githubRepo: repo,
+        checkError,
+      };
+    }
   }
 
   async downloadLatestInstaller(): Promise<UpdateStatusResponse> {
     const release = await this.fetchLatestRelease(true);
-    if (!release) {
-      throw new BadRequestException('No GitHub release found.');
-    }
-
     const asset = this.findInstallerAsset(release);
     const latestVersion = this.normalizeVersion(release.tag_name);
     const updateAvailable = this.compareVersions(latestVersion, APP_VERSION) > 0;
@@ -145,6 +167,7 @@ export class UpdatesService {
     const headers: Record<string, string> = {
       Accept: accept,
       'User-Agent': 'DentalNova-Updater',
+      'X-GitHub-Api-Version': '2022-11-28',
     };
     const token = this.config.get<string>('GITHUB_TOKEN')?.trim();
     if (token) {
@@ -157,37 +180,92 @@ export class UpdatesService {
     return path.join(this.downloadsDir(), fileName);
   }
 
-  private async fetchLatestRelease(force: boolean): Promise<GitHubRelease | null> {
+  private async fetchLatestRelease(force: boolean): Promise<GitHubRelease> {
     const ttlMs = 15 * 60 * 1000;
     if (!force && this.cachedRelease && Date.now() - this.cachedAt < ttlMs) {
       return this.cachedRelease;
     }
 
     const repo = this.githubRepo();
-    const url = `https://api.github.com/repos/${repo}/releases/latest`;
+    const latestResult = await this.githubApi<GitHubRelease>(
+      `https://api.github.com/repos/${repo}/releases/latest`,
+    );
 
-    try {
-      const res = await fetch(url, {
-        headers: this.githubRequestHeaders('application/vnd.github+json'),
-      });
-
-      if (res.status === 404) {
-        this.logger.warn(`No GitHub release found for ${repo}`);
-        return null;
-      }
-
-      if (!res.ok) {
-        throw new Error(`GitHub API ${res.status}`);
-      }
-
-      const release = (await res.json()) as GitHubRelease;
-      this.cachedRelease = release;
-      this.cachedAt = Date.now();
-      return release;
-    } catch (err) {
-      this.logger.warn(`GitHub Releases check failed: ${(err as Error).message}`);
-      return null;
+    let release: GitHubRelease | null = null;
+    if (latestResult.ok && latestResult.data?.tag_name) {
+      release = latestResult.data;
     }
+
+    if (!release || !this.findInstallerAsset(release)) {
+      const listResult = await this.githubApi<GitHubRelease[]>(
+        `https://api.github.com/repos/${repo}/releases?per_page=30`,
+      );
+      if (!listResult.ok) {
+        throw new Error(listResult.message);
+      }
+      release = this.pickLatestPublishedRelease(listResult.data) ?? release;
+    }
+
+    if (!release) {
+      throw new Error(
+        latestResult.ok
+          ? `No published GitHub release found for ${repo}.`
+          : latestResult.message,
+      );
+    }
+
+    this.cachedRelease = release;
+    this.cachedAt = Date.now();
+    return release;
+  }
+
+  private async githubApi<T>(
+    url: string,
+  ): Promise<{ ok: true; data: T } | { ok: false; status: number; message: string }> {
+    const res = await fetch(url, {
+      headers: this.githubRequestHeaders('application/vnd.github+json'),
+    });
+
+    if (!res.ok) {
+      let detail = '';
+      try {
+        const body = (await res.json()) as { message?: string };
+        detail = body?.message ? `: ${body.message}` : '';
+      } catch {
+        /* ignore non-JSON error bodies */
+      }
+
+      const repo = this.githubRepo();
+      const message =
+        res.status === 404
+          ? `GitHub release not found for ${repo}. If the repository is private, set GITHUB_TOKEN so the updater can read Releases.`
+          : `GitHub API ${res.status}${detail}`;
+      return { ok: false, status: res.status, message };
+    }
+
+    return { ok: true, data: (await res.json()) as T };
+  }
+
+  private pickLatestPublishedRelease(releases: GitHubRelease[]): GitHubRelease | null {
+    if (!Array.isArray(releases) || releases.length === 0) return null;
+
+    const published = releases.filter((release) => release && !release.draft);
+    const withInstaller = published.filter((release) => this.findInstallerAsset(release));
+    const stable = (withInstaller.length ? withInstaller : published).filter(
+      (release) => !release.prerelease,
+    );
+    const pool = stable.length ? stable : withInstaller.length ? withInstaller : published;
+
+    return (
+      pool.slice().sort((a, b) => {
+        const byVersion = this.compareVersions(
+          this.normalizeVersion(b.tag_name),
+          this.normalizeVersion(a.tag_name),
+        );
+        if (byVersion !== 0) return byVersion;
+        return String(b.published_at || '').localeCompare(String(a.published_at || ''));
+      })[0] ?? null
+    );
   }
 
   private findInstallerAsset(release: GitHubRelease): GitHubReleaseAsset | null {

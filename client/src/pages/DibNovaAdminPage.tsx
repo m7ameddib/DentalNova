@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Building2,
+  Copy,
   Lock,
   LogIn,
   LogOut,
@@ -40,6 +41,7 @@ export function DibNovaAdminPage() {
   const [offlineClinicName, setOfflineClinicName] = useState('');
   const [offlineInstallationId, setOfflineInstallationId] = useState('');
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [codeCopied, setCodeCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
@@ -99,6 +101,7 @@ export function DibNovaAdminPage() {
       }),
     onSuccess: (result) => {
       setGeneratedCode(result.activationCode);
+      setCodeCopied(false);
       setSuccess(t('dibnovaAdmin.success.createOfflineSlot'));
       setError(null);
       setOfflineClinicId('');
@@ -109,6 +112,25 @@ export function DibNovaAdminPage() {
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
+
+  async function handleCopyGeneratedCode() {
+    if (!generatedCode) return;
+    try {
+      await navigator.clipboard.writeText(generatedCode);
+      setCodeCopied(true);
+    } catch {
+      const textarea = document.createElement('textarea');
+      textarea.value = generatedCode;
+      textarea.setAttribute('readonly', '');
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      setCodeCopied(true);
+    }
+  }
 
   async function handleLoginSubmit(e: FormEvent) {
     e.preventDefault();
@@ -427,9 +449,20 @@ export function DibNovaAdminPage() {
                   </button>
 
                   {generatedCode && (
-                    <p className="form-success-banner admin-card__success mono-text">
-                      {t('dibnovaAdmin.generatedActivationCode')}: <strong>{generatedCode}</strong>
-                    </p>
+                    <div className="activation-code-box" role="status">
+                      <div className="activation-code-box__label">{t('dibnovaAdmin.generatedActivationCode')}</div>
+                      <div className="activation-code-box__row">
+                        <code className="activation-code-box__value">{generatedCode}</code>
+                        <button
+                          type="button"
+                          className="btn btn--secondary btn--small activation-code-box__copy"
+                          onClick={() => void handleCopyGeneratedCode()}
+                        >
+                          <Copy size={14} />
+                          {codeCopied ? t('common.copied') : t('common.copy')}
+                        </button>
+                      </div>
+                    </div>
                   )}
 
                   {offlineSlots && offlineSlots.length > 0 && (

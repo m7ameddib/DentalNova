@@ -9,12 +9,13 @@ $Port = if ($env:PORT) { $env:PORT } else { '4000' }
 $NodeExe = Join-Path $AppRoot 'runtime\node\node.exe'
 if (-not (Test-Path $NodeExe)) { $NodeExe = 'node' }
 
-foreach ($sub in @('data', 'attachments', 'backups', 'logs', 'config', 'license')) {
+foreach ($sub in @('data', 'attachments', 'backups', 'logs', 'config', 'license', 'downloads')) {
   $path = Join-Path $DataDir $sub
   if (-not (Test-Path $path)) { New-Item -ItemType Directory -Force -Path $path | Out-Null }
 }
 
 $env:DNT_DATA_DIR = $DataDir
+$env:DEPLOYMENT_MODE = 'offline'
 $env:HOST = '0.0.0.0'
 $env:SERVE_CLIENT = '1'
 $env:NODE_ENV = 'production'
@@ -64,8 +65,8 @@ if (-not (Test-DntHealth)) {
   if (Test-DntPortListening) {
     if (-not (Wait-DntHealth)) {
       [System.Windows.Forms.MessageBox]::Show(
-        "DNT Dental server is busy or not responding.`nPlease wait a moment and try again.`nLogs: $(Join-Path $DataDir 'logs')",
-        'DNT Dental',
+        "DentalNova server is busy or not responding.`nPlease wait a moment and try again.`nLogs: $(Join-Path $DataDir 'logs')",
+        'DentalNova',
         'OK',
         'Error'
       ) | Out-Null
@@ -76,8 +77,8 @@ if (-not (Test-DntHealth)) {
   $mainJs = Join-Path $serverDir 'dist\main.js'
   if (-not (Test-Path $mainJs)) {
     [System.Windows.Forms.MessageBox]::Show(
-      "DNT Dental server files are missing.`nExpected: $mainJs",
-      'DNT Dental',
+      "DentalNova server files are missing.`nExpected: $mainJs",
+      'DentalNova',
       'OK',
       'Error'
     ) | Out-Null
@@ -101,7 +102,7 @@ if (-not (Test-DntHealth)) {
       $psi.EnvironmentVariables[$entry.Key] = $entry.Value
     }
   }
-  foreach ($key in @('DNT_DATA_DIR', 'HOST', 'SERVE_CLIENT', 'NODE_ENV', 'PORT', 'MIGRATIONS_DIR')) {
+  foreach ($key in @('DNT_DATA_DIR', 'DEPLOYMENT_MODE', 'HOST', 'SERVE_CLIENT', 'NODE_ENV', 'PORT', 'MIGRATIONS_DIR')) {
     $psi.EnvironmentVariables[$key] = [Environment]::GetEnvironmentVariable($key)
   }
 
@@ -118,8 +119,8 @@ if (-not (Test-DntHealth)) {
 
     if (-not (Wait-DntHealth)) {
       [System.Windows.Forms.MessageBox]::Show(
-        "DNT Dental server did not start.`nCheck logs in:`n$logDir",
-        'DNT Dental',
+        "DentalNova server did not start.`nCheck logs in:`n$logDir",
+        'DentalNova',
         'OK',
         'Error'
       ) | Out-Null

@@ -178,9 +178,10 @@
   font-weight: 700;
   line-height: 1.3;
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 .do-cell__tx-check {
   margin-inline-start: 2px;
@@ -196,6 +197,30 @@
   }
   .do-cell__tx {
     font-size: 10px;
+  }
+}
+
+@media (max-width: 768px) {
+  .do-chart {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    max-width: 100%;
+  }
+  .do-arch {
+    width: max-content;
+    min-width: max-content;
+    max-width: none;
+    justify-content: flex-start;
+    flex-shrink: 0;
+  }
+  .do-quadrant {
+    flex-shrink: 0;
+  }
+  .do-cell,
+  .do-graphic {
+    flex-shrink: 0;
   }
 }
 

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { AuthenticatedUser } from '@/types/domain';
 import { clearAiAssistantSession } from '@/store/ai-assistant.store';
+import { queryClient } from '@/queryClient';
 
 const TOKEN_KEY = 'dnt-dental-token';
 const USER_KEY = 'dnt-dental-user';
@@ -64,6 +65,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       clearAiAssistantSession(prevUserId);
     }
     clearStoredSession();
+    queryClient.clear();
     const storage = remember ? localStorage : sessionStorage;
     storage.setItem(TOKEN_KEY, token);
     storage.setItem(USER_KEY, JSON.stringify(user));
@@ -73,6 +75,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const userId = get().user?.id ?? null;
     clearAiAssistantSession(userId);
     clearStoredSession();
+    queryClient.clear();
     set({ token: null, user: null, isAuthenticated: false });
   },
   hasPermission: (permission: string) => {

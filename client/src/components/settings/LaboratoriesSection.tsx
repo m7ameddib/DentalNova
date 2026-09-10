@@ -123,7 +123,8 @@ export function LaboratoriesSection() {
       <h2>{t('settings.laboratories.title')}</h2>
       <p className="muted">{t('settings.laboratories.hint')}</p>
 
-      <table className="patients-table">
+      <div className="catalog-table-wrap">
+        <table className="patients-table">
         <thead>
           <tr>
             <th>{t('settings.laboratories.name')}</th>
@@ -209,7 +210,8 @@ export function LaboratoriesSection() {
             </Fragment>
           ))}
         </tbody>
-      </table>
+        </table>
+      </div>
 
       {adding ? (
         <div className="inline-form inline-form--settings">

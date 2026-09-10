@@ -7,14 +7,14 @@ $defaultPort = '4000'
 
 $hostInput = [Microsoft.VisualBasic.Interaction]::InputBox(
   'Enter the main clinic computer name or LAN IP:',
-  'DNT Dental — Connect to Main Server',
+  'DentalNova — Connect to Main Server',
   $defaultHost
 )
 if ([string]::IsNullOrWhiteSpace($hostInput)) { exit 0 }
 
 $portInput = [Microsoft.VisualBasic.Interaction]::InputBox(
   'Enter the server port:',
-  'DNT Dental — Server Port',
+  'DentalNova — Server Port',
   $defaultPort
 )
 if ([string]::IsNullOrWhiteSpace($portInput)) { $portInput = $defaultPort }

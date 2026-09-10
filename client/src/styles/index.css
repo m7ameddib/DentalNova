@@ -1143,6 +1143,63 @@ textarea {
   word-break: break-all;
 }
 
+.activation-code-box {
+  margin: 12px 0 0;
+  padding: 12px;
+  background: #ecfdf5;
+  color: var(--color-success);
+  border: 1px solid #a7f3d0;
+  border-radius: var(--radius-sm);
+  min-width: 0;
+}
+
+.activation-code-box__label {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.activation-code-box__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.activation-code-box__value {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.45;
+  color: var(--color-text);
+  background: #fff;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  padding: 8px 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  user-select: all;
+}
+
+.activation-code-box__copy {
+  flex-shrink: 0;
+}
+
+@media (max-width: 640px) {
+  .activation-code-box__row {
+    flex-direction: column;
+  }
+
+  .activation-code-box__copy {
+    width: 100%;
+    justify-content: center;
+  }
+}
+
 .form-actions {
   display: flex;
   justify-content: flex-end;
@@ -1613,12 +1670,16 @@ textarea {
 }
 .tooth__code {
   font-size: 8.5px;
-  line-height: 1;
+  line-height: 1.2;
   color: white;
   padding: 1.5px 4px;
   border-radius: 4px;
   font-weight: 700;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: center;
+  max-width: 100%;
 }
 
 /* ---------- Odontogram v2 (treatment chart) ---------- */
@@ -3886,6 +3947,9 @@ textarea {
   gap: 16px;
   align-items: start;
 }
+.settings-nav-mobile {
+  display: none;
+}
 .settings-nav {
   display: flex;
   flex-direction: column;
@@ -4015,6 +4079,8 @@ textarea {
 }
 .catalog-table-wrap {
   overflow-x: auto;
+  max-width: 100%;
+  -webkit-overflow-scrolling: touch;
 }
 .catalog-followups {
   display: flex;

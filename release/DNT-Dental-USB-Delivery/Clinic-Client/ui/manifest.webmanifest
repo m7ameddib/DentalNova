@@ -1,17 +1,1 @@
-{
-  "name": "DentalNova",
-  "short_name": "DentalNova",
-  "description": "Dental clinic management system",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#156572",
-  "orientation": "any",
-  "icons": [
-    {
-      "src": "/favicon.ico",
-      "sizes": "64x64",
-      "type": "image/x-icon"
-    }
-  ]
-}
+{"name":"DentalNova","short_name":"DentalNova","description":"Dental clinic management system","start_url":"/","display":"standalone","background_color":"#ffffff","theme_color":"#156572","lang":"en","scope":"/","display_override":["standalone","browser"],"orientation":"any","categories":["medical","business","productivity"],"icons":[{"src":"/icons/icon-192.png","sizes":"192x192","type":"image/png","purpose":"any"},{"src":"/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"any"},{"src":"/icons/icon-512.png","sizes":"512x512","type":"image/png","purpose":"maskable"}]}

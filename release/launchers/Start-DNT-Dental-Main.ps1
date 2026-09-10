@@ -65,8 +65,8 @@ if (-not (Test-DntHealth)) {
   if (Test-DntPortListening) {
     if (-not (Wait-DntHealth)) {
       [System.Windows.Forms.MessageBox]::Show(
-        "DNT Dental server is busy or not responding.`nPlease wait a moment and try again.`nLogs: $(Join-Path $DataDir 'logs')",
-        'DNT Dental',
+        "DentalNova server is busy or not responding.`nPlease wait a moment and try again.`nLogs: $(Join-Path $DataDir 'logs')",
+        'DentalNova',
         'OK',
         'Error'
       ) | Out-Null
@@ -77,8 +77,8 @@ if (-not (Test-DntHealth)) {
   $mainJs = Join-Path $serverDir 'dist\main.js'
   if (-not (Test-Path $mainJs)) {
     [System.Windows.Forms.MessageBox]::Show(
-      "DNT Dental server files are missing.`nExpected: $mainJs",
-      'DNT Dental',
+      "DentalNova server files are missing.`nExpected: $mainJs",
+      'DentalNova',
       'OK',
       'Error'
     ) | Out-Null
@@ -119,8 +119,8 @@ if (-not (Test-DntHealth)) {
 
     if (-not (Wait-DntHealth)) {
       [System.Windows.Forms.MessageBox]::Show(
-        "DNT Dental server did not start.`nCheck logs in:`n$logDir",
-        'DNT Dental',
+        "DentalNova server did not start.`nCheck logs in:`n$logDir",
+        'DentalNova',
         'OK',
         'Error'
       ) | Out-Null

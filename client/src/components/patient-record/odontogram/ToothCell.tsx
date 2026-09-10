@@ -76,7 +76,12 @@ export function ToothCell({
             .filter(Boolean)
             .join(' ')}>
             {treatments.map((tr, i) => (
-              <span key={i} className="do-cell__tx" style={{ color: tr.colorHex }}>
+              <span
+                key={i}
+                className="do-cell__tx"
+                style={{ color: tr.colorHex }}
+                title={tr.abbreviation}
+              >
                 {tr.abbreviation}
                 {tr.completed && <span className="do-cell__tx-check">✓</span>}
               </span>

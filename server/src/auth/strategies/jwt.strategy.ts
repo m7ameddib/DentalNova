@@ -7,7 +7,7 @@ import { JwtPayload } from '../auth.types';
 import { JwtSecretService } from '../jwt-secret.service';
 import { DeploymentService } from '../../common/deployment.service';
 import { PlatformService } from '../../platform/platform.service';
-import { runInTenant } from '../../platform/tenant-context';
+import { bindTenant, runInTenant } from '../../platform/tenant-context';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -40,13 +40,15 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
         if (!clinicId || !this.platform.findClinic(clinicId)) {
           throw new UnauthorizedException();
         }
-        return runInTenant(clinicId, () => {
-          const user = this.authService.toAuthenticatedUser(payload.sub, clinicId);
-          if (user.username !== payload.username) {
+        const user = runInTenant(clinicId, () => {
+          const authenticated = this.authService.toAuthenticatedUser(payload.sub, clinicId);
+          if (authenticated.username !== payload.username) {
             throw new UnauthorizedException();
           }
-          return user;
+          return authenticated;
         });
+        bindTenant(clinicId);
+        return user;
       }
       return this.authService.toAuthenticatedUser(payload.sub);
     } catch {

@@ -40,6 +40,8 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     if (clinicId && this.platform.isEnabled()) {
       return this.ensureClinicConnection(clinicId);
     }
+    // Online without tenant context must not use another clinic's file.
+    // The default clinic.db is only for offline / pre-tenant platform work.
     return this.db;
   }
 

@@ -15,7 +15,7 @@
    - **A) New Installation** — for a new computer; creates ProgramData folders if needed
    - **B) Update Existing Installation** — replaces application files only; **never** deletes or replaces `clinic.db` or patient data
 3. Accept the default install location: `C:\Program Files\DibNova\DNTDental\`
-4. Double-click **DNT Dental** on the desktop
+4. Double-click **DentalNova** on the desktop
 5. On first run (new install only):
    - Copy **Installation ID** from the activation screen
    - Request a signed license from DibNova Technologies
@@ -31,13 +31,13 @@ GEMINI_API_KEY=your-key-here
 GEMINI_MODEL=gemini-3.6-flash
 ```
 
-Restart DNT Dental after saving. Clinic data stays local; only chat messages/images are sent to Gemini.
+Restart DentalNova after saving. Clinic data stays local; only chat messages/images are sent to Gemini.
 
 ### Option 2 — Portable folder + install script
 
 1. Copy **Main-Clinic** to e.g. `C:\Program Files\DibNova\DNTDental\`
 2. Right-click **install-main-clinic.ps1** → Run with PowerShell
-3. Launch from the **DNT Dental** desktop shortcut
+3. Launch from the **DentalNova** desktop shortcut
 
 ### Data location (never inside program folder)
 
@@ -78,4 +78,4 @@ The update process replaces program files only. Your `clinic.db` and all patient
 
 ---
 
-**DNT Dental v1.1.3** — DibNova Technologies
+**DentalNova** — DibNova Technologies

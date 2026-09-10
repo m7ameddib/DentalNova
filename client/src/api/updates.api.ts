@@ -12,6 +12,7 @@ export interface UpdateStatus {
   downloadedPath: string | null;
   downloadedSizeBytes: number | null;
   githubRepo: string;
+  checkError: string | null;
 }
 
 export const updatesApi = {

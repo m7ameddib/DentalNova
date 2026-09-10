@@ -70,15 +70,23 @@ export function UpdatesSection() {
           <dd>{data?.latestVersion ?? t('settings.updates.unknown')}</dd>
         </div>
         <div>
+          <dt>{t('settings.updates.installer')}</dt>
+          <dd>{data?.installerFileName ?? '—'}</dd>
+        </div>
+        <div>
           <dt>{t('settings.updates.source')}</dt>
           <dd>GitHub — {data?.githubRepo ?? 'm7ameddib/DentalNova'}</dd>
         </div>
       </dl>
 
-      {data?.updateAvailable ? (
+      {data?.checkError ? (
+        <p className="form-error-banner">{data.checkError}</p>
+      ) : data?.updateAvailable ? (
         <p className="updates-banner updates-banner--available">{t('settings.updates.available')}</p>
-      ) : (
+      ) : data?.latestVersion ? (
         <p className="muted">{t('settings.updates.upToDate')}</p>
+      ) : (
+        <p className="muted">{t('settings.updates.unknown')}</p>
       )}
 
       {data?.releaseNotes && (

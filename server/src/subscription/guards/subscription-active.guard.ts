@@ -29,10 +29,14 @@ export class SubscriptionActiveGuard implements CanActivate {
     if (skip) return true;
 
     if (this.deployment.isOnline() && this.platform.isEnabled()) {
-      const req = context.switchToHttp().getRequest<{ path?: string; url?: string }>();
+      const req = context.switchToHttp().getRequest<{
+        path?: string;
+        url?: string;
+        user?: { clinicId?: string };
+      }>();
       const path = req.path ?? req.url ?? '';
       if (this.isPublicPath(path)) return true;
-      const clinicId = getTenantClinicId();
+      const clinicId = getTenantClinicId() || req.user?.clinicId?.trim();
       if (!clinicId) {
         throw new ForbiddenException({
           code: 'CLINIC_CONTEXT_REQUIRED',

@@ -59,7 +59,9 @@
     "date": "Date",
     "time": "Time",
     "from": "From",
-    "to": "To"
+    "to": "To",
+    "copy": "Copy",
+    "copied": "Copied"
   },
   "auth": {
     "title": "Sign in",
@@ -900,6 +902,7 @@
   },
   "settings": {
     "title": "Settings",
+    "mobileNavLabel": "Settings section",
     "language": "Language",
     "account": "Account",
     "generalTitle": "General",
@@ -1093,7 +1096,7 @@
     "status": "Status",
     "save": "Save",
     "aboutTitle": "About",
-    "aboutText": "DentalNova Clinic Management System — Phase 1 (offline-first).",
+    "aboutText": "Dental Nova Clinic Management System",
     "archive": {
       "title": "Archive",
       "hint": "Patients moved to archive when deleted from their file. Restore or permanently delete them here.",
@@ -1139,9 +1142,10 @@
       "currentVersion": "Installed version",
       "latestVersion": "Latest release",
       "unknown": "Not checked yet",
+      "installer": "Windows installer",
       "source": "Update source",
       "available": "A newer version is available.",
-      "upToDate": "You are on the latest release (or no newer release was found).",
+      "upToDate": "You are on the latest release.",
       "releaseNotes": "Release notes",
       "check": "Check for updates",
       "download": "Download installer",
