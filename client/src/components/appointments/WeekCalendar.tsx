@@ -7,6 +7,7 @@ import { useMediaQuery } from '@/hooks/useMediaQuery';
 import {
   CALENDAR_HEADER_ROW_PX,
   CALENDAR_MIN_CARD_HEIGHT_PX,
+  CALENDAR_MOBILE_MIN_CARD_HEIGHT_PX,
   CALENDAR_MOBILE_BREAKPOINT,
   CALENDAR_MOBILE_DAY_COLUMN_PX,
   CALENDAR_MOBILE_TIME_COLUMN_PX,
@@ -78,6 +79,7 @@ function findCoveringAppointment(
   const slotStart = timeToMinutes(slotTime);
   const slotEnd = slotStart + slotStepMin;
   return appointments.find((a) => {
+    if (a.status === 'CANCELLED') return false;
     const start = timeToMinutes(a.time);
     const end = start + (a.durationMin || DEFAULT_DURATION);
     return start < slotEnd && slotStart < end;
@@ -201,7 +203,12 @@ function AppointmentCardContent({
         {formatClockTime(minutesToTime(previewMinute), language)} –{' '}
         {formatClockTime(minutesToTime(endMin), language)}
       </span>
-      <span className="appointment-card__patient">{appt.patientName}</span>
+      <span className="appointment-card__patient">
+        {appt.patientName}
+        {!appt.patientId && (
+          <span className="appointment-card__guest-tag">{t('appointmentsPage.walkin.tag')}</span>
+        )}
+      </span>
       {appt.status !== 'SCHEDULED' && (
         <span className={`appointment-card__status appointment-card__status--${appt.status.toLowerCase()}`}>
           {t(calendarStatusKey(appt.status))}
@@ -233,6 +240,7 @@ export function WeekCalendar({
 }: WeekCalendarProps) {
   const { t } = useTranslation();
   const isMobileWeek = useMediaQuery(CALENDAR_MOBILE_BREAKPOINT);
+  const minCardHeightPx = isMobileWeek ? CALENDAR_MOBILE_MIN_CARD_HEIGHT_PX : CALENDAR_MIN_CARD_HEIGHT_PX;
   const timeColumnPx = isMobileWeek ? CALENDAR_MOBILE_TIME_COLUMN_PX : CALENDAR_TIME_COLUMN_PX;
   const dayColumnTemplate = isMobileWeek
     ? `repeat(7, ${CALENDAR_MOBILE_DAY_COLUMN_PX}px)`
@@ -614,7 +622,9 @@ export function WeekCalendar({
 
           {dayColumns.map((d, dayIdx) => {
             const closed = isDayClosed(d.schedule);
-            const appointments = (d.schedule?.appointments ?? []).filter((a) => !isEmergencyAppointment(a));
+            const appointments = (d.schedule?.appointments ?? []).filter(
+              (a) => !isEmergencyAppointment(a) && a.status !== 'CANCELLED',
+            );
             const slotMap = new Map((d.schedule?.slots ?? []).map((s) => [s.time, s]));
             const dayStartMin = times.length > 0 ? timeToMinutes(times[0]) : 0;
             const clickable = !closed && (canCreate || canEdit);
@@ -679,7 +689,7 @@ export function WeekCalendar({
 
                   const previewDuration = appt.durationMin || DEFAULT_DURATION;
                   const top = ((timeToMinutes(appt.time) - dayStartMin) / slotStepMin) * rowHeightPx;
-                  const height = Math.max(CALENDAR_MIN_CARD_HEIGHT_PX, (previewDuration / slotStepMin) * rowHeightPx - 2);
+                  const height = Math.max(minCardHeightPx, (previewDuration / slotStepMin) * rowHeightPx - 2);
 
                   return (
                     <div
@@ -719,7 +729,7 @@ export function WeekCalendar({
                     const appt = drag.appt;
                     const previewDuration = appt.durationMin || DEFAULT_DURATION;
                     const top = ((drag.previewMinute - dayStartMin) / slotStepMin) * rowHeightPx;
-                    const height = Math.max(CALENDAR_MIN_CARD_HEIGHT_PX, (previewDuration / slotStepMin) * rowHeightPx - 2);
+                    const height = Math.max(minCardHeightPx, (previewDuration / slotStepMin) * rowHeightPx - 2);
                     return (
                       <div
                         key={`drag-preview-${appt.id}`}

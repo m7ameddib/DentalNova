@@ -27,7 +27,6 @@ import { expandTreatmentDisplayRows, isPartialToothRemoval, buildPartialToothRem
 
 const STATUS_OPTIONS: TreatmentStatus[] = ['PLANNED', 'IN_PROGRESS', 'COMPLETED'];
 const SCOPE_OPTIONS: TreatmentScope[] = ['SINGLE', 'UPPER_JAW', 'LOWER_JAW', 'ALL_TEETH'];
-const COLLAPSED_HISTORY_LIMIT = 6;
 
 export function TreatmentSection({ patientId, patient }: { patientId: number; patient: Patient }) {
   const { t } = useTranslation();
@@ -44,7 +43,6 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
   const [status, setStatus] = useState<Exclude<TreatmentStatus, 'VOID'>>('PLANNED');
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [showAllHistory, setShowAllHistory] = useState(false);
   const [deletingRow, setDeletingRow] = useState<TreatmentDisplayRow | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
   const [showTreatmentPlan, setShowTreatmentPlan] = useState(false);
@@ -434,15 +432,6 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
         className="section-card--treatment-history"
       >
         <div className="treatment-history">
-          {treatments.length > COLLAPSED_HISTORY_LIMIT && (
-            <div className="treatment-history__header">
-              <button type="button" className="link-btn" onClick={() => setShowAllHistory((v) => !v)}>
-                {showAllHistory
-                  ? t('patientRecord.treatment.showLess')
-                  : t('patientRecord.treatment.showAll', { count: treatments.length })}
-              </button>
-            </div>
-          )}
           {treatments.length === 0 ? (
             <p className="muted">{t('patientRecord.treatment.noHistory')}</p>
           ) : (
@@ -461,7 +450,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
                   </tr>
                 </thead>
                 <tbody>
-                  {(showAllHistory ? displayRows : displayRows.slice(0, COLLAPSED_HISTORY_LIMIT)).map(
+                  {displayRows.map(
                     (row) => {
                       const tr = row.treatment;
                       const treatmentLabel = t(`patientRecord.treatmentTypes.${tr.treatmentCode}`, {

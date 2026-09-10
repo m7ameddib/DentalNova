@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -52,14 +52,19 @@ export class LabCasesController {
   @Patch('lab-names/:id')
   updateLabName(
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { name?: string; isActive?: boolean },
+    @Body() body: { name?: string; phone?: string | null; isActive?: boolean },
   ) {
     return this.labCasesService.updateLabName(id, body);
   }
 
+  @Delete('lab-names/:id')
+  deleteLabName(@Param('id', ParseIntPipe) id: number) {
+    return this.labCasesService.deleteLabName(id);
+  }
+
   @Post('lab-names')
-  createLabName(@Body('name') name: string) {
-    return this.labCasesService.createLabName(name);
+  createLabName(@Body() body: { name: string; phone: string }) {
+    return this.labCasesService.createLabName(body.name, body.phone);
   }
 
   @Get('lab-names/:id/account')

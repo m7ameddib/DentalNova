@@ -55,11 +55,14 @@ export const labCasesApi = {
 
   labNames: () => apiClient.get<LabName[]>('/lab-cases/lab-names').then((r) => r.data),
 
-  createLabName: (name: string) =>
-    apiClient.post<LabName>('/lab-cases/lab-names', { name }).then((r) => r.data),
+  createLabName: (payload: { name: string; phone: string }) =>
+    apiClient.post<LabName>('/lab-cases/lab-names', payload).then((r) => r.data),
 
-  updateLabName: (id: number, payload: { name?: string; isActive?: boolean }) =>
+  updateLabName: (id: number, payload: { name?: string; phone?: string | null; isActive?: boolean }) =>
     apiClient.patch<LabName>(`/lab-cases/lab-names/${id}`, payload).then((r) => r.data),
+
+  deleteLabName: (id: number) =>
+    apiClient.delete<LabName>(`/lab-cases/lab-names/${id}`).then((r) => r.data),
 
   listServiceCosts: (labNameId: number) =>
     apiClient.get<LabServiceCost[]>(`/lab-cases/lab-names/${labNameId}/service-costs`).then((r) => r.data),

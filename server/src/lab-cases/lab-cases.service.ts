@@ -60,13 +60,20 @@ export class LabCasesService {
     return this.labNamesRepo.findAll();
   }
 
-  createLabName(name: string) {
+  createLabName(name: string, phone: string) {
     if (!name?.trim()) throw new BadRequestException('Lab name is required');
-    return this.labNamesRepo.create(name.trim());
+    if (!phone?.trim()) throw new BadRequestException('Lab phone number is required');
+    return this.labNamesRepo.create(name.trim(), phone.trim());
   }
 
-  updateLabName(id: number, input: { name?: string; isActive?: boolean }) {
+  updateLabName(id: number, input: { name?: string; phone?: string | null; isActive?: boolean }) {
     const updated = this.labNamesRepo.update(id, input);
+    if (!updated) throw new NotFoundException('Laboratory not found');
+    return updated;
+  }
+
+  deleteLabName(id: number) {
+    const updated = this.labNamesRepo.update(id, { isActive: false });
     if (!updated) throw new NotFoundException('Laboratory not found');
     return updated;
   }

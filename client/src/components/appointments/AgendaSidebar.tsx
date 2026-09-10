@@ -8,7 +8,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AppointmentStatus, AppointmentWithPatient, Patient } from '@/types/domain';
 import { formatClockTime } from '@/utils/calendar';
-import { todayIso } from '@/utils/date';
+import { todayIso, localAddDaysIso, formatDateDisplay } from '@/utils/date';
 import { DEFAULT_DURATION, EMERGENCY_STATUS_OPTIONS, EMERGENCY_TYPE, CalendarViewMode } from './constants';
 
 interface AgendaSidebarProps {
@@ -74,6 +74,7 @@ export function AgendaSidebar({
   const canCreate = usePermission(PERMISSIONS.APPOINTMENTS_CREATE);
   const canEdit = usePermission(PERMISSIONS.APPOINTMENTS_EDIT);
   const today = todayIso();
+  const [emergencyDate, setEmergencyDate] = useState(today);
 
   const [year, month] = focusDate.split('-').map(Number);
   const [viewYear, setViewYear] = useState(year);
@@ -95,8 +96,8 @@ export function AgendaSidebar({
   });
 
   const { data: schedule } = useQuery({
-    queryKey: ['day-schedule', today],
-    queryFn: () => appointmentsApi.daySchedule(today),
+    queryKey: ['day-schedule', emergencyDate],
+    queryFn: () => appointmentsApi.daySchedule(emergencyDate),
   });
 
   const { data: patientResults = [] } = useQuery({
@@ -131,7 +132,8 @@ export function AgendaSidebar({
   const createMutation = useMutation({
     mutationFn: appointmentsApi.create,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['day-schedule', today] });
+      queryClient.invalidateQueries({ queryKey: ['day-schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['appointments-month'] });
       resetEmergencyForm();
     },
     onError: () => setError(t('common.error')),
@@ -140,7 +142,7 @@ export function AgendaSidebar({
   const statusMutation = useMutation({
     mutationFn: ({ id, status }: { id: number; status: AppointmentStatus }) =>
       appointmentsApi.updateStatus(id, status),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['day-schedule', today] }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['day-schedule', emergencyDate] }),
   });
 
   function resetEmergencyForm() {
@@ -155,7 +157,7 @@ export function AgendaSidebar({
 
   function handleAddEmergency() {
     const payload = {
-      date: today,
+      date: emergencyDate,
       time: currentTimeRounded(),
       durationMin: DEFAULT_DURATION,
       appointmentType: EMERGENCY_TYPE,
@@ -298,6 +300,36 @@ export function AgendaSidebar({
           )}
         </div>
 
+        <div className="emergency-panel__date-nav">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setEmergencyDate((d) => localAddDaysIso(d, -1))}
+            title={t('appointmentsPage.emergency.previousDay')}
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span
+            className={[
+              'emergency-panel__date',
+              emergencyDate === today ? 'emergency-panel__date--today' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            {formatDateDisplay(emergencyDate, language)}
+            {emergencyDate === today ? ` · ${t('common.today')}` : ''}
+          </span>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setEmergencyDate((d) => localAddDaysIso(d, 1))}
+            title={t('appointmentsPage.emergency.nextDay')}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
         <p className="emergency-panel__hint emergency-panel__hint--compact">
           {t('appointmentsPage.emergency.dragHint')}
         </p>
@@ -410,6 +442,9 @@ export function AgendaSidebar({
                 <span className="emergency-card__name">
                   <User size={13} />
                   {appt.patientName}
+                  {!appt.patientId && (
+                    <span className="appointment-card__guest-tag">{t('appointmentsPage.walkin.tag')}</span>
+                  )}
                 </span>
                 <span className="emergency-card__time">
                   {formatClockTime(appt.time, language)}

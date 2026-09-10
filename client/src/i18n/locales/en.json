@@ -715,7 +715,7 @@
     "createdMessage": "Appointment saved",
     "walkin": {
       "tabLabel": "Walk-in (no file yet)",
-      "tag": "Guest",
+      "tag": "GUEST",
       "name": "Name",
       "namePlaceholder": "Enter full name",
       "phone": "Phone",
@@ -730,7 +730,8 @@
       "createPatientRecord": "Create Patient Record",
       "linkExistingPlaceholder": "Search to link an existing patient",
       "openPatientRecord": "Open Patient Record",
-      "duplicatePhoneHint": "This phone number already belongs to a patient — search and link them instead"
+      "duplicatePhoneHint": "This phone number already belongs to a patient — search and link them instead",
+      "cancelConfirm": "Cancel this appointment? It will be removed from the calendar."
     },
     "appointmentTypes": {
       "CHECKUP": "Checkup",
@@ -791,7 +792,9 @@
       "hint": "Walk-in patients without a prior appointment",
       "dragHint": "Drag a patient onto the calendar to schedule",
       "add": "Add Emergency",
-      "empty": "No emergency patients today",
+      "empty": "No emergency appointments for this date",
+      "previousDay": "Previous day",
+      "nextDay": "Next day",
       "arrivedAt": "Arrived {{time}}",
       "defaultReason": "Emergency visit",
       "convertToRegular": "Convert to Regular Appointment",
@@ -1025,13 +1028,16 @@
       "title": "Laboratories",
       "hint": "Manage lab names and default service costs.",
       "name": "Lab name",
+      "phone": "Phone number",
       "status": "Status",
       "addTitle": "Add laboratory",
       "workType": "Work type",
       "serviceCost": "Default cost",
       "costsHint": "Set default lab costs per work type for this laboratory.",
+      "deleteConfirm": "Delete laboratory \"{{name}}\"? It will no longer appear in the Laboratories list.",
       "validation": {
-        "required": "Enter a lab name"
+        "required": "Enter a lab name",
+        "phoneRequired": "Enter a lab phone number"
       }
     },
     "workingHours": {

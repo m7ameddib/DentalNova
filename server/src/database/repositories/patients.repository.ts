@@ -128,7 +128,7 @@ export class PatientsRepository {
       .prepare(
         `SELECT * FROM (
            SELECT p.*,
-             COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status != 'VOID'), 0)
+             COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0)
                - COALESCE((SELECT SUM(ad.amount_cents) FROM account_discounts ad WHERE ad.patient_id = p.id AND COALESCE(ad.status, 'ACTIVE') != 'VOID'), 0) as total_cost_cents,
              COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents
            FROM patients p

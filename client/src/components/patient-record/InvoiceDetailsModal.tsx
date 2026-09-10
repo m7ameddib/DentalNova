@@ -35,7 +35,11 @@ export function InvoiceDetailsModal({ patient, onClose }: { patient: Patient; on
     queryFn: () => settingsApi.getClinic(),
   });
 
-  const displayRows = useMemo(() => expandTreatmentDisplayRows(treatments), [treatments]);
+  const billedTreatments = useMemo(
+    () => treatments.filter((treatment) => treatment.status === 'COMPLETED'),
+    [treatments],
+  );
+  const displayRows = useMemo(() => expandTreatmentDisplayRows(billedTreatments), [billedTreatments]);
 
   const totals = useMemo(() => {
     if (!summary) return null;
@@ -54,7 +58,7 @@ export function InvoiceDetailsModal({ patient, onClose }: { patient: Patient; on
     print(
       <InvoiceReceiptPrintable
         patient={patient}
-        treatments={treatments}
+        treatments={billedTreatments}
         totals={totals}
         clinic={clinic}
         language={language}

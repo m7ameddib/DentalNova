@@ -233,9 +233,7 @@ export class TreatmentsService {
     const updated = this.patientTreatmentsRepo.updateStatus(id, dto.status, currentUser.id);
     if (!updated) throw new NotFoundException('Treatment entry not found');
 
-    if (dto.status === 'VOID') {
-      this.followUpsService.onPaymentChanged(updated.patientId);
-    }
+    this.followUpsService.onPaymentChanged(updated.patientId);
 
     this.audit.log({
       action: 'TREATMENT_STATUS_CHANGED',

@@ -81,7 +81,7 @@ export class FollowUpsRepository {
         p.full_name as patient_name,
         p.file_number as patient_file_number,
         p.phone as patient_phone,
-        COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id), 0) as total_cost_cents,
+        COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0) as total_cost_cents,
         COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents,
         (SELECT pay2.date FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_date,
         (SELECT pay2.amount_cents FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_amount_cents
@@ -111,7 +111,7 @@ export class FollowUpsRepository {
         p.full_name as patient_name,
         p.file_number as patient_file_number,
         p.phone as patient_phone,
-        COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status != 'VOID'), 0) as total_cost_cents,
+        COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0) as total_cost_cents,
         COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents,
         (SELECT pay2.date FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_date,
         (SELECT pay2.amount_cents FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_amount_cents
@@ -166,7 +166,7 @@ export class FollowUpsRepository {
           p.full_name as patient_name,
           p.file_number as patient_file_number,
           p.phone as patient_phone,
-          COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id), 0) as total_cost_cents,
+          COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0) as total_cost_cents,
           COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents,
           (SELECT pay2.date FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_date,
           (SELECT pay2.amount_cents FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_amount_cents

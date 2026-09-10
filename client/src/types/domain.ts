@@ -646,6 +646,7 @@ export interface LabWorkType {
 export interface LabName {
   id: number;
   name: string;
+  phone: string | null;
   isActive: boolean;
   sortOrder: number;
 }

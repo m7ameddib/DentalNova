@@ -1945,6 +1945,16 @@ textarea {
   margin-top: 10px;
   overflow-x: auto;
 }
+.treatment-history .treatment-history-table-wrap {
+  overflow: auto;
+  max-height: min(420px, 55vh);
+}
+.treatment-history-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--color-surface, #fff);
+}
 .treatment-history-table {
   width: 100%;
   border-collapse: collapse;
@@ -2797,6 +2807,24 @@ textarea {
   align-items: center;
   justify-content: center;
   cursor: pointer;
+}
+.emergency-panel__date-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 0 10px;
+}
+.emergency-panel__date {
+  flex: 1;
+  text-align: center;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: var(--color-text);
+  line-height: 1.3;
+}
+.emergency-panel__date--today {
+  color: var(--color-primary);
 }
 .emergency-panel__hint {
   font-size: 0.78rem;

@@ -10,12 +10,15 @@ export const DEFAULT_DURATION = 30;
 
 export const ROW_HEIGHT_PX_30 = 82;
 export const ROW_HEIGHT_PX_15 = 41;
+export const MOBILE_ROW_HEIGHT_PX_30 = 44;
+export const MOBILE_ROW_HEIGHT_PX_15 = 24;
 export const CALENDAR_HEADER_ROW_PX = 54;
 export const CALENDAR_TIME_COLUMN_PX = 100;
 export const CALENDAR_MOBILE_TIME_COLUMN_PX = 56;
 export const CALENDAR_MOBILE_DAY_COLUMN_PX = 136;
 export const CALENDAR_MOBILE_BREAKPOINT = '(max-width: 768px)';
 export const CALENDAR_MIN_CARD_HEIGHT_PX = 32;
+export const CALENDAR_MOBILE_MIN_CARD_HEIGHT_PX = 18;
 export const DRAG_THRESHOLD_PX = 6;
 
 export const CALENDAR_STATUS_OPTIONS: AppointmentStatus[] = [

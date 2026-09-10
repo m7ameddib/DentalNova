@@ -25,6 +25,8 @@ export function LaboratoriesSection() {
   const [editName, setEditName] = useState('');
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [editPhone, setEditPhone] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [costEdits, setCostEdits] = useState<Record<string, string>>({});
   const [error, setError] = useState<string | null>(null);
@@ -35,19 +37,25 @@ export function LaboratoriesSection() {
   };
 
   const createMutation = useMutation({
-    mutationFn: (n: string) => labCasesApi.createLabName(n),
+    mutationFn: (payload: { name: string; phone: string }) => labCasesApi.createLabName(payload),
     onSuccess: () => {
       invalidate();
       setAdding(false);
       setName('');
+      setPhone('');
       setError(null);
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, payload }: { id: number; payload: { name?: string; isActive?: boolean } }) =>
-      labCasesApi.updateLabName(id, payload),
+    mutationFn: ({
+      id,
+      payload,
+    }: {
+      id: number;
+      payload: { name?: string; phone?: string | null; isActive?: boolean };
+    }) => labCasesApi.updateLabName(id, payload),
     onSuccess: () => {
       invalidate();
       setEditingId(null);
@@ -64,9 +72,16 @@ export function LaboratoriesSection() {
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => labCasesApi.deleteLabName(id),
+    onSuccess: () => invalidate(),
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+  });
+
   function startEdit(lab: LabName) {
     setEditingId(lab.id);
     setEditName(lab.name);
+    setEditPhone(lab.phone ?? '');
     setError(null);
   }
 
@@ -75,7 +90,11 @@ export function LaboratoriesSection() {
       setError(t('settings.laboratories.validation.required'));
       return;
     }
-    updateMutation.mutate({ id, payload: { name: editName.trim() } });
+    if (!editPhone.trim()) {
+      setError(t('settings.laboratories.validation.phoneRequired'));
+      return;
+    }
+    updateMutation.mutate({ id, payload: { name: editName.trim(), phone: editPhone.trim() } });
   }
 
   function toggleActive(lab: LabName) {
@@ -87,7 +106,16 @@ export function LaboratoriesSection() {
       setError(t('settings.laboratories.validation.required'));
       return;
     }
-    createMutation.mutate(name.trim());
+    if (!phone.trim()) {
+      setError(t('settings.laboratories.validation.phoneRequired'));
+      return;
+    }
+    createMutation.mutate({ name: name.trim(), phone: phone.trim() });
+  }
+
+  function handleDelete(lab: LabName) {
+    if (!window.confirm(t('settings.laboratories.deleteConfirm', { name: lab.name }))) return;
+    deleteMutation.mutate(lab.id);
   }
 
   return (
@@ -99,6 +127,7 @@ export function LaboratoriesSection() {
         <thead>
           <tr>
             <th>{t('settings.laboratories.name')}</th>
+            <th>{t('settings.laboratories.phone')}</th>
             <th>{t('settings.laboratories.status')}</th>
             <th>{t('common.actions')}</th>
           </tr>
@@ -118,6 +147,13 @@ export function LaboratoriesSection() {
                     >
                       {expandedId === lab.id ? <ChevronDown size={14} /> : <ChevronRight size={14} />} {lab.name}
                     </button>
+                  )}
+                </td>
+                <td>
+                  {editingId === lab.id ? (
+                    <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} />
+                  ) : (
+                    lab.phone || '—'
                   )}
                 </td>
                 <td>
@@ -143,13 +179,21 @@ export function LaboratoriesSection() {
                       <button type="button" className="btn btn--ghost btn--small" onClick={() => toggleActive(lab)}>
                         {lab.isActive ? t('common.disable') : t('common.enable')}
                       </button>
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--small"
+                        onClick={() => handleDelete(lab)}
+                        disabled={deleteMutation.isPending}
+                      >
+                        {t('common.delete')}
+                      </button>
                     </>
                   )}
                 </td>
               </tr>
               {expandedId === lab.id && (
                 <tr key={`${lab.id}-costs`}>
-                  <td colSpan={3}>
+                  <td colSpan={4}>
                     <LabServiceCostsPanel
                       labId={lab.id}
                       workTypes={workTypes}
@@ -172,6 +216,10 @@ export function LaboratoriesSection() {
           <label className="form-field">
             <span className="form-field__label">{t('settings.laboratories.name')}</span>
             <input autoFocus value={name} onChange={(e) => setName(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span className="form-field__label">{t('settings.laboratories.phone')}</span>
+            <input value={phone} onChange={(e) => setPhone(e.target.value)} />
           </label>
           {error && <div className="form-error-banner">{error}</div>}
           <div className="form-actions">

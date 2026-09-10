@@ -180,7 +180,7 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
     print(
       <AccountStatementPrintable
         patient={patient}
-        treatments={treatments}
+        treatments={treatments.filter((treatment) => treatment.status === 'COMPLETED')}
         payments={payments}
         totals={summary}
         clinic={clinic}

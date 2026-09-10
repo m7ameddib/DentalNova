@@ -249,11 +249,11 @@ export class PatientTreatmentsRepository {
     return rows.map(mapDetailsRow) as PatientTreatmentReportRow[];
   }
 
-  /** Sum of every treatment entry's final amount — feeds the patient invoice total. */
+  /** Sum of COMPLETED treatment amounts — feeds the patient account total. */
   totalCostForPatient(patientId: number): number {
     const row = this.db.connection
       .prepare(
-        `SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE patient_id = ? AND status != 'VOID'`,
+        `SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE patient_id = ? AND status = 'COMPLETED'`,
       )
       .get(patientId) as { total: number };
     return row.total;
@@ -262,7 +262,7 @@ export class PatientTreatmentsRepository {
   /** Clinic-wide sum of final amounts across all patients (all time) — used for the Reports outstanding balance. */
   totalFinalAmountAll(): number {
     const row = this.db.connection
-      .prepare(`SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE status != 'VOID'`)
+      .prepare(`SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE status = 'COMPLETED'`)
       .get() as { total: number };
     return row.total;
   }

@@ -22,9 +22,13 @@ import {
   isEmergencyAppointment,
   ROW_HEIGHT_PX_15,
   ROW_HEIGHT_PX_30,
+  MOBILE_ROW_HEIGHT_PX_15,
+  MOBILE_ROW_HEIGHT_PX_30,
+  CALENDAR_MOBILE_BREAKPOINT,
 } from '@/components/appointments/constants';
 import { MonthCalendar } from '@/components/appointments/MonthCalendar';
 import { usePermission } from '@/hooks/usePermission';
+import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { PERMISSIONS } from '@/constants/permissions';
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
@@ -157,7 +161,14 @@ export function AppointmentsPage() {
   }, [dayQueries, clinicSettings?.workStartTime]);
 
   const times = useMemo(() => expandSlotTimes(baseTimes, slotStepMin), [baseTimes, slotStepMin]);
-  const rowHeightPx = slotStepMin === 15 ? ROW_HEIGHT_PX_15 : ROW_HEIGHT_PX_30;
+  const isMobileWeek = useMediaQuery(CALENDAR_MOBILE_BREAKPOINT);
+  const rowHeightPx = isMobileWeek
+    ? slotStepMin === 15
+      ? MOBILE_ROW_HEIGHT_PX_15
+      : MOBILE_ROW_HEIGHT_PX_30
+    : slotStepMin === 15
+      ? ROW_HEIGHT_PX_15
+      : ROW_HEIGHT_PX_30;
 
   const printDate = todayIso();
 
@@ -216,9 +227,13 @@ export function AppointmentsPage() {
     mutationFn: ({ id, status }: { id: number; status: AppointmentStatus }) =>
       appointmentsApi.updateStatus(id, status),
     onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['day-schedule'] });
+      queryClient.invalidateQueries({ queryKey: ['patient-appointments-upcoming'] });
+      if (variables.status === 'CANCELLED') {
+        setManagingAppt(null);
+        return;
+      }
       if (managingAppt) {
-        queryClient.invalidateQueries({ queryKey: ['day-schedule'] });
-        queryClient.invalidateQueries({ queryKey: ['patient-appointments-upcoming'] });
         setManagingAppt((prev) => (prev ? { ...prev, status: variables.status } : prev));
       }
     },
@@ -1295,7 +1310,12 @@ export function AppointmentsPage() {
                         ]
                           .filter(Boolean)
                           .join(' ')}
-                        onClick={() => statusMutation.mutate({ id: managingAppt.id, status: s })}
+                        onClick={() => {
+                          if (s === 'CANCELLED' && managingAppt.status !== 'CANCELLED') {
+                            if (!window.confirm(t('appointmentsPage.manage.cancelConfirm'))) return;
+                          }
+                          statusMutation.mutate({ id: managingAppt.id, status: s });
+                        }}
                         disabled={statusMutation.isPending}
                       >
                         {t(`appointmentsPage.status.${s}`)}
