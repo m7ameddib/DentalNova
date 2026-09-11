@@ -1,6 +1,6 @@
 {
   "name": "@dnt/dental-server",
-  "version": "1.1.10",
+  "version": "1.1.11",
   "private": true,
   "description": "DNT Dental Clinic Management System - API (local-first, online-ready)",
   "scripts": {

@@ -1294,7 +1294,7 @@ textarea {
 /* ---------- Compact patient search (full-width row below the Patient header) ---------- */
 
 .patient-search-row {
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 .patient-search-row .patient-search-box {
   max-width: none;
@@ -1409,13 +1409,19 @@ textarea {
   width: 100%;
   min-width: 0;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+  align-items: stretch;
   gap: 8px;
+}
+
+.patient-record__identity > .section-card--patient {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .patient-record__main-row {
   display: grid;
-  grid-template-columns: minmax(0, 2.2fr) minmax(220px, 0.9fr) minmax(200px, 0.75fr);
+  grid-template-columns: minmax(0, 3.4fr) minmax(150px, 0.5fr) minmax(140px, 0.4fr);
   gap: 12px;
   align-items: start;
 }
@@ -1437,16 +1443,39 @@ textarea {
 }
 
 .patient-record__medical-alerts {
+  flex: 0 1 240px;
+  width: 240px;
+  max-width: 28%;
+  min-width: 168px;
+  align-self: stretch;
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
-  padding: 10px 14px;
+  padding: 8px 10px;
+  overflow: auto;
 }
 
 .patient-record__medical-alerts .medical-alerts-section {
   margin-top: 0;
   border-top: none;
   padding-top: 0;
+}
+.patient-record__medical-alerts .medical-alerts-section__header {
+  margin-bottom: 6px;
+}
+.patient-record__medical-alerts .medical-alerts-catalog {
+  margin-bottom: 6px;
+}
+.patient-record__medical-alerts .medical-alerts-catalog__chips {
+  max-height: 88px;
+  overflow: auto;
+  gap: 4px;
+}
+.patient-record__medical-alerts .medical-alerts-list {
+  flex-direction: row;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  font-size: 12px;
 }
 
 .patient-record__empty-state {
@@ -1467,6 +1496,10 @@ textarea {
   align-items: stretch;
   min-height: min(68vh, 620px);
 }
+.patient-record--empty .patient-record__identity {
+  flex-direction: column;
+}
+
 .patient-record--empty .patient-record__identity,
 .patient-record--empty .section-card--patient {
   height: 100%;
@@ -1530,7 +1563,7 @@ textarea {
 
 @media (max-width: 1280px) {
   .patient-record__main-row {
-    grid-template-columns: minmax(0, 1.8fr) minmax(200px, 0.9fr) minmax(180px, 0.8fr);
+    grid-template-columns: minmax(0, 2.8fr) minmax(140px, 0.5fr) minmax(130px, 0.4fr);
   }
   .patient-record__secondary-row {
     grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -1548,27 +1581,36 @@ textarea {
   }
 }
 
+.section-card--patient-wide > .section-card__header {
+  padding: 6px 12px;
+}
 .section-card--patient-wide > .section-card__body,
 .section-card--treatment > .section-card__body {
   overflow: visible;
+}
+.section-card--patient-wide > .section-card__body {
+  padding: 8px 12px;
 }
 
 .patient-view {
   display: flex;
   flex-direction: row;
-  align-items: flex-start;
-  gap: 16px;
+  align-items: center;
+  gap: 10px;
 }
 .patient-view__main {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-direction: column;
-  gap: 2px;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 8px 12px;
+  overflow-x: auto;
 }
 .patient-view__actions {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
@@ -1584,23 +1626,37 @@ textarea {
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0;
 }
 .patient-view__name {
-  font-size: 18px;
+  font-size: 16px;
+  white-space: nowrap;
 }
 .patient-view__file-number {
   color: var(--color-text-muted);
   font-size: 12.5px;
-  margin-bottom: 10px;
+  margin-bottom: 0;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.patient-view__archived-banner {
+  flex: 1 1 100%;
 }
 .patient-view__fields {
-  margin: 8px 0 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-  gap: 10px 16px;
+  margin: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  gap: 8px 14px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.patient-view__fields > div {
+  flex: 0 0 auto;
+  min-width: max-content;
 }
 .patient-view__fields > div:last-child {
-  grid-column: 1 / -1;
+  grid-column: auto;
 }
 .patient-view__phone-row {
   display: flex;
@@ -1626,16 +1682,21 @@ textarea {
   gap: 4px;
 }
 .patient-view__family {
-  margin-top: 12px;
-  border-top: 1px dashed var(--color-border);
-  padding-top: 10px;
+  margin-top: 0;
+  border-top: none;
+  padding-top: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .patient-view__family ul {
   list-style: none;
   padding: 0;
-  margin: 6px 0 0;
+  margin: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   gap: 8px 14px;
 }
 
