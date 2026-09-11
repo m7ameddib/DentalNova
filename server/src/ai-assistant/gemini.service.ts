@@ -18,14 +18,27 @@ interface GeminiGenerateResponse {
   error?: { message?: string; code?: number };
 }
 
+interface ProviderGenerateResponse {
+  text?: string;
+  durationMs?: number;
+}
+
 @Injectable()
 export class GeminiService {
-  private static readonly DEFAULT_MODEL = 'gemini-3.6-flash';
+  static readonly DEFAULT_MODEL = 'gemini-3.5-flash-lite';
+  static readonly DEFAULT_AI_SERVICE_URL = 'https://dentalnova.dibnova.com';
+  static readonly DEFAULT_AI_SERVICE_SECRET = 'DentalNova.AI.Proxy.v1';
+
   private readonly logger = new Logger(GeminiService.name);
 
   constructor(private readonly config: ConfigService) {}
 
   isConfigured(): boolean {
+    if (this.usesOnlineAiService()) return true;
+    return this.hasLocalApiKey();
+  }
+
+  hasLocalApiKey(): boolean {
     return !!this.getApiKey();
   }
 
@@ -38,7 +51,31 @@ export class GeminiService {
     return this.getModel();
   }
 
+  getAiServiceSecret(): string {
+    return this.config.get<string>('AI_SERVICE_SECRET')?.trim() || GeminiService.DEFAULT_AI_SERVICE_SECRET;
+  }
+
   async chat(
+    systemPrompt: string,
+    messages: AiChatMessage[],
+    options?: { imageBase64?: string; imageMimeType?: string; round?: number },
+  ): Promise<{ text: string; durationMs: number }> {
+    if (this.usesOnlineAiService()) {
+      return this.proxyToOnlineService(systemPrompt, messages, options);
+    }
+    return this.callGemini(systemPrompt, messages, options);
+  }
+
+  /** Direct Gemini call for the online provider endpoint. Never proxies. */
+  async generateDirect(
+    systemPrompt: string,
+    messages: AiChatMessage[],
+    options?: { imageBase64?: string; imageMimeType?: string },
+  ): Promise<{ text: string; durationMs: number }> {
+    return this.callGemini(systemPrompt, messages, options);
+  }
+
+  private async callGemini(
     systemPrompt: string,
     messages: AiChatMessage[],
     options?: { imageBase64?: string; imageMimeType?: string; round?: number },
@@ -115,6 +152,66 @@ export class GeminiService {
     this.logger.log(`Gemini response received in ${(durationMs / 1000).toFixed(1)}s${roundLabel}`);
 
     return { text, durationMs };
+  }
+
+  private async proxyToOnlineService(
+    systemPrompt: string,
+    messages: AiChatMessage[],
+    options?: { imageBase64?: string; imageMimeType?: string; round?: number },
+  ): Promise<{ text: string; durationMs: number }> {
+    const baseUrl = this.getAiServiceUrl();
+    if (!baseUrl) {
+      throw new ServiceUnavailableException('AI service URL is not configured');
+    }
+
+    const roundLabel = options?.round != null ? ` (round ${options.round})` : '';
+    this.logger.log(`AI service proxy started${roundLabel}`);
+    const started = Date.now();
+
+    const response = await fetch(`${baseUrl}/api/ai-provider/generate`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-dentalnova-ai-key': this.getAiServiceSecret(),
+      },
+      body: JSON.stringify({
+        systemPrompt,
+        messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+        imageBase64: options?.imageBase64,
+        imageMimeType: options?.imageMimeType,
+      }),
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new ServiceUnavailableException(
+        `AI service error: ${response.status} ${this.sanitizeError(errText).slice(0, 200)}`,
+      );
+    }
+
+    const data = (await response.json()) as ProviderGenerateResponse;
+    if (!data.text?.trim()) {
+      throw new ServiceUnavailableException('Empty response from AI service');
+    }
+
+    const durationMs = data.durationMs ?? Date.now() - started;
+    this.logger.log(`AI service proxy finished in ${(durationMs / 1000).toFixed(1)}s${roundLabel}`);
+    return { text: data.text, durationMs };
+  }
+
+  private usesOnlineAiService(): boolean {
+    if (!this.isOfflineMode()) return false;
+    return !!this.getAiServiceUrl();
+  }
+
+  private isOfflineMode(): boolean {
+    return (this.config.get<string>('DEPLOYMENT_MODE') || 'offline').toLowerCase() !== 'online';
+  }
+
+  private getAiServiceUrl(): string | undefined {
+    const raw = this.config.get<string>('AI_SERVICE_URL');
+    if (raw !== undefined && raw.trim() === '') return undefined;
+    return (raw?.trim() || GeminiService.DEFAULT_AI_SERVICE_URL).replace(/\/$/, '');
   }
 
   private getApiKey(): string | undefined {

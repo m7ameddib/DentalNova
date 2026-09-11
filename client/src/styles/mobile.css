@@ -317,6 +317,27 @@ body.top-nav-menu-open {
 /* ---------- Patient workspace ---------- */
 
 @media (max-width: 768px) {
+  .patient-record__main-row,
+  .patient-record__secondary-row {
+    grid-template-columns: 1fr;
+  }
+
+  .patient-view {
+    flex-direction: column;
+  }
+
+  .patient-view__actions {
+    flex-direction: row;
+    align-self: flex-end;
+    margin-left: 0;
+    order: 0;
+  }
+
+  [dir='rtl'] .patient-view__actions {
+    order: 0;
+    margin-right: 0;
+  }
+
   .patient-workspace {
     flex-direction: column;
   }
@@ -344,23 +365,33 @@ body.top-nav-menu-open {
     overflow-x: hidden;
   }
 
-  .dental-chart {
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
+  .dental-chart,
+  .do-chart {
+    overflow-x: hidden;
+    overflow-y: hidden;
     max-width: 100%;
     padding-bottom: 4px;
   }
 
-  .dental-chart__row {
-    min-width: max-content;
+  .dental-chart__row,
+  .do-arch {
+    min-width: 0;
+    width: 100%;
+    max-width: 100%;
   }
 
-  .quadrant {
+  .quadrant,
+  .do-quadrant {
     flex-wrap: nowrap;
+    min-width: 0;
+    flex: 1 1 0;
+    gap: 1px;
   }
 
-  .tooth {
-    flex-shrink: 0;
+  .tooth,
+  .do-cell {
+    flex: 1 1 0;
+    min-width: 0;
   }
 }
 
@@ -392,11 +423,8 @@ body.top-nav-menu-open {
   }
 
   .week-agenda--mobile-week .week-agenda__scroll {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: visible;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
-    scroll-behavior: smooth;
     width: 100%;
     max-width: 100%;
     border: 1px solid var(--color-border);
@@ -404,17 +432,17 @@ body.top-nav-menu-open {
   }
 
   .week-agenda--mobile-week .week-agenda__grid {
-    width: max-content;
-    min-width: unset;
+    width: 100%;
+    min-width: 0;
   }
 
   .week-agenda__mobile-strip {
-    display: flex;
-    gap: 4px;
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 3px;
     margin-bottom: 8px;
-    overflow-x: auto;
-    -webkit-overflow-scrolling: touch;
-    padding-bottom: 4px;
+    overflow: hidden;
+    padding-bottom: 0;
   }
 
   .week-agenda__mobile-day {
@@ -422,14 +450,15 @@ body.top-nav-menu-open {
     flex-direction: column;
     align-items: center;
     gap: 2px;
-    padding: 8px 6px;
+    padding: 6px 2px;
     border: 1px solid var(--color-border);
     border-radius: var(--radius-sm);
     background: var(--color-bg);
     cursor: pointer;
-    min-height: 44px;
-    min-width: 52px;
-    flex: 0 0 auto;
+    min-height: 40px;
+    min-width: 0;
+    width: 100%;
+    flex: none;
     font: inherit;
     color: inherit;
   }
@@ -470,16 +499,16 @@ body.top-nav-menu-open {
   }
 
   .week-agenda--mobile-week .week-agenda__day-header {
-    min-width: 136px;
-    padding: 6px 4px 8px;
+    min-width: 0;
+    padding: 4px 1px 6px;
   }
 
   .week-agenda--mobile-week .week-agenda__day-name {
-    font-size: 11px;
+    font-size: 9px;
   }
 
   .week-agenda--mobile-week .week-agenda__day-number {
-    font-size: 13px;
+    font-size: 11px;
   }
 
   .week-agenda__today-badge {
@@ -641,6 +670,36 @@ body.top-nav-menu-open {
   .settings-section {
     min-width: 0;
     max-width: 100%;
+  }
+}
+
+/* ---------- AI Assistant ---------- */
+
+@media (max-width: 768px) {
+  .ai-assistant-page {
+    min-height: calc(100dvh - 88px);
+  }
+
+  .ai-assistant-chat {
+    min-height: min(52dvh, 420px);
+  }
+
+  .ai-assistant-input {
+    align-items: stretch;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  }
+
+  .ai-assistant-input__field {
+    min-height: 104px;
+    font-size: 16px;
+    line-height: 1.45;
+    padding: 12px;
+  }
+
+  .ai-assistant-input__send {
+    min-height: 48px;
+    height: auto;
+    align-self: flex-end;
   }
 }
 

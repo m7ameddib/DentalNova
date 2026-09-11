@@ -276,6 +276,7 @@
       "searchPlaceholder": "ابحث بالاسم أو الهاتف أو رقم الملف",
       "emptyStateTitle": "لم يتم اختيار مريض",
       "emptyStateHint": "ابحث أعلاه أو اضغط + لإضافة مريض جديد",
+      "recentPatients": "تم البحث عنهم مؤخراً",
       "validation": {
         "fullNameRequired": "الاسم الكامل مطلوب",
         "phoneRequired": "رقم الهاتف مطلوب"

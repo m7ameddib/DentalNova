@@ -202,25 +202,54 @@
 
 @media (max-width: 768px) {
   .do-chart {
-    overflow-x: auto;
+    overflow-x: hidden;
     overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    overscroll-behavior-x: contain;
     max-width: 100%;
   }
   .do-arch {
-    width: max-content;
-    min-width: max-content;
-    max-width: none;
-    justify-content: flex-start;
-    flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
+    max-width: 100%;
+    justify-content: space-between;
   }
   .do-quadrant {
-    flex-shrink: 0;
+    flex: 1 1 0;
+    min-width: 0;
+    gap: 1px;
   }
-  .do-cell,
+  .do-cell {
+    flex: 1 1 0 !important;
+    width: auto !important;
+    min-width: 0 !important;
+    max-width: none !important;
+    margin-inline: 0 !important;
+  }
+  .do-cell__graphic-slot {
+    width: 100%;
+    height: auto !important;
+  }
+  .do-cell__btn {
+    width: 100%;
+  }
   .do-graphic {
-    flex-shrink: 0;
+    width: 100% !important;
+    height: auto !important;
+    max-width: 100%;
+    aspect-ratio: 1 / var(--do-ar, 2);
+  }
+  .do-graphic > svg {
+    width: 100%;
+    height: auto;
+    max-width: 100%;
+  }
+  .do-vline {
+    margin: 2px 3px;
+  }
+  .do-cell__num {
+    font-size: 9px;
+  }
+  .do-cell__tx {
+    font-size: 8px;
   }
 }
 

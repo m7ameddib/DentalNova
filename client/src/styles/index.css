@@ -1394,34 +1394,46 @@ textarea {
 }
 
 /* ---------- Patient Record layout ----------
-   Three zones, left-to-right in DOM/logical order:
-     Patient (+ Files & X-rays + Prescription) | Account (+ Appointments) | Treatment.
-   The first two are compact fixed-width columns; Treatment takes the
-   remaining (largest) width — it is the main working area. Because the
-   columns are declared in plain logical order (no explicit grid-column
-   overrides), the RTL (Arabic) layout mirrors automatically via `dir="rtl"`
-   on <html> — no extra CSS needed per direction. */
+   1) Patient identity full width
+   2) Treatment+History (largest) | Account | Appointments
+   3) Files, Prescriptions, Follow-ups, Lab Cases, Clinical notes */
 
 .patient-record {
-  display: grid;
-  grid-template-columns: 250px 250px minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 12px;
-  align-items: start;
+  align-items: stretch;
 }
 
-.patient-record__patient-col,
-.patient-record__account-col {
+.patient-record__identity {
+  width: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 8px;
 }
 
-.patient-record__treatment-col {
+.patient-record__main-row {
+  display: grid;
+  grid-template-columns: minmax(0, 2.2fr) minmax(220px, 0.9fr) minmax(200px, 0.75fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.patient-record__treatment-col,
+.patient-record__account-col,
+.patient-record__appointments-col {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
+}
+
+.patient-record__secondary-row {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 12px;
+  align-items: start;
 }
 
 .patient-record__medical-alerts {
@@ -1438,8 +1450,7 @@ textarea {
 }
 
 .patient-record__empty-state {
-  grid-column: 2 / -1;
-  min-height: 480px;
+  min-height: 360px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1449,29 +1460,124 @@ textarea {
   padding: 48px 24px;
 }
 
-@media (max-width: 1024px) {
-  .patient-record__empty-state {
-    grid-column: 1 / -1;
-    min-height: 280px;
-  }
+.patient-record--empty {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(220px, 0.75fr);
+  gap: 12px;
+  align-items: stretch;
+  min-height: min(68vh, 620px);
+}
+.patient-record--empty .patient-record__identity,
+.patient-record--empty .section-card--patient {
+  height: 100%;
+  min-height: 0;
+}
+.patient-record--empty .patient-record__empty-state {
+  min-height: 0;
+  height: 100%;
+}
+.patient-record--empty .section-card--patient .section-card__body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.patient-record--empty .recent-patients,
+.patient-record--empty .patient-empty-state {
+  flex: 1;
+}
+
+.recent-patients {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 4px 0 8px;
+}
+.recent-patients__title {
+  margin: 0 0 8px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--color-text-muted);
+}
+.recent-patients__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: auto;
+}
+.recent-patients__list button {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-align: start;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.recent-patients__list button:hover {
+  border-color: var(--color-primary);
+  background: var(--color-primary-soft);
 }
 
 @media (max-width: 1280px) {
-  .patient-record {
-    grid-template-columns: 230px 230px minmax(0, 1fr);
+  .patient-record__main-row {
+    grid-template-columns: minmax(0, 1.8fr) minmax(200px, 0.9fr) minmax(180px, 0.8fr);
+  }
+  .patient-record__secondary-row {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
 
 @media (max-width: 1024px) {
-  .patient-record {
+  .patient-record__main-row,
+  .patient-record__secondary-row {
     grid-template-columns: 1fr;
   }
+  .patient-record--empty {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}
+
+.section-card--patient-wide > .section-card__body,
+.section-card--treatment > .section-card__body {
+  overflow: visible;
 }
 
 .patient-view {
   display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  gap: 16px;
+}
+.patient-view__main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
   gap: 2px;
+}
+.patient-view__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+[dir='rtl'] .patient-view__actions {
+  order: -1;
+  margin-left: 0;
+  margin-right: auto;
 }
 .patient-view__title-row {
   display: flex;
@@ -1489,9 +1595,12 @@ textarea {
 }
 .patient-view__fields {
   margin: 8px 0 0;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px 16px;
+}
+.patient-view__fields > div:last-child {
+  grid-column: 1 / -1;
 }
 .patient-view__phone-row {
   display: flex;
@@ -1526,8 +1635,25 @@ textarea {
   padding: 0;
   margin: 6px 0 0;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+
+.treatment-history-block {
+  margin-top: 14px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+.treatment-history-block__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  font-size: 13.5px;
+  color: var(--color-text);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  margin-bottom: 10px;
 }
 
 /* ---------- Duplicate phone prompt ---------- */

@@ -28,7 +28,7 @@ export class InstallationReadyGuard implements CanActivate {
 
     const req = context.switchToHttp().getRequest<{ path?: string; url?: string }>();
     const path = req.path ?? req.url ?? '';
-    if (path.startsWith('/api/installation') || path.startsWith('/api/health')) {
+    if (path.startsWith('/api/installation') || path.startsWith('/api/health') || path.startsWith('/api/ai-provider')) {
       return true;
     }
 

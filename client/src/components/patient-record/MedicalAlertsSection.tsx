@@ -40,7 +40,7 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
   } = useQuery({
     queryKey: ['disease-catalog'],
     queryFn: () => diseaseCatalogApi.listActive(),
-    staleTime: 0,
+    staleTime: 10 * 60_000,
   });
 
   const activeDiseaseIds = useMemo(

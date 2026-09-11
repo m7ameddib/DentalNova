@@ -18,11 +18,13 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { useUiStore } from '@/store/ui.store';
 import { usePrintStore } from '@/store/print.store';
+import { useAuthStore } from '@/store/auth.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { openWhatsApp } from '@/utils/whatsapp';
 import { calculateAge, formatDateDisplay } from '@/utils/date';
 import { getErrorMessage } from '@/utils/errors';
 import { getAreaTextForEdit, getPatientAreaDisplay, resolveAreaFields } from '@/utils/patientArea';
+import { loadRecentPatients, rememberRecentPatient } from '@/utils/recentPatients';
 import { Patient, PatientDetail } from '@/types/domain';
 
 interface DuplicateInfo {
@@ -42,6 +44,7 @@ export function PatientSection({
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { language } = useUiStore();
+  const user = useAuthStore((s) => s.user);
   const print = usePrintStore((s) => s.print);
   const canCreate = usePermission(PERMISSIONS.PATIENTS_CREATE);
   const canEdit = usePermission(PERMISSIONS.PATIENTS_EDIT);
@@ -69,11 +72,15 @@ export function PatientSection({
   const { data: areas = [] } = useQuery({
     queryKey: ['areas'],
     queryFn: () => areasApi.listActive(),
+    enabled: mode !== 'empty',
+    staleTime: 10 * 60_000,
   });
 
   const { data: guarantors = [] } = useQuery({
     queryKey: ['guarantors'],
     queryFn: () => guarantorsApi.listActive(),
+    enabled: mode !== 'empty',
+    staleTime: 10 * 60_000,
   });
 
   const createMutation = useMutation({
@@ -293,6 +300,24 @@ export function PatientSection({
   }
 
   if (mode === 'empty') {
+    const recent = user?.id ? loadRecentPatients(user.id, user.clinicId) : [];
+
+    function openRecent(entry: (typeof recent)[number]) {
+      if (user?.id) {
+        rememberRecentPatient(user.id, user.clinicId, entry);
+      }
+      const cached = queryClient.getQueryData(['patient', entry.id]);
+      if (!cached) {
+        queryClient.setQueryData(['patient', entry.id], { ...entry, familyMembers: [] });
+      }
+      void queryClient.prefetchQuery({
+        queryKey: ['patient', entry.id],
+        queryFn: () => patientsApi.getById(entry.id),
+        staleTime: 30_000,
+      });
+      navigate(`/patients/${entry.id}`);
+    }
+
     return (
       <SectionCard
         title={t('patientRecord.sections.patient')}
@@ -304,11 +329,29 @@ export function PatientSection({
         <div className="patient-search-row">
           <PatientSearchBox />
         </div>
-        <div className="patient-empty-state">
-          <UserPlus size={28} className="patient-empty-state__icon" />
-          <p>{t('patientRecord.patient.emptyStateTitle')}</p>
-          <span className="muted">{t('patientRecord.patient.emptyStateHint')}</span>
-        </div>
+        {recent.length > 0 ? (
+          <div className="recent-patients">
+            <p className="recent-patients__title">{t('patientRecord.patient.recentPatients')}</p>
+            <ul className="recent-patients__list">
+              {recent.map((p) => (
+                <li key={p.id}>
+                  <button type="button" onClick={() => openRecent(p)}>
+                    <span className="patient-search-box__name">{p.fullName}</span>
+                    <span className="muted">
+                      {p.fileNumber} · {p.phone}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : (
+          <div className="patient-empty-state">
+            <UserPlus size={28} className="patient-empty-state__icon" />
+            <p>{t('patientRecord.patient.emptyStateTitle')}</p>
+            <span className="muted">{t('patientRecord.patient.emptyStateHint')}</span>
+          </div>
+        )}
       </SectionCard>
     );
   }
@@ -503,51 +546,18 @@ export function PatientSection({
       <SectionCard
         title={t('patientRecord.sections.patient')}
         icon={<User size={16} />}
-        headerExtra={
-          canEdit || canDelete ? (
-            <div className="section-card__header-actions">
-              {canEdit && (
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--small"
-                  title={t('patientRecord.patient.editTitle') ?? ''}
-                  onClick={startEdit}
-                >
-                  <Pencil size={13} />
-                </button>
-              )}
-              {canDelete && (
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--small icon-btn--danger"
-                  title={t('patientRecord.patient.deleteTitle') ?? ''}
-                  onClick={openDeleteConfirm}
-                >
-                  <Trash2 size={13} />
-                </button>
-              )}
-            </div>
-          ) : undefined
-        }
         onAdd={canCreate ? startAdd : undefined}
         addTitle={t('patients.newPatient') ?? ''}
-        className="section-card--patient"
+        className="section-card--patient section-card--patient-wide"
       >
         <div className="patient-search-row">
           <PatientSearchBox />
         </div>
 
         <div className="patient-view">
+          <div className="patient-view__main">
           <div className="patient-view__title-row">
             <h2 className="patient-view__name">{p.fullName}</h2>
-            <button
-              type="button"
-              className="icon-btn icon-btn--small"
-              title={t('patientRecordPrint.printAction') ?? ''}
-              onClick={handlePrintPatientFile}
-            >
-              <Printer size={13} />
-            </button>
           </div>
           <span className="patient-view__file-number">
             {t('patientRecord.patient.fileNumber')}: {p.fileNumber}
@@ -647,6 +657,38 @@ export function PatientSection({
               </ul>
             </div>
           )}
+          </div>
+
+          <div className="patient-view__actions">
+            {canEdit && (
+              <button
+                type="button"
+                className="icon-btn icon-btn--small"
+                title={t('patientRecord.patient.editTitle') ?? ''}
+                onClick={startEdit}
+              >
+                <Pencil size={13} />
+              </button>
+            )}
+            {canDelete && (
+              <button
+                type="button"
+                className="icon-btn icon-btn--small icon-btn--danger"
+                title={t('patientRecord.patient.deleteTitle') ?? ''}
+                onClick={openDeleteConfirm}
+              >
+                <Trash2 size={13} />
+              </button>
+            )}
+            <button
+              type="button"
+              className="icon-btn icon-btn--small"
+              title={t('patientRecordPrint.printAction') ?? ''}
+              onClick={handlePrintPatientFile}
+            >
+              <Printer size={13} />
+            </button>
+          </div>
         </div>
       </SectionCard>
 

@@ -93,6 +93,8 @@ export class SubscriptionActiveGuard implements CanActivate {
       '/auth/verify-reset-otp',
       '/api/auth/reset-password',
       '/auth/reset-password',
+      '/api/ai-provider',
+      '/ai-provider',
     ];
     return prefixes.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
   }

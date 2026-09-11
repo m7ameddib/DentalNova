@@ -45,16 +45,19 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
   const { data: summary } = useQuery({
     queryKey: ['account-summary', patientId],
     queryFn: () => patientsApi.accountSummary(patientId),
+    staleTime: 30_000,
   });
 
   const { data: methods = [] } = useQuery({
     queryKey: ['payment-methods'],
     queryFn: () => paymentMethodsApi.listActive(),
+    staleTime: 10 * 60_000,
   });
 
   const { data: clinicSettings } = useQuery({
     queryKey: ['clinic-settings'],
     queryFn: () => settingsApi.getClinic(),
+    staleTime: 10 * 60_000,
   });
 
   useEffect(() => {

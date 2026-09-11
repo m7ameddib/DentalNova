@@ -280,6 +280,7 @@
       "searchPlaceholder": "Search name, phone or file #",
       "emptyStateTitle": "No patient selected",
       "emptyStateHint": "Search above or click + to add a new patient",
+      "recentPatients": "Recently searched",
       "validation": {
         "fullNameRequired": "Full name is required",
         "phoneRequired": "Phone number is required"

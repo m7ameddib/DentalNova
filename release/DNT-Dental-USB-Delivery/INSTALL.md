@@ -22,16 +22,18 @@
    - Paste license → Complete first setup (clinic info + admin account)
 6. On later runs, log in with your clinic user account
 
-### AI Assistant (Gemini)
+### AI Assistant
 
-After installation, edit `C:\Program Files\DibNova\DNTDental\server\.env` (created from `.env.example` on new install):
+Offline DentalNova uses the Dental Nova Online AI service (Gemini 3.5 Lite). Clinic data stays on this computer; only chat messages and images are sent.
+
+No local Gemini API key is required. Optional override in `server/.env`:
 
 ```
-GEMINI_API_KEY=your-key-here
-GEMINI_MODEL=gemini-3.6-flash
+AI_SERVICE_URL=https://dentalnova.dibnova.com
+AI_SERVICE_SECRET=DentalNova.AI.Proxy.v1
 ```
 
-Restart DentalNova after saving. Clinic data stays local; only chat messages/images are sent to Gemini.
+Leave `AI_SERVICE_URL` empty to disable the assistant.
 
 ### Option 2 — Portable folder + install script
 

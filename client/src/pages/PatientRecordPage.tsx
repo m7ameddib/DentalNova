@@ -21,45 +21,55 @@ export function PatientRecordPage() {
   const isNew = id === 'new';
   const patientId = id && !isNew ? Number(id) : null;
 
-  const { data: patient, isLoading } = useQuery({
+  const { data: patient, isPending, isError } = useQuery({
     queryKey: ['patient', patientId],
     queryFn: () => patientsApi.getById(patientId!),
     enabled: !isNew && !!patientId,
+    staleTime: 30_000,
   });
 
-  if (!isNew && patientId && isLoading) {
+  if (!isNew && patientId && isPending && !patient) {
     return <div className="page-loading">{t('common.loading')}</div>;
   }
 
-  if (!isNew && patientId && !isLoading && !patient) {
+  if (!isNew && patientId && !patient && (isError || !isPending)) {
     return <div className="page-loading">{t('patientRecord.notFound')}</div>;
   }
 
+  const emptyWorkspace = !patient && !isNew;
+
   return (
-    <div className="patient-record" key={id ?? 'empty'}>
+    <div className={`patient-record${emptyWorkspace ? ' patient-record--empty' : ''}`} key={id ?? 'empty'}>
       {patient ? <MedicalAlertsBanner patientId={patient.id} /> : null}
-      <div className="patient-record__patient-col">
+
+      <div className="patient-record__identity">
         <PatientSection patient={patient ?? null} forceAdd={isNew} />
         {patient ? (
           <div className="patient-record__medical-alerts">
             <MedicalAlertsSection patientId={patient.id} />
           </div>
         ) : null}
-        {patient ? <FilesSection patientId={patient.id} /> : null}
-        {patient ? <PrescriptionSection patientId={patient.id} patient={patient} /> : null}
       </div>
 
       {patient ? (
         <>
-          <div className="patient-record__account-col">
-            <AccountSection patientId={patient.id} patient={patient} />
-            <AppointmentsSection patientId={patient.id} />
-            <FollowUpsSection patientId={patient.id} />
-            <LabCasesSection patientId={patient.id} />
+          <div className="patient-record__main-row">
+            <div className="patient-record__treatment-col">
+              <TreatmentSection patientId={patient.id} patient={patient} />
+            </div>
+            <div className="patient-record__account-col">
+              <AccountSection patientId={patient.id} patient={patient} />
+            </div>
+            <div className="patient-record__appointments-col">
+              <AppointmentsSection patientId={patient.id} />
+            </div>
           </div>
 
-          <div className="patient-record__treatment-col">
-            <TreatmentSection patientId={patient.id} patient={patient} />
+          <div className="patient-record__secondary-row">
+            <FilesSection patientId={patient.id} />
+            <PrescriptionSection patientId={patient.id} patient={patient} />
+            <FollowUpsSection patientId={patient.id} />
+            <LabCasesSection patientId={patient.id} />
             <ClinicalVisitNotesSection patientId={patient.id} />
           </div>
         </>

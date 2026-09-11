@@ -52,11 +52,14 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
   const { data: treatments = [] } = useQuery({
     queryKey: ['patient-treatments', patientId],
     queryFn: () => patientsApi.treatments(patientId),
+    staleTime: 30_000,
   });
 
   const { data: treatmentTypes = [] } = useQuery({
     queryKey: ['treatment-types'],
     queryFn: () => treatmentsApi.listTypes(),
+    enabled: adding || !!editingTreatment || showTreatmentPlan,
+    staleTime: 10 * 60_000,
   });
 
   const displayRows = useMemo(() => expandTreatmentDisplayRows(treatments), [treatments]);
@@ -424,13 +427,12 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
             </div>
           </div>
         )}
-      </SectionCard>
 
-      <SectionCard
-        title={t('patientRecord.treatment.history')}
-        icon={<History size={16} />}
-        className="section-card--treatment-history"
-      >
+        <div className="treatment-history-block">
+          <div className="treatment-history-block__title">
+            <History size={16} />
+            <span>{t('patientRecord.treatment.history')}</span>
+          </div>
         <div className="treatment-history">
           {treatments.length === 0 ? (
             <p className="muted">{t('patientRecord.treatment.noHistory')}</p>
@@ -548,6 +550,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
           )}
           {deleteError && <div className="form-error-banner">{deleteError}</div>}
           {statusError && <div className="form-error-banner">{statusError}</div>}
+        </div>
         </div>
       </SectionCard>
 

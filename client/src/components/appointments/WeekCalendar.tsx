@@ -9,7 +9,6 @@ import {
   CALENDAR_MIN_CARD_HEIGHT_PX,
   CALENDAR_MOBILE_MIN_CARD_HEIGHT_PX,
   CALENDAR_MOBILE_BREAKPOINT,
-  CALENDAR_MOBILE_DAY_COLUMN_PX,
   CALENDAR_MOBILE_TIME_COLUMN_PX,
   CALENDAR_TIME_COLUMN_PX,
   DEFAULT_DURATION,
@@ -242,9 +241,7 @@ export function WeekCalendar({
   const isMobileWeek = useMediaQuery(CALENDAR_MOBILE_BREAKPOINT);
   const minCardHeightPx = isMobileWeek ? CALENDAR_MOBILE_MIN_CARD_HEIGHT_PX : CALENDAR_MIN_CARD_HEIGHT_PX;
   const timeColumnPx = isMobileWeek ? CALENDAR_MOBILE_TIME_COLUMN_PX : CALENDAR_TIME_COLUMN_PX;
-  const dayColumnTemplate = isMobileWeek
-    ? `repeat(7, ${CALENDAR_MOBILE_DAY_COLUMN_PX}px)`
-    : 'repeat(7, minmax(0, 1fr))';
+  const dayColumnTemplate = 'repeat(7, minmax(0, 1fr))';
   const [drag, setDrag] = useState<ApptDragState | null>(null);
   const gridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -275,8 +272,9 @@ export function WeekCalendar({
       if (!scrollEl || !isMobileWeek) return;
       const idx = dayColumns.findIndex((d) => d.iso === iso);
       if (idx < 0) return;
-      const offset = timeColumnPx + idx * CALENDAR_MOBILE_DAY_COLUMN_PX;
-      const centered = offset - (scrollEl.clientWidth - CALENDAR_MOBILE_DAY_COLUMN_PX) / 2 + timeColumnPx / 2;
+      const dayWidth = Math.max(1, (scrollEl.clientWidth - timeColumnPx) / 7);
+      const offset = timeColumnPx + idx * dayWidth;
+      const centered = offset - (scrollEl.clientWidth - dayWidth) / 2 + timeColumnPx / 2;
       scrollEl.scrollTo({ left: Math.max(0, centered), behavior });
     },
     [dayColumns, isMobileWeek, timeColumnPx],

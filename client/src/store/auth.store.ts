@@ -60,12 +60,16 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   user: loadUser(),
   isAuthenticated: !!loadToken(),
   setSession: (token, user, remember = true) => {
-    const prevUserId = get().user?.id;
-    if (prevUserId != null && prevUserId !== user.id) {
-      clearAiAssistantSession(prevUserId);
+    const prev = get().user;
+    const switchedUser = prev != null && prev.id !== user.id;
+    const switchedClinic = prev != null && (prev.clinicId ?? '') !== (user.clinicId ?? '');
+    if (switchedUser) {
+      clearAiAssistantSession(prev.id);
+    }
+    if (switchedUser || switchedClinic) {
+      queryClient.clear();
     }
     clearStoredSession();
-    queryClient.clear();
     const storage = remember ? localStorage : sessionStorage;
     storage.setItem(TOKEN_KEY, token);
     storage.setItem(USER_KEY, JSON.stringify(user));

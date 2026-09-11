@@ -42,7 +42,11 @@ export function ToothGraphic({ toothNumber, selected = false, printLayout = fals
     <div
       ref={hostRef}
       className={`do-graphic do-graphic--${kind}${selected ? ' do-graphic--selected' : ''}`}
-      style={{ width: cellWidth, height }}
+      style={{
+        width: cellWidth,
+        height,
+        ['--do-ar' as string]: String(aspectRatio),
+      }}
       aria-hidden="true"
     />
   );
