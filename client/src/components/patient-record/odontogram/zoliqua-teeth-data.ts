@@ -51,7 +51,7 @@ export const ZOLIQUA_COL_PX: Record<ZoliquaTemplateId, number> = {
 };
 
 /** Uniform display scale — preserves per-tooth aspect ratio from templates. */
-export const ZOLIQUA_WIDTH_SCALE = 0.86;
+export const ZOLIQUA_WIDTH_SCALE = 0.78;
 
 /** A5 print — fits 32 teeth across ~130 mm printable width. */
 export const ZOLIQUA_PRINT_WIDTH_SCALE = 0.48;

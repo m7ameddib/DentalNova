@@ -1238,9 +1238,16 @@ textarea {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
   padding: 10px 14px;
   border-bottom: 1px solid var(--color-border);
   background: #fafbfc;
+}
+.section-card__header-extra {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
 }
 .section-card__title {
   display: flex;
@@ -1291,7 +1298,18 @@ textarea {
   overflow-y: auto;
 }
 
-/* ---------- Compact patient search (full-width row below the Patient header) ---------- */
+/* ---------- Compact patient search (in the Patient section header) ---------- */
+
+.section-card--patient {
+  overflow: visible;
+}
+.section-card--patient > .section-card__header {
+  overflow: visible;
+}
+.section-card--patient .section-card__header-extra .patient-search-box {
+  max-width: none;
+  width: 100%;
+}
 
 .patient-search-row {
   margin-bottom: 6px;

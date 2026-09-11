@@ -29,7 +29,7 @@ export function SectionCard({
           {icon}
           <span>{title}</span>
         </div>
-        {headerExtra}
+        {headerExtra ? <div className="section-card__header-extra">{headerExtra}</div> : null}
         {onAdd && (
           <button className="section-card__add-btn" onClick={onAdd} title={addTitle} type="button">
             <Plus size={15} />

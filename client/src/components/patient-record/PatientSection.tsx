@@ -325,10 +325,8 @@ export function PatientSection({
         onAdd={canCreate ? startAdd : undefined}
         addTitle={t('patients.newPatient') ?? ''}
         className="section-card--patient"
+        headerExtra={<PatientSearchBox />}
       >
-        <div className="patient-search-row">
-          <PatientSearchBox />
-        </div>
         {recent.length > 0 ? (
           <div className="recent-patients">
             <p className="recent-patients__title">{t('patientRecord.patient.recentPatients')}</p>
@@ -368,10 +366,8 @@ export function PatientSection({
         }
         icon={<User size={16} />}
         className="section-card--patient"
+        headerExtra={<PatientSearchBox />}
       >
-        <div className="patient-search-row">
-          <PatientSearchBox />
-        </div>
         {duplicate ? (
           <div className="duplicate-phone-prompt">
             <h4>{t('patientRecord.patient.duplicateTitle')}</h4>
@@ -549,11 +545,8 @@ export function PatientSection({
         onAdd={canCreate ? startAdd : undefined}
         addTitle={t('patients.newPatient') ?? ''}
         className="section-card--patient section-card--patient-wide"
+        headerExtra={<PatientSearchBox />}
       >
-        <div className="patient-search-row">
-          <PatientSearchBox />
-        </div>
-
         <div className="patient-view">
           <div className="patient-view__main">
           <div className="patient-view__title-row">
