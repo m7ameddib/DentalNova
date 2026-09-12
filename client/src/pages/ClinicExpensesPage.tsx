@@ -9,6 +9,7 @@ import { Modal } from '@/components/common/Modal';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { formatMoney, centsToAmount } from '@/utils/money';
 import { getErrorMessage } from '@/utils/errors';
 import { ClinicExpense, ExpenseCategoryEntity } from '@/types/domain';
@@ -174,7 +175,7 @@ export function ClinicExpensesPage() {
     <>
       <label className="form-field">
         <span className="form-field__label">{t('common.date')}</span>
-        <input type="date" value={expenseDate} onChange={(e) => setExpenseDate(e.target.value)} />
+        <DateField value={expenseDate} onChange={setExpenseDate} />
       </label>
       <label className="form-field">
         <span className="form-field__label">{t('reports.expenses.amount')}</span>
@@ -256,9 +257,9 @@ export function ClinicExpensesPage() {
           </button>
           {period === 'custom' && (
             <span className="reports-custom-range">
-              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+              <DateField value={customFrom} onChange={setCustomFrom} />
               <span className="muted">—</span>
-              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+              <DateField value={customTo} onChange={setCustomTo} />
             </span>
           )}
         </div>

@@ -351,6 +351,7 @@
       "quadrantLowerLeftShort": "LL",
       "archUpper": "علوي",
       "archLower": "سفلي",
+      "print": "طباعة العلاجات",
       "addTitle": "إضافة علاج",
       "selectType": "1. اختر نوع العلاج",
       "selectTeeth": "2. اختر السن / الأسنان",
@@ -423,6 +424,7 @@
     "medicalAlerts": {
       "title": "تنبيهات طبية",
       "add": "إضافة تنبيه",
+      "chooseType": "اختر نوع التنبيه",
       "type": "نوع التنبيه",
       "customLabel": "وصف مخصص",
       "deactivate": "أرشفة التنبيه",
@@ -432,6 +434,7 @@
       "catalogEmpty": "لا توجد أمراض في الإعدادات. أضفها من الإعدادات ← الأمراض / التنبيهات الطبية.",
       "catalogLoadError": "تعذّر تحميل قائمة الأمراض من الإعدادات.",
       "validation": {
+        "typeRequired": "اختر نوع التنبيه",
         "labelRequired": "أدخل وصفاً للتنبيه المخصص",
         "diseaseRequired": "اختر مرضاً من القائمة"
       },
@@ -510,7 +513,12 @@
       "viewInvoice": "تفاصيل الفاتورة",
       "hideInvoice": "إخفاء الفاتورة",
       "deleteConfirm": "هل تريد حذف هذه الدفعة؟",
+      "editPayment": "تعديل الدفعة",
+      "editDiscount": "تعديل الحسم",
       "voidPayment": "إبطال الدفعة",
+      "voidPaymentConfirm": "إبطال هذه الدفعة؟ سيبقى السجل في التاريخ ويُعاد احتساب المجاميع.",
+      "voidDiscountConfirm": "إلغاء هذا الحسم؟ سيبقى السجل في التاريخ ويُعاد احتساب المجاميع.",
+      "voidReason": "السبب",
       "voidConfirm": "تأكيد الإبطال",
       "voidReasonPlaceholder": "السبب (مطلوب)",
       "voidReasonRequired": "أدخل سبباً قصيراً للإبطال",
@@ -606,7 +614,9 @@
     "accountDiscount": "حسم",
     "paid": "المدفوع",
     "remaining": "المتبقي",
-    "thankYou": "شكراً لزيارتكم"
+    "thankYou": "شكراً لزيارتكم",
+    "receivedFromPatient": "استلمت العيادة دفعة بقيمة {{amount}} من {{patient}} عبر {{method}}.",
+    "issuedByClinic": "هذا إيصال صادر عن عيادة الأسنان."
   },
   "statement": {
     "title": "كشف حساب",
@@ -714,7 +724,10 @@
     "instructions": "التعليمات",
     "signature": "توقيع الطبيب",
     "stamp": "الختم",
-    "doctorTitleDefault": "جراح في طب الأسنان"
+    "doctorTitleDefault": "جراح في طب الأسنان",
+    "doctorTitleDefaultAr": "جراح في طب الأسنان",
+    "license": "الترخيص",
+    "licenseAr": "رقم النقابة"
   },
   "printLayout": {
     "poweredBy": "Powered by DibNova"
@@ -1058,6 +1071,8 @@
       "pricesHint": "حدد الأسعار المتفق عليها لكل نوع علاج.",
       "defaultPrice": "سعر العيادة",
       "guarantorPrice": "سعر الضامن",
+      "savePrices": "حفظ الأسعار",
+      "deleteConfirm": "حذف هذا الضامن؟ لن يبقى مرتبطاً بالمرضى.",
       "validation": {
         "required": "أدخل اسم الضامن"
       }
@@ -1083,6 +1098,7 @@
       "workType": "نوع العمل",
       "serviceCost": "التكلفة الافتراضية",
       "costsHint": "حدد تكاليف المختبر الافتراضية لكل نوع عمل.",
+      "saveCosts": "حفظ التكاليف",
       "deleteConfirm": "حذف المختبر \"{{name}}\"؟ لن يظهر بعد ذلك في قائمة المختبرات.",
       "validation": {
         "required": "أدخل اسم المختبر",
@@ -1355,6 +1371,12 @@
   "labCases": {
     "title": "حالات المختبر",
     "addCase": "إضافة حالة مختبر",
+    "cancelConfirmTitle": "إلغاء حالة المختبر",
+    "cancelConfirmBody": "إلغاء حالة المختبر هذه؟ سيبقى السجل في التاريخ.",
+    "print": {
+      "title": "طلب مختبر",
+      "details": "تفاصيل المختبر"
+    },
     "editCase": "تعديل حالة المختبر",
     "patient": "المريض",
     "labName": "المختبر",

@@ -756,6 +756,52 @@ body.top-nav-menu-open {
   }
 }
 
+@media (max-width: 768px) {
+  .medical-alerts-section {
+    margin-top: 6px;
+    padding-top: 6px;
+  }
+
+  .medical-alerts-section__title,
+  .medical-alerts-list,
+  .medical-alerts-list__item {
+    font-size: 11px;
+    line-height: 1.25;
+  }
+
+  .medical-alerts-section__header {
+    margin-bottom: 4px;
+  }
+
+  .medical-alerts-list {
+    gap: 3px;
+  }
+
+  .appointment-card,
+  .week-agenda--mobile-week .appointment-card {
+    padding: 1px 3px;
+    min-height: 11px;
+  }
+
+  .appointment-card__time,
+  .week-agenda--mobile-week .appointment-card__time {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+
+  .appointment-card__patient,
+  .week-agenda--mobile-week .appointment-card__patient,
+  .appointment-card__reason {
+    font-size: 8px;
+    line-height: 1.15;
+  }
+
+  .appointment-card__status,
+  .week-agenda--mobile-week .appointment-card__status {
+    font-size: 7px;
+  }
+}
+
 /* ---------- Standalone PWA safe areas ---------- */
 
 @supports (padding: env(safe-area-inset-top)) {

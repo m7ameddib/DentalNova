@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ClipboardList, Eye, Printer, Radiation, Trash2 } from 'lucide-react';
+import { ClipboardList, Eye, Pencil, Printer, Radiation, Trash2 } from 'lucide-react';
 import { SectionCard } from '@/components/common/SectionCard';
 import { Modal } from '@/components/common/Modal';
 import { PrescriptionPrintable, XrayPrescriptionPrintable } from './PrintableTemplates';
@@ -112,6 +112,16 @@ export function PrescriptionSection({ patientId, patient }: { patientId: number;
                   >
                     <Eye size={14} />
                   </button>
+                  {type === 'XRAY' && (
+                    <button
+                      type="button"
+                      className="icon-btn"
+                      title={t('common.edit') ?? ''}
+                      onClick={() => navigate(`/patients/${patientId}/prescription/xray/${rx.id}`)}
+                    >
+                      <Pencil size={14} />
+                    </button>
+                  )}
                   <button
                     type="button"
                     className="icon-btn"

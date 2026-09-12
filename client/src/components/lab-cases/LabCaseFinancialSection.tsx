@@ -5,7 +5,9 @@ import { labCasesApi } from '@/api/lab-cases.api';
 import { paymentMethodsApi } from '@/api/settings.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
-import { formatMoney } from '@/utils/money';
+import { centsToAmount, formatMoney } from '@/utils/money';
+import { DateField } from '@/components/common/DateField';
+import { Modal } from '@/components/common/Modal';
 import { getErrorMessage } from '@/utils/errors';
 import { todayIso } from '@/utils/date';
 import { LabCaseWithDetails } from '@/types/domain';
@@ -21,6 +23,11 @@ export function LabCaseFinancialSection({ labCase }: { labCase: LabCaseWithDetai
   const [payDate, setPayDate] = useState(todayIso());
   const [note, setNote] = useState('');
   const [voidingId, setVoidingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editAmount, setEditAmount] = useState('');
+  const [editMethod, setEditMethod] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editNote, setEditNote] = useState('');
   const [voidReason, setVoidReason] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -60,6 +67,23 @@ export function LabCaseFinancialSection({ labCase }: { labCase: LabCaseWithDetai
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
+  const updateMutation = useMutation({
+    mutationFn: () =>
+      labCasesApi.updatePayment(labCase.id, editingId!, {
+        amount: Number(editAmount),
+        paymentMethod: editMethod,
+        paymentDate: editDate,
+        note: editNote.trim() || undefined,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['lab-case', labCase.id] });
+      queryClient.invalidateQueries({ queryKey: ['lab-case-payments', labCase.id] });
+      queryClient.invalidateQueries({ queryKey: ['lab-cases'] });
+      setEditingId(null);
+    },
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+  });
+
   const voidMutation = useMutation({
     mutationFn: ({ paymentId, reason }: { paymentId: number; reason: string }) =>
       labCasesApi.voidPayment(labCase.id, paymentId, reason),
@@ -95,7 +119,7 @@ export function LabCaseFinancialSection({ labCase }: { labCase: LabCaseWithDetai
               <th>{t('patientRecord.account.amount')}</th>
               <th>{t('patientRecord.account.method')}</th>
               <th>{t('common.note')}</th>
-              {canVoid && <th>{t('common.actions')}</th>}
+              <th>{t('common.actions')}</th>
             </tr>
           </thead>
           <tbody>
@@ -105,19 +129,28 @@ export function LabCaseFinancialSection({ labCase }: { labCase: LabCaseWithDetai
                 <td>{formatMoney(p.amountCents)}</td>
                 <td>{p.paymentMethod}</td>
                 <td className="muted">{p.status === 'VOID' ? p.voidReason : p.note || '—'}</td>
-                {canVoid && p.status !== 'VOID' && (
-                  <td>
-                    {voidingId === p.id ? (
-                      <span className="payment-void-form">
-                        <input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} placeholder={t('labCases.financial.voidReason') ?? ''} />
-                        <button type="button" className="link-btn link-btn--danger" onClick={() => voidMutation.mutate({ paymentId: p.id, reason: voidReason })}>{t('common.confirm')}</button>
-                        <button type="button" className="link-btn" onClick={() => setVoidingId(null)}>{t('common.cancel')}</button>
-                      </span>
-                    ) : (
-                      <button type="button" className="link-btn link-btn--danger" onClick={() => setVoidingId(p.id)}>{t('labCases.financial.voidPayment')}</button>
-                    )}
-                  </td>
-                )}
+                <td>
+                  {p.status !== 'VOID' && canPay && (
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={() => {
+                        setEditingId(p.id);
+                        setEditAmount(String(centsToAmount(p.amountCents)));
+                        setEditMethod(p.paymentMethod);
+                        setEditDate(p.paymentDate);
+                        setEditNote(p.note ?? '');
+                      }}
+                    >
+                      {t('common.edit')}
+                    </button>
+                  )}
+                  {canVoid && p.status !== 'VOID' && (
+                    <button type="button" className="link-btn link-btn--danger" onClick={() => setVoidingId(p.id)}>
+                      {t('labCases.financial.voidPayment')}
+                    </button>
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
@@ -140,7 +173,7 @@ export function LabCaseFinancialSection({ labCase }: { labCase: LabCaseWithDetai
           </label>
           <label className="form-field">
             <span className="form-field__label">{t('common.date')}</span>
-            <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+            <DateField value={payDate} onChange={setPayDate} />
           </label>
           <label className="form-field">
             <span className="form-field__label">{t('common.note')}</span>
@@ -152,6 +185,56 @@ export function LabCaseFinancialSection({ labCase }: { labCase: LabCaseWithDetai
         </div>
       )}
       {error && <div className="form-error-banner">{error}</div>}
+
+      {editingId != null && (
+        <Modal title={t('labCases.accounts.editPayment')} onClose={() => setEditingId(null)}>
+          <label className="form-field">
+            <span className="form-field__label">{t('patientRecord.account.amount')}</span>
+            <input type="number" min="0.01" step="0.01" value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+          </label>
+          <label className="form-field">
+            <span className="form-field__label">{t('patientRecord.account.method')}</span>
+            <select value={editMethod} onChange={(e) => setEditMethod(e.target.value)}>
+              {paymentMethods.map((m) => (
+                <option key={m.id} value={m.code}>{m.label}</option>
+              ))}
+            </select>
+          </label>
+          <label className="form-field">
+            <span className="form-field__label">{t('common.date')}</span>
+            <DateField value={editDate} onChange={setEditDate} />
+          </label>
+          <label className="form-field">
+            <span className="form-field__label">{t('common.note')}</span>
+            <input value={editNote} onChange={(e) => setEditNote(e.target.value)} />
+          </label>
+          <div className="form-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setEditingId(null)}>{t('common.cancel')}</button>
+            <button type="button" className="btn btn--primary" onClick={() => updateMutation.mutate()} disabled={updateMutation.isPending}>{t('common.save')}</button>
+          </div>
+        </Modal>
+      )}
+
+      {voidingId != null && (
+        <Modal title={t('labCases.financial.voidPayment')} onClose={() => setVoidingId(null)}>
+          <p>{t('labCases.accounts.voidConfirm')}</p>
+          <label className="form-field">
+            <span className="form-field__label">{t('labCases.financial.voidReason')}</span>
+            <input value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+          </label>
+          <div className="form-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setVoidingId(null)}>{t('common.cancel')}</button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => voidMutation.mutate({ paymentId: voidingId, reason: voidReason })}
+              disabled={voidReason.trim().length < 3 || voidMutation.isPending}
+            >
+              {t('common.confirm')}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

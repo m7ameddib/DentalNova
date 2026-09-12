@@ -74,6 +74,32 @@ export class PrescriptionsRepository {
     return this.findById(prescriptionId)!;
   }
 
+  replaceItems(id: number, items: CreatePrescriptionItemInput[]): PrescriptionWithItems | undefined {
+    const existing = this.findById(id);
+    if (!existing) return undefined;
+    const insertItem = this.db.connection.prepare(
+      `INSERT INTO prescription_items
+        (prescription_id, medicine_name, dose, frequency, duration, instructions, sort_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    );
+    const tx = this.db.connection.transaction(() => {
+      this.db.connection.prepare('DELETE FROM prescription_items WHERE prescription_id = ?').run(id);
+      items.forEach((item, index) => {
+        insertItem.run(
+          id,
+          item.medicineName,
+          item.dose ?? null,
+          item.frequency ?? null,
+          item.duration ?? null,
+          item.instructions ?? null,
+          index,
+        );
+      });
+    });
+    tx();
+    return this.findById(id);
+  }
+
   delete(id: number): boolean {
     const result = this.db.connection.prepare('DELETE FROM prescriptions WHERE id = ?').run(id);
     return result.changes > 0;

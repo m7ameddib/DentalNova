@@ -147,7 +147,7 @@ export class PatientsRepository {
   findFamilyMembers(familyGroupId: number, excludePatientId?: number): Patient[] {
     const rows = this.db.connection
       .prepare(
-        `SELECT * FROM patients WHERE family_group_id = ? AND id != ? ORDER BY created_at`,
+        `SELECT * FROM patients WHERE family_group_id = ? AND id != ? AND archived_at IS NULL ORDER BY created_at`,
       )
       .all(familyGroupId, excludePatientId ?? -1) as Record<string, unknown>[];
     return toCamelList<Patient>(rows);

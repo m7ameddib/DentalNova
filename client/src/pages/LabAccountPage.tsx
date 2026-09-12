@@ -7,12 +7,15 @@ import { labCasesApi } from '@/api/lab-cases.api';
 import { paymentMethodsApi } from '@/api/settings.api';
 import { Modal } from '@/components/common/Modal';
 import { LabStatementPrintable } from '@/components/lab-accounts/LabStatementPrintable';
+import { LabOrderPrintable } from '@/components/patient-record/PrintableTemplates';
+import { LabCaseWithDetails } from '@/types/domain';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { todayIso, formatDateDisplay } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { formatMoney } from '@/utils/money';
 import { getErrorMessage } from '@/utils/errors';
 import type { LabAccountPaymentRow } from '@/types/domain';
@@ -47,6 +50,7 @@ export function LabAccountPage() {
 
   const [voiding, setVoiding] = useState<LabAccountPaymentRow | null>(null);
   const [voidReason, setVoidReason] = useState('');
+  const [cancellingOrder, setCancellingOrder] = useState<LabCaseWithDetails | null>(null);
 
   const { data: accounts = [] } = useQuery({
     queryKey: ['lab-accounts'],
@@ -122,6 +126,14 @@ export function LabAccountPage() {
       setError(null);
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+  });
+
+  const cancelOrderMutation = useMutation({
+    mutationFn: (row: LabCaseWithDetails) => labCasesApi.update(row.id, { status: 'CANCELLED' }),
+    onSuccess: () => {
+      invalidate();
+      setCancellingOrder(null);
+    },
   });
 
   const voidMutation = useMutation({
@@ -265,11 +277,11 @@ export function LabAccountPage() {
       <div className="lab-account-filters inline-form">
         <label className="form-field">
           <span className="form-field__label">{t('labCases.accounts.dateFrom')}</span>
-          <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
+          <DateField value={fromDate} onChange={setFromDate} />
         </label>
         <label className="form-field">
           <span className="form-field__label">{t('labCases.accounts.dateTo')}</span>
-          <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
+          <DateField value={toDate} onChange={setToDate} />
         </label>
         <button type="button" className="btn btn--ghost btn--small" onClick={applyFilter}>
           {t('labCases.accounts.applyFilter')}
@@ -292,6 +304,7 @@ export function LabAccountPage() {
                 <th>{t('labCases.accounts.workType')}</th>
                 <th>{t('labCases.accounts.cost')}</th>
                 <th>{t('labCases.status')}</th>
+                <th>{t('common.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -304,6 +317,26 @@ export function LabAccountPage() {
                   <td>{o.workTypeLabel}</td>
                   <td>{formatMoney(o.labCostCents)}</td>
                   <td>{t(`labCases.statuses.${o.status}`)}</td>
+                  <td>
+                    <button type="button" className="link-btn" onClick={() => navigate(`/lab-cases?caseId=${o.id}`)}>
+                      {t('common.edit')}
+                    </button>
+                    <button
+                      type="button"
+                      className="link-btn"
+                      onClick={async () => {
+                        const clinic = await loadClinicPrintInfo();
+                        print(<LabOrderPrintable labCase={o} clinic={clinic} language={language} />);
+                      }}
+                    >
+                      {t('common.print')}
+                    </button>
+                    {o.status !== 'CANCELLED' && (
+                      <button type="button" className="link-btn link-btn--danger" onClick={() => setCancellingOrder(o)}>
+                        {t('common.cancel')}
+                      </button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -378,7 +411,7 @@ export function LabAccountPage() {
                 </label>
                 <label className="form-field">
                   <span className="form-field__label">{t('common.date')}</span>
-                  <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                  <DateField value={payDate} onChange={setPayDate} />
                 </label>
                 <label className="form-field">
                   <span className="form-field__label">{t('common.note')}</span>
@@ -449,7 +482,7 @@ export function LabAccountPage() {
             </label>
             <label className="form-field">
               <span className="form-field__label">{t('common.date')}</span>
-              <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+              <DateField value={editDate} onChange={setEditDate} />
             </label>
             <label className="form-field">
               <span className="form-field__label">{t('common.note')}</span>
@@ -468,6 +501,25 @@ export function LabAccountPage() {
                 {t('common.save')}
               </button>
             </div>
+          </div>
+        </Modal>
+      )}
+
+      {cancellingOrder && (
+        <Modal title={t('labCases.cancelConfirmTitle')} onClose={() => setCancellingOrder(null)}>
+          <p>{t('labCases.cancelConfirmBody')}</p>
+          <div className="form-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setCancellingOrder(null)}>
+              {t('common.back')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => cancelOrderMutation.mutate(cancellingOrder)}
+              disabled={cancelOrderMutation.isPending}
+            >
+              {t('labCases.statuses.CANCELLED')}
+            </button>
           </div>
         </Modal>
       )}

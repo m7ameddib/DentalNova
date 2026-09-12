@@ -4021,6 +4021,25 @@ textarea {
 .week-agenda__day-body--today {
   background: rgba(37, 99, 235, 0.04);
 }
+.week-agenda__now-line {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: #e11d48;
+  z-index: 6;
+  pointer-events: none;
+}
+.week-agenda__now-line::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: -4px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e11d48;
+}
 .week-agenda__slot {
   position: absolute;
   left: 0;
@@ -5539,6 +5558,31 @@ textarea {
   gap: 4px;
   font-weight: 600;
   font-size: 13px;
+}
+.medical-alerts-type-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.compact-appointment-list__item,
+.compact-lab-case-list__item,
+.compact-follow-up-list__item {
+  display: flex;
+  width: 100%;
+  align-items: baseline;
+  gap: 8px;
+  text-align: start;
+  background: none;
+  border: 0;
+  padding: 4px 0;
+  cursor: pointer;
+  font: inherit;
+  color: inherit;
+}
+.compact-appointment-list__item:hover,
+.compact-lab-case-list__item:hover,
+.compact-follow-up-list__item:hover {
+  color: var(--color-accent, #156572);
 }
 .medical-alerts-section {
   margin-top: 12px;

@@ -1,8 +1,12 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FlaskConical, Plus, Wallet } from 'lucide-react';
+import { FlaskConical, Plus, Printer, Wallet } from 'lucide-react';
+import { LabOrderPrintable } from '@/components/patient-record/PrintableTemplates';
+import { usePrintStore } from '@/store/print.store';
+import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
+import { Modal } from '@/components/common/Modal';
 import { labCasesApi, LabCaseListFilter } from '@/api/lab-cases.api';
 import { patientsApi } from '@/api/patients.api';
 import { LabCaseFormModal } from '@/components/lab-cases/LabCaseFormModal';
@@ -18,11 +22,14 @@ export function LabCasesPage() {
   const queryClient = useQueryClient();
   const [searchParams] = useSearchParams();
   const patientFilterId = searchParams.get('patientId');
+  const caseFilterId = searchParams.get('caseId');
+  const print = usePrintStore((s) => s.print);
 
   const [filter, setFilter] = useState<LabCaseListFilter>('active');
   const [search, setSearch] = useState('');
-  const [formOpen, setFormOpen] = useState(!!patientFilterId);
+  const [formOpen, setFormOpen] = useState(!!patientFilterId && !caseFilterId);
   const [editCase, setEditCase] = useState<LabCaseWithDetails | null>(null);
+  const [cancelling, setCancelling] = useState<LabCaseWithDetails | null>(null);
 
   const { data: presetPatient } = useQuery({
     queryKey: ['patient-lite-lab', patientFilterId],
@@ -59,6 +66,25 @@ export function LabCasesPage() {
   function openEdit(row: LabCaseWithDetails) {
     setEditCase(row);
     setFormOpen(true);
+  }
+
+  useEffect(() => {
+    if (!caseFilterId || items.length === 0) return;
+    const found = items.find((row) => String(row.id) === caseFilterId);
+    if (found) openEdit(found);
+  }, [caseFilterId, items]);
+
+  const cancelMutation = useMutation({
+    mutationFn: (row: LabCaseWithDetails) => labCasesApi.update(row.id, { status: 'CANCELLED' }),
+    onSuccess: () => {
+      invalidate();
+      setCancelling(null);
+    },
+  });
+
+  async function handlePrint(row: LabCaseWithDetails) {
+    const clinic = await loadClinicPrintInfo();
+    print(<LabOrderPrintable labCase={row} clinic={clinic} language={language} />);
   }
 
   function dueBadge(alert: LabCaseWithDetails['dueAlert']) {
@@ -165,6 +191,14 @@ export function LabCasesPage() {
                   <button type="button" className="btn btn--ghost btn--small" onClick={() => openEdit(row)}>
                     {t('common.edit')}
                   </button>
+                  <button type="button" className="btn btn--ghost btn--small" onClick={() => handlePrint(row)}>
+                    <Printer size={13} /> {t('common.print')}
+                  </button>
+                  {row.status !== 'CANCELLED' && (
+                    <button type="button" className="btn btn--ghost btn--small" onClick={() => setCancelling(row)}>
+                      {t('common.cancel')}
+                    </button>
+                  )}
                 </td>
               </tr>
             ))}
@@ -182,6 +216,25 @@ export function LabCasesPage() {
         editCase={editCase}
         presetPatient={(presetPatient as Patient) ?? null}
       />
+
+      {cancelling && (
+        <Modal title={t('labCases.cancelConfirmTitle')} onClose={() => setCancelling(null)}>
+          <p>{t('labCases.cancelConfirmBody')}</p>
+          <div className="form-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setCancelling(null)}>
+              {t('common.back')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => cancelMutation.mutate(cancelling)}
+              disabled={cancelMutation.isPending}
+            >
+              {t('labCases.statuses.CANCELLED')}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

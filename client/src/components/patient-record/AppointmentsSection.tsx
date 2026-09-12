@@ -58,11 +58,17 @@ export function AppointmentsSection({ patientId }: { patientId: number }) {
         <ul className="compact-appointment-list">
           {appointments.map((a) => (
             <li key={a.id}>
-              <span className="compact-appointment-list__date">
-                {formatDateDisplay(a.date, language)}
-              </span>
-              <span className="compact-appointment-list__time">{a.time}</span>
-              <span className="compact-appointment-list__reason">{a.reason || a.appointmentType}</span>
+              <button
+                type="button"
+                className="compact-appointment-list__item"
+                onClick={() => navigate(`/appointments?appointmentId=${a.id}&date=${a.date}`)}
+              >
+                <span className="compact-appointment-list__date">
+                  {formatDateDisplay(a.date, language)}
+                </span>
+                <span className="compact-appointment-list__time">{a.time}</span>
+                <span className="compact-appointment-list__reason">{a.reason || a.appointmentType}</span>
+              </button>
             </li>
           ))}
         </ul>

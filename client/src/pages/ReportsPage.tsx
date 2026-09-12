@@ -7,6 +7,7 @@ import { reportsApi } from '@/api/reports.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { formatMoney } from '@/utils/money';
 import { ReportDetailModal, ReportDetailSpec } from '@/components/reports/ReportDetailModal';
 import { AppointmentStatus } from '@/types/domain';
@@ -83,9 +84,9 @@ export function ReportsPage() {
           </button>
           {period === 'custom' && (
             <span className="reports-custom-range">
-              <input type="date" value={customFrom} onChange={(e) => setCustomFrom(e.target.value)} />
+              <DateField value={customFrom} onChange={setCustomFrom} />
               <span className="muted">—</span>
-              <input type="date" value={customTo} onChange={(e) => setCustomTo(e.target.value)} />
+              <DateField value={customTo} onChange={setCustomTo} />
             </span>
           )}
         </div>

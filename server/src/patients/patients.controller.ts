@@ -93,6 +93,12 @@ export class PatientsController {
     return this.patientsService.getUpcomingAppointments(id);
   }
 
+  @RequirePermissions(PERMISSIONS.APPOINTMENTS_VIEW)
+  @Get(':id/appointments')
+  appointments(@Param('id', ParseIntPipe) id: number) {
+    return this.patientsService.getAppointments(id);
+  }
+
   @RequirePermissions(PERMISSIONS.TREATMENTS_VIEW)
   @Get(':id/treatments')
   treatments(@Param('id', ParseIntPipe) id: number) {

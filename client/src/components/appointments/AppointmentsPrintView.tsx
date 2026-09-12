@@ -137,7 +137,7 @@ export function AppointmentsPrintView({
     .sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
 
   return (
-    <PrintDocument orientation="landscape">
+    <PrintDocument orientation="landscape" className="print-doc--daily-appointments">
       <PrintReportHeader
         clinic={clinic}
         title={t('appointmentsPage.print.dailyTitle')}

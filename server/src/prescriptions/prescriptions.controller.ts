@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
@@ -29,6 +29,16 @@ export class PrescriptionsController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.prescriptionsService.create(patientId, dto, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.PRESCRIPTIONS_MANAGE)
+  @Patch(':id')
+  update(
+    @Param('patientId', ParseIntPipe) patientId: number,
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: CreatePrescriptionDto,
+  ) {
+    return this.prescriptionsService.update(patientId, id, dto);
   }
 
   @RequirePermissions(PERMISSIONS.PRESCRIPTIONS_MANAGE)

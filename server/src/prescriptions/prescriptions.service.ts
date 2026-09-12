@@ -32,6 +32,25 @@ export class PrescriptionsService {
     });
   }
 
+  update(patientId: number, id: number, dto: CreatePrescriptionDto) {
+    const existing = this.prescriptionsRepo.findById(id);
+    if (!existing || existing.patientId !== patientId) {
+      throw new NotFoundException('Prescription not found');
+    }
+    const updated = this.prescriptionsRepo.replaceItems(
+      id,
+      dto.items.map((item) => ({
+        medicineName: item.medicineName.trim(),
+        dose: item.dose?.trim() || null,
+        frequency: item.frequency?.trim() || null,
+        duration: item.duration?.trim() || null,
+        instructions: item.instructions?.trim() || null,
+      })),
+    );
+    if (!updated) throw new NotFoundException('Prescription not found');
+    return updated;
+  }
+
   remove(patientId: number, id: number) {
     const existing = this.prescriptionsRepo.findById(id);
     if (!existing || existing.patientId !== patientId) {

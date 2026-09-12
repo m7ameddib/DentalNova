@@ -1,5 +1,17 @@
 export function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localTodayIso();
+}
+
+/** Round local clock time to the nearest 5 minutes, carrying the hour when needed. */
+export function currentTimeRounded(): string {
+  const now = new Date();
+  let minutes = Math.round(now.getMinutes() / 5) * 5;
+  let hours = now.getHours();
+  if (minutes === 60) {
+    minutes = 0;
+    hours = (hours + 1) % 24;
+  }
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 }
 
 /** Local calendar date (YYYY-MM-DD) for the clinic computer. */

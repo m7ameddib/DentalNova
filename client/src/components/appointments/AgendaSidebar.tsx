@@ -8,7 +8,8 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AppointmentStatus, AppointmentWithPatient, Patient } from '@/types/domain';
 import { formatClockTime } from '@/utils/calendar';
-import { todayIso, formatDateDisplay } from '@/utils/date';
+import { todayIso, formatDateDisplay, currentTimeRounded } from '@/utils/date';
+import { getErrorMessage } from '@/utils/errors';
 import { DEFAULT_DURATION, EMERGENCY_STATUS_OPTIONS, EMERGENCY_TYPE, CalendarViewMode } from './constants';
 
 interface AgendaSidebarProps {
@@ -45,14 +46,6 @@ function buildMonthGrid(year: number, month: number): (string | null)[][] {
   const weeks: (string | null)[][] = [];
   for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
   return weeks;
-}
-
-function currentTimeRounded(): string {
-  const now = new Date();
-  const min = Math.round(now.getMinutes() / 5) * 5;
-  const h = now.getHours().toString().padStart(2, '0');
-  const m = (min === 60 ? 0 : min).toString().padStart(2, '0');
-  return `${h}:${m}`;
 }
 
 export function AgendaSidebar({
@@ -136,7 +129,7 @@ export function AgendaSidebar({
       queryClient.invalidateQueries({ queryKey: ['appointments-month'] });
       resetEmergencyForm();
     },
-    onError: () => setError(t('common.error')),
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
   const statusMutation = useMutation({

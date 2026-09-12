@@ -18,6 +18,9 @@ export const prescriptionsApi = {
   list: (patientId: number) =>
     apiClient.get<Prescription[]>(`/patients/${patientId}/prescriptions`).then((r) => r.data),
 
+  update: (patientId: number, id: number, payload: CreatePrescriptionPayload) =>
+    apiClient.patch<Prescription>(`/patients/${patientId}/prescriptions/${id}`, payload).then((r) => r.data),
+
   create: (patientId: number, payload: CreatePrescriptionPayload | PrescriptionItemPayload[]) => {
     const body = Array.isArray(payload) ? { items: payload, type: 'MEDICATION' as const } : payload;
     return apiClient

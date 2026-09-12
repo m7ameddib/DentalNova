@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ClinicPrintInfo } from '@/utils/clinicPrintInfo';
+import { useUiStore } from '@/store/ui.store';
 
 export type PrintOrientation = 'portrait' | 'landscape';
 
@@ -28,6 +29,40 @@ export function PrintDocument({
   return <div className={classes}>{children}</div>;
 }
 
+/** Approved prescription-style header — Settings-linked, one language only. */
+export function ApprovedPrintHeader({ clinic }: { clinic: ClinicPrintInfo }) {
+  const { t } = useTranslation();
+  const { language } = useUiStore();
+  const isAr = language.startsWith('ar');
+  const doctorName = isAr
+    ? clinic.doctorNameAr || clinic.doctorNameEn || clinic.clinicName || '—'
+    : clinic.doctorNameEn || clinic.clinicName || clinic.doctorNameAr || '—';
+  const doctorTitle = isAr
+    ? clinic.doctorTitleAr || t('prescriptionPrint.doctorTitleDefaultAr')
+    : clinic.doctorTitleEn || t('prescriptionPrint.doctorTitleDefault');
+  const licenseLabel = isAr ? t('prescriptionPrint.licenseAr') : t('prescriptionPrint.license');
+
+  return (
+    <header
+      className={[
+        'prescription-sheet__header',
+        'prescription-sheet__header--single',
+        isAr ? 'prescription-sheet__header--rtl' : 'prescription-sheet__header--ltr',
+      ].join(' ')}
+    >
+      <div className="prescription-sheet__header-col">
+        <p className={isAr ? 'prescription-sheet__doctor-ar' : 'prescription-sheet__doctor-en'}>{doctorName}</p>
+        <p className={isAr ? 'prescription-sheet__title-ar' : 'prescription-sheet__title-en'}>{doctorTitle}</p>
+        {clinic.doctorLicenseNo && (
+          <p className={isAr ? 'prescription-sheet__license-ar' : 'prescription-sheet__license-en'}>
+            {licenseLabel}: {clinic.doctorLicenseNo}
+          </p>
+        )}
+      </div>
+    </header>
+  );
+}
+
 /** Unified clinic + report title header used on every printable document. */
 export function PrintReportHeader({
   clinic,
@@ -35,32 +70,19 @@ export function PrintReportHeader({
   meta,
 }: {
   clinic: ClinicPrintInfo;
-  title: string;
+  title?: string;
   meta?: ReactNode;
 }) {
-  const hasClinic = clinic.clinicName || clinic.clinicPhone || clinic.address || clinic.logoUrl;
   return (
-    <header className="print-header">
-      {hasClinic && (
-        <div className="print-header__brand">
-          {clinic.logoUrl && (
-            <img src={clinic.logoUrl} alt="" className="print-header__logo" />
-          )}
-          <div className="print-header__clinic">
-            {clinic.clinicName && <p className="print-header__clinic-name">{clinic.clinicName}</p>}
-            {(clinic.clinicPhone || clinic.address) && (
-              <p className="print-header__clinic-contact">
-                {[clinic.clinicPhone, clinic.address].filter(Boolean).join(' · ')}
-              </p>
-            )}
-          </div>
+    <div className="print-header print-header--approved">
+      <ApprovedPrintHeader clinic={clinic} />
+      {title && (
+        <div className="print-header__title-block">
+          <h1 className="print-header__title">{title}</h1>
         </div>
       )}
-      <div className="print-header__title-block">
-        <h1 className="print-header__title">{title}</h1>
-        {meta && <div className="print-header__meta">{meta}</div>}
-      </div>
-    </header>
+      {meta && <div className="print-header__meta">{meta}</div>}
+    </div>
   );
 }
 
@@ -109,13 +131,13 @@ export function PrintTotals({
   );
 }
 
-/** Professional footer — optional note + DibNova branding. */
-export function PrintFooter({ note }: { note?: string }) {
+/** Professional footer — optional note. Branding is omitted unless explicitly requested. */
+export function PrintFooter({ note, showBrand }: { note?: string; showBrand?: boolean }) {
   const { t } = useTranslation();
   return (
     <footer className="print-footer">
       {note && <p className="print-footer__note">{note}</p>}
-      <p className="print-footer__brand">{t('printLayout.poweredBy')}</p>
+      {showBrand && <p className="print-footer__brand">{t('printLayout.poweredBy')}</p>}
     </footer>
   );
 }

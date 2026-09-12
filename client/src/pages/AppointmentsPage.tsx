@@ -33,7 +33,8 @@ import { PERMISSIONS } from '@/constants/permissions';
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
-import { formatDateDisplay, formatTimeDisplay, localAddDaysIso, todayIso } from '@/utils/date';
+import { currentTimeRounded, formatDateDisplay, formatTimeDisplay, localAddDaysIso, todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { buildWeekDays, expandSlotTimes, startOfWeekIso, timeToMinutes, trimTimesFromWorkingDayStart, weekRangeLabel } from '@/utils/calendar';
 import { getErrorMessage } from '@/utils/errors';
 import { openWhatsApp, openWhatsAppDesktop } from '@/utils/whatsapp';
@@ -66,14 +67,6 @@ function getApiErrorCode(err: unknown): string | undefined {
   return undefined;
 }
 
-function currentTimeRounded(): string {
-  const now = new Date();
-  const min = Math.round(now.getMinutes() / 5) * 5;
-  const h = now.getHours().toString().padStart(2, '0');
-  const m = (min === 60 ? 0 : min).toString().padStart(2, '0');
-  return `${h}:${m}`;
-}
-
 export function AppointmentsPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -86,6 +79,7 @@ export function AppointmentsPage() {
   const canBookOutside = usePermission(PERMISSIONS.APPOINTMENTS_BOOK_OUTSIDE_HOURS);
 
   const preselectedPatientId = searchParams.get('patientId');
+  const manageAppointmentId = searchParams.get('appointmentId');
   const initialDate = searchParams.get('date') || todayIso();
 
   const [weekStart, setWeekStart] = useState(() => startOfWeekIso(initialDate, language));
@@ -646,6 +640,20 @@ export function AppointmentsPage() {
     setLinkError(null);
   }
 
+  useEffect(() => {
+    const id = Number(manageAppointmentId);
+    if (!id) return;
+    let cancelled = false;
+    appointmentsApi.daySchedule(initialDate).then((day) => {
+      if (cancelled) return;
+      const found = day.appointments.find((a) => a.id === id);
+      if (found) handleAppointmentOpen(found);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [manageAppointmentId, initialDate]);
+
   function handleFabClick() {
     if (!canCreate) return;
     handleSlotSelect(focusDate, currentTimeRounded());
@@ -1150,7 +1158,7 @@ export function AppointmentsPage() {
 
                 <label className="form-field">
                   <span className="form-field__label">{t('common.date')}</span>
-                  <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+                  <DateField value={editDate} onChange={setEditDate} />
                 </label>
 
                 <div className="appointment-time-row">
@@ -1287,17 +1295,6 @@ export function AppointmentsPage() {
 
                 <div className="status-action-group">
                   <span className="form-field__label">{t('appointmentsPage.manage.changeStatus')}</span>
-                  {managingAppt.status === 'SCHEDULED' && (
-                    <button
-                      type="button"
-                      className="btn btn--primary btn--small"
-                      style={{ marginBottom: 8 }}
-                      onClick={() => statusMutation.mutate({ id: managingAppt.id, status: 'WAITING' })}
-                      disabled={statusMutation.isPending}
-                    >
-                      {t('appointmentsPage.markArrived')}
-                    </button>
-                  )}
                   <div className="status-action-group__buttons">
                     {STATUS_OPTIONS.map((s) => (
                       <button

@@ -120,16 +120,15 @@ export class PatientsService {
     if (!patient.archivedAt) {
       throw new ConflictException('Only archived patients can be permanently deleted');
     }
-    const deleted = this.patientsRepo.delete(id);
-    if (!deleted) throw new NotFoundException('Patient not found');
     this.audit.log({
       action: 'PATIENT_DELETED_PERMANENTLY',
       entityType: 'patient',
       entityId: id,
-      patientId: id,
       description: `Patient permanently deleted: ${patient.fullName}`,
       userId: currentUser?.id ?? null,
     });
+    const deleted = this.patientsRepo.delete(id);
+    if (!deleted) throw new NotFoundException('Patient not found');
     return { id, deleted: true };
   }
 
@@ -159,6 +158,11 @@ export class PatientsService {
   getUpcomingAppointments(patientId: number) {
     this.assertExists(patientId);
     return this.appointmentsRepo.findByPatient(patientId, true, 5);
+  }
+
+  getAppointments(patientId: number) {
+    this.assertExists(patientId);
+    return this.appointmentsRepo.findByPatient(patientId, false, 200);
   }
 
   getTreatments(patientId: number) {

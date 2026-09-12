@@ -72,7 +72,9 @@ export class AppointmentsService {
     }
 
     const durationMin = dto.durationMin ?? 30;
-    if (this.hasOverlap(dto.date, dto.time, durationMin)) {
+    // Emergencies live in the sidebar and are dropped onto the calendar later.
+    // Overlap with a booked slot is expected and must not fail create.
+    if (dto.appointmentType !== 'EMERGENCY' && this.hasOverlap(dto.date, dto.time, durationMin)) {
       throw new ConflictException('This time overlaps with another appointment');
     }
 

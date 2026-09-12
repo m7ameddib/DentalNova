@@ -90,6 +90,17 @@ export class GuarantorsRepository {
       .run(guarantorId, treatmentTypeId);
   }
 
+  delete(id: number): boolean {
+    const existing = this.findById(id);
+    if (!existing) return false;
+    const tx = this.db.connection.transaction(() => {
+      this.db.connection.prepare('UPDATE patients SET guarantor_id = NULL WHERE guarantor_id = ?').run(id);
+      this.db.connection.prepare('DELETE FROM guarantor_treatment_prices WHERE guarantor_id = ?').run(id);
+      return this.db.connection.prepare('DELETE FROM guarantors WHERE id = ?').run(id);
+    });
+    return tx().changes > 0;
+  }
+
   findPrice(guarantorId: number, treatmentTypeId: number): number | undefined {
     const row = this.db.connection
       .prepare(

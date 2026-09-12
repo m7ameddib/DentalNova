@@ -7,6 +7,7 @@ import { paymentMethodsApi } from '@/api/settings.api';
 import { FormField } from '@/components/common/FormField';
 import { FollowUpHistoryEntry, FollowUpResult, FollowUpWithPatient } from '@/types/domain';
 import { todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
 import { formatMoney } from '@/utils/money';
 
@@ -241,7 +242,7 @@ export function FollowUpExpandedPanel({ fu, latestHistory, onDone, onWhatsApp }:
       {editing && (
         <div className="follow-up-expand__edit-grid">
           <FormField label={t('followUp.columns.date')}>
-            <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+            <DateField value={editDate} onChange={setEditDate} />
           </FormField>
           <FormField label={t('followUp.columns.reason')}>
             <input value={editReason} onChange={(e) => setEditReason(e.target.value)} />
@@ -276,7 +277,7 @@ export function FollowUpExpandedPanel({ fu, latestHistory, onDone, onWhatsApp }:
           {selectedResult === 'NEEDS_APPOINTMENT' && (
             <div className="follow-up-expand__inline-form">
               <FormField label={t('common.date')}>
-                <input type="date" value={apptDate} onChange={(e) => setApptDate(e.target.value)} />
+                <DateField value={apptDate} onChange={setApptDate} />
               </FormField>
               <FormField label={t('common.time')}>
                 <input type="time" value={apptTime} onChange={(e) => setApptTime(e.target.value)} />
@@ -297,7 +298,7 @@ export function FollowUpExpandedPanel({ fu, latestHistory, onDone, onWhatsApp }:
           )}
           {selectedResult && needsNextDate(selectedResult) && (
             <FormField label={t('followUp.actions.nextDate')}>
-              <input type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
+              <DateField value={nextDate} onChange={setNextDate} />
             </FormField>
           )}
         </>
@@ -348,7 +349,7 @@ export function FollowUpExpandedPanel({ fu, latestHistory, onDone, onWhatsApp }:
                 </select>
               </FormField>
               <FormField label={t('patientRecord.account.date')}>
-                <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                <DateField value={payDate} onChange={setPayDate} />
               </FormField>
               <FormField label={t('common.note')}>
                 <input value={payNote} onChange={(e) => setPayNote(e.target.value)} />
@@ -358,7 +359,7 @@ export function FollowUpExpandedPanel({ fu, latestHistory, onDone, onWhatsApp }:
           {selectedResult &&
             (selectedResult === 'NO_ANSWER' || selectedResult === 'PROMISED_PAYMENT') && (
               <FormField label={t('followUp.actions.nextDate')}>
-                <input type="date" value={nextDate} onChange={(e) => setNextDate(e.target.value)} />
+                <DateField value={nextDate} onChange={setNextDate} />
               </FormField>
             )}
         </>

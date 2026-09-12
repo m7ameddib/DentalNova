@@ -8,6 +8,7 @@ import { DentalChart } from '@/components/patient-record/DentalChart';
 import { LabCaseFinancialSection } from '@/components/lab-cases/LabCaseFinancialSection';
 import { LabCaseStatus, LabCaseWithDetails, Patient, PatientTreatment } from '@/types/domain';
 import { todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
 
 const STATUSES: LabCaseStatus[] = [
@@ -306,26 +307,22 @@ export function LabCaseFormModal({ open, onClose, onSaved, editCase, presetPatie
       <div className="inline-form__row">
         <label className="form-field inline-form__col">
           <span className="form-field__label">{t('labCases.sentDate')}</span>
-          <input type="date" value={sentDate} onChange={(e) => setSentDate(e.target.value)} />
+          <DateField value={sentDate} onChange={setSentDate} />
         </label>
         <label className="form-field inline-form__col">
           <span className="form-field__label">{t('labCases.expectedDelivery')}</span>
-          <input
-            type="date"
-            value={expectedDeliveryDate}
-            onChange={(e) => setExpectedDeliveryDate(e.target.value)}
-          />
+          <DateField value={expectedDeliveryDate} onChange={setExpectedDeliveryDate} />
         </label>
       </div>
 
       <div className="inline-form__row">
         <label className="form-field inline-form__col">
           <span className="form-field__label">{t('labCases.receivedDate')}</span>
-          <input type="date" value={receivedDate} onChange={(e) => setReceivedDate(e.target.value)} />
+          <DateField value={receivedDate} onChange={setReceivedDate} />
         </label>
         <label className="form-field inline-form__col">
           <span className="form-field__label">{t('labCases.deliveredDate')}</span>
-          <input type="date" value={deliveredDate} onChange={(e) => setDeliveredDate(e.target.value)} />
+          <DateField value={deliveredDate} onChange={setDeliveredDate} />
         </label>
       </div>
 

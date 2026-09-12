@@ -12,6 +12,10 @@ import { AreaPicker } from '@/components/patient-record/AreaPicker';
 import { PatientRecordPrintable } from '@/components/patient-record/PrintableTemplates';
 import type { ToothTreatmentBadge } from '@/components/patient-record/odontogram/types';
 import { patientsApi, CreatePatientPayload, UpdatePatientPayload } from '@/api/patients.api';
+import { clinicalApi } from '@/api/clinical.api';
+import { labCasesApi } from '@/api/lab-cases.api';
+import { prescriptionsApi } from '@/api/prescriptions.api';
+import { capitalizePersonName } from '@/utils/names';
 import { areasApi } from '@/api/settings.api';
 import { guarantorsApi } from '@/api/guarantors.api';
 import { usePermission } from '@/hooks/usePermission';
@@ -244,16 +248,45 @@ export function PatientSection({
   async function handlePrintPatientFile() {
     if (!patient) return;
     const clinic = await loadClinicPrintInfo();
-    const [treatments, summary] = await Promise.all([
-      queryClient.fetchQuery({
-        queryKey: ['patient-treatments', patient.id],
-        queryFn: () => patientsApi.treatments(patient.id),
-      }),
-      queryClient.fetchQuery({
-        queryKey: ['account-summary', patient.id],
-        queryFn: () => patientsApi.accountSummary(patient.id),
-      }),
-    ]);
+    const [treatments, summary, alerts, payments, discounts, appointments, followUps, labCases, prescriptions] =
+      await Promise.all([
+        queryClient.fetchQuery({
+          queryKey: ['patient-treatments', patient.id],
+          queryFn: () => patientsApi.treatments(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['account-summary', patient.id],
+          queryFn: () => patientsApi.accountSummary(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['medical-alerts', patient.id],
+          queryFn: () => clinicalApi.listAlerts(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['patient-payments', patient.id],
+          queryFn: () => patientsApi.payments(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['patient-account-discounts', patient.id],
+          queryFn: () => patientsApi.accountDiscounts(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['patient-appointments', patient.id],
+          queryFn: () => patientsApi.appointments(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['patient-follow-ups', patient.id],
+          queryFn: () => patientsApi.followUps(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['patient-lab-cases', patient.id],
+          queryFn: () => labCasesApi.forPatient(patient.id),
+        }),
+        queryClient.fetchQuery({
+          queryKey: ['patient-prescriptions', patient.id],
+          queryFn: () => prescriptionsApi.list(patient.id),
+        }).catch(() => []),
+      ]);
 
     const toothMap = new Map<number, ToothTreatmentBadge[]>();
     for (const treatment of treatments) {
@@ -281,6 +314,13 @@ export function PatientSection({
         toothMap={toothMap}
         clinic={clinic}
         language={language}
+        alerts={alerts}
+        payments={payments}
+        discounts={discounts}
+        appointments={appointments}
+        followUps={followUps.active ?? []}
+        labCases={labCases.all ?? labCases.active ?? []}
+        prescriptions={prescriptions}
       />,
     );
   }
@@ -410,7 +450,7 @@ export function PatientSection({
               <input
                 autoFocus
                 value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
+                onChange={(e) => setFullName(capitalizePersonName(e.target.value))}
                 placeholder={t('patientRecord.patient.fullNamePlaceholder') ?? ''}
               />
             </FormField>

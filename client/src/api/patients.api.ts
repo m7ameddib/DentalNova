@@ -67,6 +67,9 @@ export const patientsApi = {
       .get<AppointmentWithPatient[]>(`/patients/${id}/appointments/upcoming`)
       .then((r) => r.data),
 
+  appointments: (id: number) =>
+    apiClient.get<AppointmentWithPatient[]>(`/patients/${id}/appointments`).then((r) => r.data),
+
   treatments: (id: number) =>
     apiClient.get<PatientTreatment[]>(`/patients/${id}/treatments`).then((r) => r.data),
 

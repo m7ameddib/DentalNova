@@ -73,6 +73,32 @@ export class LabCasePaymentsRepository {
     return this.findById(Number(result.lastInsertRowid))!;
   }
 
+  update(
+    id: number,
+    input: {
+      amountCents?: number;
+      paymentMethod?: string;
+      paymentDate?: string;
+      note?: string | null;
+    },
+  ): LabCasePayment | undefined {
+    const existing = this.findById(id);
+    if (!existing || existing.status === 'VOID') return undefined;
+    this.db.connection
+      .prepare(
+        `UPDATE lab_case_payments SET amount_cents = ?, payment_method = ?, payment_date = ?, note = ?
+         WHERE id = ? AND COALESCE(status, 'ACTIVE') != 'VOID'`,
+      )
+      .run(
+        input.amountCents ?? existing.amountCents,
+        input.paymentMethod ?? existing.paymentMethod,
+        input.paymentDate ?? existing.paymentDate,
+        input.note !== undefined ? input.note : existing.note ?? null,
+        id,
+      );
+    return this.findById(id);
+  }
+
   void(id: number, voidedById: number, reason: string): LabCasePayment | undefined {
     const result = this.db.connection
       .prepare(

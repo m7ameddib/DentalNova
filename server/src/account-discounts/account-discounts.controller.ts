@@ -6,6 +6,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../common/rbac.constants';
 import { AccountDiscountsService } from './account-discounts.service';
 import { CreateAccountDiscountDto } from './dto/create-account-discount.dto';
+import { UpdateAccountDiscountDto } from './dto/update-account-discount.dto';
 import { VoidAccountDiscountDto } from './dto/void-account-discount.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
 
@@ -18,6 +19,16 @@ export class AccountDiscountsController {
   @Post()
   create(@Body() dto: CreateAccountDiscountDto, @CurrentUser() user: AuthenticatedUser) {
     return this.discountsService.create(dto, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.PAYMENTS_CREATE)
+  @Patch(':id')
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body() dto: UpdateAccountDiscountDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.discountsService.update(id, dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.PAYMENTS_VOID)

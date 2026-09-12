@@ -487,6 +487,42 @@
   padding-bottom: 2mm;
   border-bottom: 1.5px solid var(--print-accent, #156572);
 }
+.prescription-sheet__header--single {
+  grid-template-columns: 1fr;
+}
+.prescription-sheet__header--rtl {
+  direction: rtl;
+  text-align: start;
+}
+.prescription-sheet__patient-row--single {
+  grid-template-columns: 1fr;
+}
+.prescription-sheet__date-bottom {
+  margin-top: 8mm;
+  font-size: 8pt;
+  color: var(--print-muted, #5a6b73);
+}
+.prescription-sheet__xray-heading--single {
+  justify-content: flex-start;
+}
+.print-header--approved .print-header__title {
+  margin: 2mm 0 1mm;
+  font-size: 13pt;
+}
+.print-doc--daily-appointments .print-table td,
+.print-doc--daily-appointments .print-table th {
+  height: 7.2mm;
+  max-height: 7.2mm;
+  line-height: 7.2mm;
+  padding-top: 0;
+  padding-bottom: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+  word-wrap: normal;
+  overflow-wrap: normal;
+}
 
 .prescription-sheet__header-col--ltr {
   text-align: start;

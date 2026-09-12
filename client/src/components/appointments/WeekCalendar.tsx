@@ -243,6 +243,10 @@ export function WeekCalendar({
   const timeColumnPx = isMobileWeek ? CALENDAR_MOBILE_TIME_COLUMN_PX : CALENDAR_TIME_COLUMN_PX;
   const dayColumnTemplate = 'repeat(7, minmax(0, 1fr))';
   const [drag, setDrag] = useState<ApptDragState | null>(null);
+  const [nowMin, setNowMin] = useState(() => {
+    const n = new Date();
+    return n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60;
+  });
   const gridRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const pendingDragRef = useRef<PendingApptDrag | null>(null);
@@ -265,6 +269,16 @@ export function WeekCalendar({
   const dayIsos = dayColumns.map((d) => d.iso);
   const isDragging = drag !== null;
   const weekKey = dayColumns[0]?.iso ?? '';
+
+  useEffect(() => {
+    const tick = () => {
+      const n = new Date();
+      setNowMin(n.getHours() * 60 + n.getMinutes() + n.getSeconds() / 60);
+    };
+    tick();
+    const id = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const scrollToDayColumn = useCallback(
     (iso: string, behavior: ScrollBehavior = 'smooth') => {
@@ -643,6 +657,16 @@ export function WeekCalendar({
                   .filter(Boolean)
                   .join(' ')}
               >
+                {d.isToday &&
+                  times.length > 0 &&
+                  nowMin >= dayStartMin &&
+                  nowMin <= dayStartMin + times.length * slotStepMin && (
+                    <div
+                      className="week-agenda__now-line"
+                      style={{ top: ((nowMin - dayStartMin) / slotStepMin) * rowHeightPx }}
+                      aria-hidden="true"
+                    />
+                  )}
                 {times.map((time, rowIdx) => {
                   const covering = findCoveringAppointment(appointments, time, slotStepMin);
                   const withinHours = slotMap.get(time)?.withinWorkingHours ?? true;

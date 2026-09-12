@@ -34,6 +34,11 @@ export function LabCasesSection({ patientId }: { patientId: number }) {
         <ul className="compact-lab-case-list">
           {active.slice(0, 4).map((c) => (
             <li key={c.id}>
+              <button
+                type="button"
+                className="compact-lab-case-list__item"
+                onClick={() => navigate(`/lab-cases?patientId=${patientId}&caseId=${c.id}`)}
+              >
               <span className="compact-lab-case-list__work">
                 {c.workTypeLabel}
                 {c.teeth.length ? ` ${c.teeth.join(',')}` : ''}
@@ -55,6 +60,7 @@ export function LabCasesSection({ patientId }: { patientId: number }) {
                   </span>
                 )}
               </span>
+              </button>
             </li>
           ))}
         </ul>

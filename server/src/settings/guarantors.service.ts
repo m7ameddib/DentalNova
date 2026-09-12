@@ -39,4 +39,11 @@ export class GuarantorsService {
     this.repo.deletePrice(guarantorId, treatmentTypeId);
     return { ok: true };
   }
+
+  remove(id: number) {
+    if (!this.repo.findById(id)) throw new NotFoundException('Guarantor not found');
+    const deleted = this.repo.delete(id);
+    if (!deleted) throw new NotFoundException('Guarantor not found');
+    return { id, deleted: true };
+  }
 }

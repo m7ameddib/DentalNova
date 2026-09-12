@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Pencil, Archive } from 'lucide-react';
@@ -20,8 +20,9 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
   const canManage = usePermission(PERMISSIONS.MEDICAL_ALERTS_MANAGE);
 
   const [adding, setAdding] = useState(false);
+  const [typeChosen, setTypeChosen] = useState(false);
   const [editing, setEditing] = useState<MedicalAlert | null>(null);
-  const [alertType, setAlertType] = useState<MedicalAlertType>('DISEASE');
+  const [alertType, setAlertType] = useState<MedicalAlertType | ''>('');
   const [diseaseCatalogId, setDiseaseCatalogId] = useState<number | ''>('');
   const [customLabel, setCustomLabel] = useState('');
   const [note, setNote] = useState('');
@@ -43,21 +44,6 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
     staleTime: 10 * 60_000,
   });
 
-  const activeDiseaseIds = useMemo(
-    () =>
-      new Set(
-        alerts
-          .filter((a) => a.isActive && a.diseaseCatalogId != null)
-          .map((a) => a.diseaseCatalogId as number),
-      ),
-    [alerts],
-  );
-
-  const availableDiseases = useMemo(
-    () => diseases.filter((d) => !activeDiseaseIds.has(d.id)),
-    [diseases, activeDiseaseIds],
-  );
-
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['medical-alerts', patientId] });
     queryClient.invalidateQueries({ queryKey: ['medical-alerts', patientId, 'active'] });
@@ -76,7 +62,7 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
   const updateMutation = useMutation({
     mutationFn: () =>
       clinicalApi.updateAlert(editing!.id, {
-        alertType,
+        alertType: alertType || undefined,
         label: alertType === 'OTHER' ? customLabel : undefined,
         note: note.trim() || undefined,
       }),
@@ -95,8 +81,9 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
 
   function resetForm() {
     setAdding(false);
+    setTypeChosen(false);
     setEditing(null);
-    setAlertType(diseases.length > 0 ? 'DISEASE' : 'ALLERGY');
+    setAlertType('');
     setDiseaseCatalogId('');
     setCustomLabel('');
     setNote('');
@@ -106,8 +93,9 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
   function openAddForm() {
     void refetchDiseases();
     setAdding(true);
+    setTypeChosen(false);
     setEditing(null);
-    setAlertType(diseases.length > 0 ? 'DISEASE' : 'ALLERGY');
+    setAlertType('');
     setDiseaseCatalogId('');
     setCustomLabel('');
     setNote('');
@@ -126,10 +114,15 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
     }
     setCustomLabel(alert.alertType === 'OTHER' ? alert.label : '');
     setNote(alert.note ?? '');
+    setTypeChosen(true);
     setError(null);
   }
 
   function handleSave() {
+    if (!alertType) {
+      setError(t('patientRecord.medicalAlerts.validation.typeRequired'));
+      return;
+    }
     if (alertType === 'DISEASE') {
       if (!diseaseCatalogId) {
         setError(t('patientRecord.medicalAlerts.validation.diseaseRequired'));
@@ -163,11 +156,6 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
     });
   }
 
-  function quickAddDisease(id: number) {
-    setError(null);
-    createMutation.mutate({ diseaseCatalogId: id });
-  }
-
   const showForm = adding || editing;
   const editingDisease = editing?.alertType === 'DISEASE' || !!editing?.diseaseCatalogId;
   const isSaving = createMutation.isPending || updateMutation.isPending;
@@ -185,55 +173,38 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
         )}
       </div>
 
-      {canManage && !showForm && diseasesLoading && (
-        <p className="muted medical-alerts-catalog__hint">{t('common.loading')}</p>
-      )}
-
-      {canManage && !showForm && diseasesError && (
-        <p className="form-error-banner medical-alerts-catalog__hint">{t('patientRecord.medicalAlerts.catalogLoadError')}</p>
-      )}
-
-      {canManage && !showForm && !diseasesLoading && !diseasesError && diseases.length === 0 && (
-        <p className="muted medical-alerts-catalog__hint">{t('patientRecord.medicalAlerts.catalogEmpty')}</p>
-      )}
-
-      {canManage && !showForm && availableDiseases.length > 0 && (
-        <div className="medical-alerts-catalog">
-          <span className="muted medical-alerts-catalog__hint">{t('patientRecord.medicalAlerts.catalogHint')}</span>
-          <div className="medical-alerts-catalog__chips">
-            {availableDiseases.map((d) => (
+      {showForm && !typeChosen && (
+        <div className="inline-form medical-alerts-form">
+          <p className="muted">{t('patientRecord.medicalAlerts.chooseType')}</p>
+          <div className="medical-alerts-type-choices">
+            {MEDICAL_ALERT_TYPES.map((type) => (
               <button
-                key={d.id}
+                key={type}
                 type="button"
-                className="medical-alerts-catalog__chip"
-                disabled={isSaving}
-                onClick={() => quickAddDisease(d.id)}
+                className="btn btn--ghost btn--small"
+                onClick={() => {
+                  setAlertType(type);
+                  setTypeChosen(true);
+                  if (type !== 'DISEASE') setDiseaseCatalogId('');
+                }}
               >
-                {d.name}
+                {t(`patientRecord.medicalAlerts.types.${type}`)}
               </button>
             ))}
+          </div>
+          <div className="form-actions">
+            <button type="button" className="btn btn--ghost" onClick={resetForm}>
+              {t('common.cancel')}
+            </button>
           </div>
         </div>
       )}
 
-      {showForm && (
+      {showForm && typeChosen && (
         <div className="inline-form medical-alerts-form">
           <label className="form-field">
             <span className="form-field__label">{t('patientRecord.medicalAlerts.type')}</span>
-            <select
-              value={alertType}
-              onChange={(e) => {
-                setAlertType(e.target.value as MedicalAlertType);
-                if (e.target.value !== 'DISEASE') setDiseaseCatalogId('');
-              }}
-              disabled={!!editing && editingDisease}
-            >
-              {MEDICAL_ALERT_TYPES.map((type) => (
-                <option key={type} value={type}>
-                  {t(`patientRecord.medicalAlerts.types.${type}`)}
-                </option>
-              ))}
-            </select>
+            <strong>{t(`patientRecord.medicalAlerts.types.${alertType}`)}</strong>
           </label>
 
           {alertType === 'DISEASE' && (

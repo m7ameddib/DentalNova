@@ -9,6 +9,7 @@ import { PERMISSIONS } from '@/constants/permissions';
 import { getErrorMessage } from '@/utils/errors';
 import { useUiStore } from '@/store/ui.store';
 import { formatDateDisplay, formatDateTimeDisplay, todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { ClinicalVisitNote } from '@/types/domain';
 
 const COLLAPSED_LIMIT = 5;
@@ -124,7 +125,7 @@ export function ClinicalVisitNotesSection({ patientId }: { patientId: number }) 
         <div className="inline-form clinical-notes-form">
           <label className="form-field">
             <span className="form-field__label">{t('patientRecord.clinicalNotes.visitDate')}</span>
-            <input type="date" value={visitDate} onChange={(e) => setVisitDate(e.target.value)} />
+            <DateField value={visitDate} onChange={setVisitDate} />
           </label>
           <label className="form-field">
             <span className="form-field__label">{t('patientRecord.clinicalNotes.chiefComplaint')}</span>

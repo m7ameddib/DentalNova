@@ -48,4 +48,9 @@ export class GuarantorsController {
   deletePrice(@Param('id', ParseIntPipe) id: number, @Param('treatmentTypeId', ParseIntPipe) treatmentTypeId: number) {
     return this.guarantorsService.deletePrice(id, treatmentTypeId);
   }
+
+  @Delete(':id')
+  remove(@Param('id', ParseIntPipe) id: number) {
+    return this.guarantorsService.remove(id);
+  }
 }

@@ -63,11 +63,18 @@ export function LaboratoriesSection() {
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
-  const upsertCostMutation = useMutation({
-    mutationFn: ({ labId, workTypeCode, cost }: { labId: number; workTypeCode: string; cost: number }) =>
-      labCasesApi.upsertServiceCost(labId, workTypeCode, cost),
-    onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['lab-service-costs', vars.labId] });
+  const saveCostsMutation = useMutation({
+    mutationFn: async (labId: number) => {
+      const prefix = `${labId}-`;
+      for (const [key, raw] of Object.entries(costEdits)) {
+        if (!key.startsWith(prefix) || raw.trim() === '') continue;
+        const cost = Number(raw);
+        if (Number.isNaN(cost) || cost < 0) continue;
+        await labCasesApi.upsertServiceCost(labId, key.slice(prefix.length), cost);
+      }
+    },
+    onSuccess: (_, labId) => {
+      queryClient.invalidateQueries({ queryKey: ['lab-service-costs', labId] });
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
@@ -200,9 +207,8 @@ export function LaboratoriesSection() {
                       workTypes={workTypes}
                       costEdits={costEdits}
                       setCostEdits={setCostEdits}
-                      onSaveCost={(workTypeCode, cost) =>
-                        upsertCostMutation.mutate({ labId: lab.id, workTypeCode, cost })
-                      }
+                      onSaveAll={() => saveCostsMutation.mutate(lab.id)}
+                      saving={saveCostsMutation.isPending}
                     />
                   </td>
                 </tr>
@@ -251,13 +257,15 @@ function LabServiceCostsPanel({
   workTypes,
   costEdits,
   setCostEdits,
-  onSaveCost,
+  onSaveAll,
+  saving,
 }: {
   labId: number;
   workTypes: import('@/types/domain').LabWorkType[];
   costEdits: Record<string, string>;
   setCostEdits: Dispatch<SetStateAction<Record<string, string>>>;
-  onSaveCost: (workTypeCode: string, cost: number) => void;
+  onSaveAll: () => void;
+  saving: boolean;
 }) {
   const { t } = useTranslation();
   const { data: costs = [] } = useQuery({
@@ -275,7 +283,6 @@ function LabServiceCostsPanel({
           <tr>
             <th>{t('settings.laboratories.workType')}</th>
             <th>{t('settings.laboratories.serviceCost')}</th>
-            <th />
           </tr>
         </thead>
         <tbody>
@@ -297,23 +304,16 @@ function LabServiceCostsPanel({
                     placeholder="0.00"
                   />
                 </td>
-                <td>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => {
-                      const cost = Number(editVal);
-                      if (cost >= 0) onSaveCost(wt.code, cost);
-                    }}
-                  >
-                    {t('common.save')}
-                  </button>
-                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      <div className="form-actions form-actions--start">
+        <button type="button" className="btn btn--primary btn--small" onClick={onSaveAll} disabled={saving}>
+          {t('settings.laboratories.saveCosts')}
+        </button>
+      </div>
     </div>
   );
 }

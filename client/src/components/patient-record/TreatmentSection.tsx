@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Stethoscope, Trash2, FileText, History, Pencil } from 'lucide-react';
+import { Stethoscope, Trash2, FileText, History, Pencil, Printer } from 'lucide-react';
+import { TreatmentPlanEstimatePrintable } from './PrintableTemplates';
+import { usePrintStore } from '@/store/print.store';
+import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { SectionCard } from '@/components/common/SectionCard';
 import { Modal } from '@/components/common/Modal';
 import { DentalChart } from './DentalChart';
@@ -14,6 +17,7 @@ import { PatientTreatment, TreatmentStatus, Patient } from '@/types/domain';
 import { TreatmentPlanModal } from './TreatmentPlanModal';
 import { centsToAmount, formatMoney } from '@/utils/money';
 import { formatDateDisplay, formatDateTimeDisplay, todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
 import { useUiStore } from '@/store/ui.store';
 import {
@@ -32,6 +36,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
   const { t } = useTranslation();
   const { language } = useUiStore();
   const queryClient = useQueryClient();
+  const print = usePrintStore((s) => s.print);
   const canCreate = usePermission(PERMISSIONS.TREATMENTS_CREATE);
 
   const [adding, setAdding] = useState(false);
@@ -287,9 +292,30 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
         addTitle={t('patientRecord.treatment.addTitle') ?? ''}
         className="section-card--treatment"
         headerExtra={
-          <button type="button" className="link-btn treatment-plan-open-btn" onClick={() => setShowTreatmentPlan(true)}>
-            <FileText size={14} /> {t('patientRecord.treatmentPlan.open')}
-          </button>
+          <>
+            <button
+              type="button"
+              className="link-btn treatment-plan-open-btn"
+              onClick={async () => {
+                const clinic = await loadClinicPrintInfo();
+                const printable = treatments.filter((tr) => tr.status !== 'VOID');
+                print(
+                  <TreatmentPlanEstimatePrintable
+                    patient={patient}
+                    treatments={printable}
+                    totalCents={printable.reduce((sum, tr) => sum + tr.finalAmountCents, 0)}
+                    clinic={clinic}
+                    language={language}
+                  />,
+                );
+              }}
+            >
+              <Printer size={14} /> {t('patientRecord.treatment.print')}
+            </button>
+            <button type="button" className="link-btn treatment-plan-open-btn" onClick={() => setShowTreatmentPlan(true)}>
+              <FileText size={14} /> {t('patientRecord.treatmentPlan.open')}
+            </button>
+          </>
         }
       >
         <DentalChart
@@ -330,7 +356,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
             <div className="treatment-add-panel__col treatment-add-panel__col--narrow">
               <label className="form-field">
                 <span className="form-field__label">{t('patientRecord.treatment.treatmentDate')}</span>
-                <input type="date" value={treatmentDate} onChange={(e) => setTreatmentDate(e.target.value)} />
+                <DateField value={treatmentDate} onChange={setTreatmentDate} />
               </label>
 
               <label className="form-field">
@@ -675,7 +701,7 @@ function TreatmentEditModal({
       <div className="inline-form">
         <label className="form-field">
           <span className="form-field__label">{t('patientRecord.treatment.treatmentDate')}</span>
-          <input type="date" value={treatmentDate} onChange={(e) => setTreatmentDate(e.target.value)} />
+          <DateField value={treatmentDate} onChange={setTreatmentDate} />
         </label>
 
         <label className="form-field">

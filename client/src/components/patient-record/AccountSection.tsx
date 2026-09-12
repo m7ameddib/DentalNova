@@ -15,6 +15,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { formatMoney } from '@/utils/money';
 import { todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
 import { useUiStore } from '@/store/ui.store';
 import { usePrintStore } from '@/store/print.store';
@@ -360,7 +361,7 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
           </FormField>
 
           <FormField label={t('patientRecord.account.date')}>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField value={date} onChange={setDate} />
           </FormField>
 
           <FormField label={t('patientRecord.account.note')}>
@@ -403,7 +404,7 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
           </FormField>
 
           <FormField label={t('patientRecord.account.date')}>
-            <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField value={date} onChange={setDate} />
           </FormField>
 
           <FormField label={t('patientRecord.account.note')}>

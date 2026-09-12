@@ -68,6 +68,26 @@ export class AccountDiscountsRepository {
     return this.findById(id);
   }
 
+  update(
+    id: number,
+    input: { amountCents?: number; date?: string; note?: string | null },
+  ): AccountDiscount | undefined {
+    const existing = this.findById(id);
+    if (!existing || existing.status === 'VOID') return undefined;
+    this.db.connection
+      .prepare(
+        `UPDATE account_discounts SET amount_cents = ?, date = ?, note = ?, updated_at = datetime('now')
+         WHERE id = ? AND COALESCE(status, 'ACTIVE') != 'VOID'`,
+      )
+      .run(
+        input.amountCents ?? existing.amountCents,
+        input.date ?? existing.date,
+        input.note !== undefined ? input.note : existing.note ?? null,
+        id,
+      );
+    return this.findById(id);
+  }
+
   create(input: CreateAccountDiscountInput): AccountDiscount {
     const result = this.db.connection
       .prepare(

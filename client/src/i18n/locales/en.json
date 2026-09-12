@@ -355,6 +355,7 @@
       "quadrantLowerLeftShort": "LL",
       "archUpper": "Upper",
       "archLower": "Lower",
+      "print": "Print treatments",
       "addTitle": "Add Treatment",
       "selectType": "1. Select treatment type",
       "selectTeeth": "2. Select tooth / teeth",
@@ -427,6 +428,7 @@
     "medicalAlerts": {
       "title": "Medical Alerts",
       "add": "Add alert",
+      "chooseType": "Choose an alert type",
       "type": "Alert type",
       "customLabel": "Custom label",
       "deactivate": "Archive alert",
@@ -436,6 +438,7 @@
       "catalogEmpty": "No diseases in Settings. Add them under Settings → Diseases / Medical Alerts.",
       "catalogLoadError": "Could not load the disease list from Settings.",
       "validation": {
+        "typeRequired": "Select an alert type",
         "labelRequired": "Enter a label for custom alerts",
         "diseaseRequired": "Select a disease from the catalog"
       },
@@ -514,7 +517,12 @@
       "viewInvoice": "Invoice details",
       "hideInvoice": "Hide invoice",
       "deleteConfirm": "Delete this payment?",
+      "editPayment": "Edit payment",
+      "editDiscount": "Edit discount",
       "voidPayment": "Void payment",
+      "voidPaymentConfirm": "Void this payment? It will remain in history and totals will be recalculated.",
+      "voidDiscountConfirm": "Cancel this discount? It will remain in history and totals will be recalculated.",
+      "voidReason": "Reason",
       "voidConfirm": "Confirm void",
       "voidReasonPlaceholder": "Reason (required)",
       "voidReasonRequired": "Enter a short reason for voiding",
@@ -610,7 +618,9 @@
     "accountDiscount": "Discount",
     "paid": "Paid",
     "remaining": "Remaining",
-    "thankYou": "Thank you for your visit"
+    "thankYou": "Thank you for your visit",
+    "receivedFromPatient": "The clinic received a payment of {{amount}} from {{patient}} via {{method}}.",
+    "issuedByClinic": "This receipt is issued by the dental clinic."
   },
   "statement": {
     "title": "Account Statement",
@@ -718,7 +728,10 @@
     "instructions": "Instructions",
     "signature": "Doctor's signature",
     "stamp": "Stamp",
-    "doctorTitleDefault": "Dental Surgeon"
+    "doctorTitleDefault": "Dental Surgeon",
+    "doctorTitleDefaultAr": "Dental Surgeon",
+    "license": "License",
+    "licenseAr": "Syndicate No."
   },
   "printLayout": {
     "poweredBy": "Powered by DibNova"
@@ -1062,6 +1075,8 @@
       "pricesHint": "Set negotiated prices per treatment type (overrides default price).",
       "defaultPrice": "Clinic price",
       "guarantorPrice": "Guarantor price",
+      "savePrices": "Save prices",
+      "deleteConfirm": "Delete this guarantor? Patients using it will no longer have a guarantor assigned.",
       "validation": {
         "required": "Enter a guarantor name"
       }
@@ -1087,6 +1102,7 @@
       "workType": "Work type",
       "serviceCost": "Default cost",
       "costsHint": "Set default lab costs per work type for this laboratory.",
+      "saveCosts": "Save costs",
       "deleteConfirm": "Delete laboratory \"{{name}}\"? It will no longer appear in the Laboratories list.",
       "validation": {
         "required": "Enter a lab name",
@@ -1360,6 +1376,12 @@
     "title": "Lab Cases",
     "addCase": "Add Lab Case",
     "editCase": "Edit Lab Case",
+    "cancelConfirmTitle": "Cancel lab case",
+    "cancelConfirmBody": "Cancel this lab case? The record will be kept in history.",
+    "print": {
+      "title": "Laboratory Order",
+      "details": "Laboratory details"
+    },
     "patient": "Patient",
     "labName": "Lab",
     "labNamePlaceholder": "Dental laboratory name",

@@ -22,7 +22,7 @@ import {
   LabStatementLine,
 } from '../common/types';
 import { CreateLabCaseDto, UpdateLabCaseDto } from './dto/lab-case.dto';
-import { RecordLabPaymentDto, VoidLabPaymentDto } from './dto/lab-payment.dto';
+import { RecordLabPaymentDto, UpdateLabPaymentDto, VoidLabPaymentDto } from './dto/lab-payment.dto';
 import {
   RecordLabAccountPaymentDto,
   UpdateLabAccountPaymentDto,
@@ -259,6 +259,65 @@ export class LabCasesService {
     });
 
     return payment;
+  }
+
+  updatePayment(labCaseId: number, paymentId: number, dto: UpdateLabPaymentDto, user: AuthenticatedUser) {
+    const payment = this.labPaymentsRepo.findById(paymentId);
+    if (!payment || payment.labCaseId !== labCaseId) {
+      throw new NotFoundException('Lab payment not found');
+    }
+    if (payment.status === 'VOID') {
+      throw new BadRequestException('Cannot edit a voided payment');
+    }
+
+    const labCase = this.labCasesRepo.findById(labCaseId);
+    if (!labCase) throw new NotFoundException('Lab case not found');
+
+    if (dto.paymentMethod) {
+      const method = this.paymentMethodsRepo.findByCode(dto.paymentMethod);
+      if (!method || !method.isActive) {
+        throw new BadRequestException('Select a valid payment method');
+      }
+    }
+
+    const amountCents = dto.amount !== undefined ? Math.round(dto.amount * 100) : payment.amountCents;
+    if (amountCents <= 0) throw new BadRequestException('Payment amount must be greater than zero');
+
+    const othersPaid = this.labPaymentsRepo.totalPaidForCase(labCaseId) - payment.amountCents;
+    const remaining = Math.max(0, labCase.labCostCents - othersPaid);
+    if (labCase.labCostCents > 0 && amountCents > remaining) {
+      throw new BadRequestException('Updated payment exceeds remaining lab balance');
+    }
+
+    const updated = this.db.connection.transaction(() => {
+      const row = this.labPaymentsRepo.update(paymentId, {
+        amountCents,
+        paymentMethod: dto.paymentMethod,
+        paymentDate: dto.paymentDate,
+        note: dto.note !== undefined ? dto.note ?? null : undefined,
+      });
+      if (!row) throw new NotFoundException('Lab payment not found');
+      if (payment.expenseId) {
+        this.expensesRepo.update(payment.expenseId, {
+          amountCents: row.amountCents,
+          date: row.paymentDate,
+          paymentMethod: row.paymentMethod,
+          note: row.note ?? `Lab payment — ${labCase.labName} (${labCase.workTypeLabel})`,
+        });
+      }
+      return row;
+    })();
+
+    this.audit.log({
+      action: 'LAB_PAYMENT_UPDATED',
+      entityType: 'lab_case_payment',
+      entityId: paymentId,
+      patientId: labCase.patientId,
+      description: `Lab payment updated for case #${labCaseId}`,
+      userId: user.id,
+    });
+
+    return updated;
   }
 
   voidPayment(labCaseId: number, paymentId: number, dto: VoidLabPaymentDto, user: AuthenticatedUser) {

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -36,8 +36,9 @@ function fromStudyType(type: TreatmentType): DraftStudy {
 }
 
 export function XrayPrescriptionBuilderPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id, rxId } = useParams<{ id: string; rxId?: string }>();
   const patientId = Number(id);
+  const editingId = rxId ? Number(rxId) : null;
   const navigate = useNavigate();
   const { t } = useTranslation();
   const { language } = useUiStore();
@@ -104,9 +105,31 @@ export function XrayPrescriptionBuilderPage() {
     };
   }, [items, patient?.id, currentUser?.id, currentUser?.fullName]);
 
+  const { data: existingList = [] } = useQuery({
+    queryKey: ['patient-prescriptions', patientId],
+    queryFn: () => prescriptionsApi.list(patientId),
+    enabled: !!editingId,
+  });
+
+  useEffect(() => {
+    if (!editingId || items.length > 0) return;
+    const existing = existingList.find((rx) => rx.id === editingId);
+    if (!existing) return;
+    setItems(
+      existing.items.map((item) => ({
+        tempId: newTempId(),
+        studyName: item.medicineName,
+        teeth: item.dose ?? '',
+        notes: item.instructions ?? '',
+      })),
+    );
+  }, [editingId, existingList, items.length]);
+
   const createMutation = useMutation({
     mutationFn: (payload: PrescriptionItemPayload[]) =>
-      prescriptionsApi.create(patientId, { type: 'XRAY', items: payload }),
+      editingId
+        ? prescriptionsApi.update(patientId, editingId, { type: 'XRAY', items: payload })
+        : prescriptionsApi.create(patientId, { type: 'XRAY', items: payload }),
     onSuccess: (prescription) => {
       queryClient.invalidateQueries({ queryKey: ['patient-prescriptions', patientId] });
       setSaved(prescription);

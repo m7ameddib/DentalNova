@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
+  ApprovedPrintHeader,
   PrintDocument,
   PrintFooter,
   PrintMetaItem,
@@ -14,8 +15,12 @@ import { formatMoney, centsToAmount } from '@/utils/money';
 import { todayIso, formatDateDisplay, formatDateTimeDisplay, calculateAge } from '@/utils/date';
 import { ClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import {
+  AccountDiscount,
   AccountSummary,
   AppointmentWithPatient,
+  FollowUpWithPatient,
+  LabCaseWithDetails,
+  MedicalAlert,
   Patient,
   PatientAttachment,
   PatientTreatment,
@@ -227,8 +232,15 @@ export function PaymentReceiptPrintable({
           </PrintMetaRow>
         }
       />
+      <p className="print-note">
+        {t('receipt.receivedFromPatient', {
+          patient: patient.fullName,
+          amount: formatMoney(payment.amountCents),
+          method: payment.methodLabel ?? payment.method,
+        })}
+      </p>
       <PrintTotals rows={rows} />
-      <PrintFooter note={t('receipt.thankYou')} />
+      <PrintFooter note={t('receipt.issuedByClinic')} />
     </PrintDocument>
   );
 }
@@ -469,10 +481,6 @@ function PrescriptionSheetShell({
   children: ReactNode;
 }) {
   const { t } = useTranslation();
-  const doctorNameEn = clinic.doctorNameEn ?? clinic.clinicName ?? '—';
-  const doctorNameAr = clinic.doctorNameAr ?? doctorNameEn;
-  const doctorTitleEn = clinic.doctorTitleEn ?? t('prescriptionPrint.doctorTitleDefault');
-  const doctorTitleAr = clinic.doctorTitleAr ?? 'جراح في طب الأسنان';
   const weightLabel =
     patient.weightKg != null ? `${patient.weightKg} ${t('patientRecord.patient.weightUnit')}` : '—';
 
@@ -483,38 +491,15 @@ function PrescriptionSheetShell({
           {watermark}
         </div>
 
-        <header className="prescription-sheet__header">
-          <div className="prescription-sheet__header-col prescription-sheet__header-col--ltr">
-            <p className="prescription-sheet__doctor-en">{doctorNameEn}</p>
-            <p className="prescription-sheet__title-en">{doctorTitleEn}</p>
-            {clinic.doctorLicenseNo && (
-              <p className="prescription-sheet__license-en">License: {clinic.doctorLicenseNo}</p>
-            )}
-          </div>
-          <div className="prescription-sheet__header-col prescription-sheet__header-col--rtl">
-            <p className="prescription-sheet__doctor-ar">{doctorNameAr}</p>
-            <p className="prescription-sheet__title-ar">{doctorTitleAr}</p>
-            {clinic.doctorLicenseNo && (
-              <p className="prescription-sheet__license-ar">رقم النقابة: {clinic.doctorLicenseNo}</p>
-            )}
-          </div>
-        </header>
+        <ApprovedPrintHeader clinic={clinic} />
 
-        <div className="prescription-sheet__patient-row">
-          <div className="prescription-sheet__patient-ltr">
-            <span>{t('prescriptionPrint.patient')}:</span> <strong>{patient.fullName}</strong>
-          </div>
-          <div className="prescription-sheet__patient-rtl">
-            <span>المريض:</span> <strong>{patient.fullName}</strong>
-          </div>
+        <div className="prescription-sheet__patient-row prescription-sheet__patient-row--single">
+          <span>{t('prescriptionPrint.patient')}:</span> <strong>{patient.fullName}</strong>
         </div>
 
         <div className="prescription-sheet__meta-row">
           <span>
             {t('prescriptionPrint.weight')}: {weightLabel}
-          </span>
-          <span>
-            {t('common.date')}: {formatDateDisplay(dateIso, language)}
           </span>
         </div>
 
@@ -528,6 +513,10 @@ function PrescriptionSheetShell({
             <span className="prescription-sheet__sign-line" />
             <span className="prescription-sheet__sign-label">{t('prescriptionPrint.signature')}</span>
           </div>
+        </div>
+
+        <div className="prescription-sheet__date-bottom">
+          {t('common.date')}: {formatDateDisplay(dateIso, language)}
         </div>
 
         <footer className="prescription-sheet__footer">
@@ -585,8 +574,6 @@ export function PrescriptionPrintable({
       sheetClassName="prescription-sheet prescription-sheet--medication"
       watermark={<ToothWatermarkIcon />}
     >
-      <div className="prescription-sheet__rx-symbol">℞</div>
-
       <ol className="prescription-sheet__medicines">
         {prescription.items.map((item, index) => {
           const detailParts = [item.dose, item.frequency, item.duration].filter(Boolean);
@@ -634,9 +621,8 @@ export function XrayPrescriptionPrintable({
       sheetClassName="prescription-sheet prescription-sheet--xray"
       watermark={<XrayWatermarkIcon />}
     >
-      <div className="prescription-sheet__xray-heading">
-        <span className="prescription-sheet__xray-heading-en">{t('xrayPrescriptionPrint.title')}</span>
-        <span className="prescription-sheet__xray-heading-ar">{t('xrayPrescriptionPrint.titleAr')}</span>
+      <div className="prescription-sheet__xray-heading prescription-sheet__xray-heading--single">
+        <span>{t('xrayPrescriptionPrint.title')}</span>
       </div>
 
       <ol className="prescription-sheet__studies">
@@ -656,13 +642,21 @@ export function XrayPrescriptionPrintable({
   );
 }
 
-/** A5 portrait patient record — identity, account, odontogram with treatment tags. */
+/** Complete patient record — all relevant workspace information. */
 export function PatientRecordPrintable({
   patient,
+  treatments = [],
   summary,
   toothMap,
   clinic,
   language,
+  alerts = [],
+  appointments = [],
+  payments = [],
+  discounts = [],
+  followUps = [],
+  labCases = [],
+  prescriptions = [],
 }: {
   patient: Patient;
   treatments?: PatientTreatment[];
@@ -670,11 +664,20 @@ export function PatientRecordPrintable({
   toothMap: Map<number, ToothTreatmentBadge[]>;
   clinic: ClinicPrintInfo;
   language: string;
+  alerts?: MedicalAlert[];
+  appointments?: AppointmentWithPatient[];
+  payments?: Payment[];
+  discounts?: AccountDiscount[];
+  followUps?: FollowUpWithPatient[];
+  labCases?: LabCaseWithDetails[];
+  prescriptions?: Prescription[];
 }) {
   const { t } = useTranslation();
   const age = patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : patient.approxAge;
   const weightLabel =
     patient.weightKg != null ? `${patient.weightKg} ${t('patientRecord.patient.weightUnit')}` : '—';
+  const activeAlerts = alerts.filter((a) => a.isActive);
+  const activeDiscounts = discounts.filter((d) => d.status !== 'VOID');
 
   return (
     <PrintDocument orientation="portrait" className="print-doc--patient-record">
@@ -697,6 +700,97 @@ export function PatientRecordPrintable({
           </PrintMetaRow>
         }
       />
+
+      <PrintSection title={t('patientRecord.sections.patient')}>
+        <PrintTable compact>
+          <tbody>
+            <tr>
+              <td>{t('patientRecord.patient.phone')}</td>
+              <td>{patient.phone || '—'}</td>
+            </tr>
+            {patient.gender && (
+              <tr>
+                <td>{t('patientRecord.patient.gender')}</td>
+                <td>{t(`gender.${patient.gender}`)}</td>
+              </tr>
+            )}
+            {patient.dateOfBirth && (
+              <tr>
+                <td>{t('patientRecord.patient.dob')}</td>
+                <td>{formatDateDisplay(patient.dateOfBirth, language)}</td>
+              </tr>
+            )}
+            {patient.address && (
+              <tr>
+                <td>{t('patientRecord.patient.address')}</td>
+                <td>{patient.address}</td>
+              </tr>
+            )}
+          </tbody>
+        </PrintTable>
+      </PrintSection>
+
+      <PrintSection title={t('patientRecord.medicalAlerts.title')}>
+        {activeAlerts.length === 0 ? (
+          <p className="muted">{t('patientRecord.medicalAlerts.empty')}</p>
+        ) : (
+          <ul>
+            {activeAlerts.map((alert) => (
+              <li key={alert.id}>
+                {alert.label}
+                {alert.note ? ` — ${alert.note}` : ''}
+              </li>
+            ))}
+          </ul>
+        )}
+      </PrintSection>
+
+      <PrintSection title={t('patientRecord.patient.generalNotes')}>
+        <p>{patient.generalNotes?.trim() || patient.medicalNotes?.trim() || '—'}</p>
+      </PrintSection>
+
+      <PrintSection title={t('patientRecordPrint.treatments')}>
+        <TreatmentsTable treatments={treatments} language={language} showStatus />
+      </PrintSection>
+
+      <PrintSection title={t('patientRecordPrint.odontogram')}>
+        <div className="print-odontogram">
+          <Odontogram
+            toothMap={toothMap}
+            selectable={false}
+            selectedTeeth={[]}
+            onToggleTooth={() => undefined}
+            printLayout
+          />
+        </div>
+      </PrintSection>
+
+      <PrintSection title={t('patientRecord.sections.appointments')}>
+        {appointments.length === 0 ? (
+          <p className="muted">{t('patientFile.noAppointments')}</p>
+        ) : (
+          <PrintTable compact>
+            <thead>
+              <tr>
+                <th>{t('common.date')}</th>
+                <th>{t('common.time')}</th>
+                <th>{t('common.status')}</th>
+                <th>{t('appointmentsPage.reason')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {appointments.map((appt) => (
+                <tr key={appt.id}>
+                  <td>{formatDateDisplay(appt.date, language)}</td>
+                  <td>{appt.time}</td>
+                  <td>{t(`appointmentsPage.status.${appt.status}`)}</td>
+                  <td>{appt.reason || appt.appointmentType}</td>
+                </tr>
+              ))}
+            </tbody>
+          </PrintTable>
+        )}
+      </PrintSection>
 
       <PrintSection title={t('patientRecordPrint.account')}>
         <PrintTotals
@@ -722,18 +816,187 @@ export function PatientRecordPrintable({
         />
       </PrintSection>
 
-      <PrintSection title={t('patientRecordPrint.odontogram')}>
-        <div className="print-odontogram">
-          <Odontogram
-            toothMap={toothMap}
-            selectable={false}
-            selectedTeeth={[]}
-            onToggleTooth={() => undefined}
-            printLayout
-          />
-        </div>
+      <PrintSection title={t('statement.paymentHistory')}>
+        <PaymentsTable payments={payments} />
       </PrintSection>
 
+      <PrintSection title={t('receipt.accountDiscount')}>
+        {activeDiscounts.length === 0 ? (
+          <p className="muted">—</p>
+        ) : (
+          <PrintTable compact>
+            <thead>
+              <tr>
+                <th>{t('common.date')}</th>
+                <th>{t('patientRecord.account.amount')}</th>
+                <th>{t('common.note')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {activeDiscounts.map((d) => (
+                <tr key={d.id}>
+                  <td>{d.date}</td>
+                  <td>{formatMoney(d.amountCents)}</td>
+                  <td>{d.note || '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </PrintTable>
+        )}
+      </PrintSection>
+
+      <PrintSection title={t('patientRecord.sections.followUps')}>
+        {followUps.length === 0 ? (
+          <p className="muted">{t('followUp.patientEmpty')}</p>
+        ) : (
+          <PrintTable compact>
+            <thead>
+              <tr>
+                <th>{t('common.date')}</th>
+                <th>{t('followUp.columns.reason')}</th>
+                <th>{t('common.status')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {followUps.map((fu) => (
+                <tr key={fu.id}>
+                  <td>{formatDateDisplay(fu.followUpDate, language)}</td>
+                  <td>{fu.reason}</td>
+                  <td>{fu.displayStatus || fu.status}</td>
+                </tr>
+              ))}
+            </tbody>
+          </PrintTable>
+        )}
+      </PrintSection>
+
+      <PrintSection title={t('patientRecord.sections.labCases')}>
+        {labCases.length === 0 ? (
+          <p className="muted">{t('labCases.patientEmpty')}</p>
+        ) : (
+          <PrintTable compact>
+            <thead>
+              <tr>
+                <th>{t('labCases.workType')}</th>
+                <th>{t('labCases.teeth')}</th>
+                <th>{t('labCases.status')}</th>
+                <th>{t('labCases.expectedDelivery')}</th>
+                <th>{t('labCases.financial.labCost')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {labCases.map((c) => (
+                <tr key={c.id}>
+                  <td>{c.workTypeLabel}</td>
+                  <td>{c.teeth.join(', ') || '—'}</td>
+                  <td>{t(`labCases.statuses.${c.status}`)}</td>
+                  <td>{c.expectedDeliveryDate ? formatDateDisplay(c.expectedDeliveryDate, language) : '—'}</td>
+                  <td>{formatMoney(c.labCostCents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </PrintTable>
+        )}
+      </PrintSection>
+
+      <PrintSection title={t('patientRecord.sections.prescription')}>
+        {prescriptions.length === 0 ? (
+          <p className="muted">{t('patientRecord.prescription.noHistory')}</p>
+        ) : (
+          <PrintTable compact>
+            <thead>
+              <tr>
+                <th>{t('common.date')}</th>
+                <th>{t('followUp.columns.type')}</th>
+                <th>{t('prescriptionPrint.medicine')}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {prescriptions.map((rx) => (
+                <tr key={rx.id}>
+                  <td>{formatDateTimeDisplay(rx.createdAt, language)}</td>
+                  <td>
+                    {rx.type === 'XRAY'
+                      ? t('patientRecord.prescription.typeXray')
+                      : t('patientRecord.prescription.typeMedication')}
+                  </td>
+                  <td>{rx.items.map((item) => item.medicineName).join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </PrintTable>
+        )}
+      </PrintSection>
+
+      <PrintFooter />
+    </PrintDocument>
+  );
+}
+
+export function LabOrderPrintable({
+  labCase,
+  clinic,
+  language,
+}: {
+  labCase: LabCaseWithDetails;
+  clinic: ClinicPrintInfo;
+  language: string;
+}) {
+  const { t } = useTranslation();
+  return (
+    <PrintDocument orientation="portrait">
+      <PrintReportHeader
+        clinic={clinic}
+        title={t('labCases.print.title')}
+        meta={
+          <PrintMetaRow>
+            <PrintMetaItem label={t('receipt.patient')} value={labCase.patientName} />
+            <PrintMetaItem label={t('receipt.fileNumber')} value={labCase.patientFileNumber} />
+          </PrintMetaRow>
+        }
+      />
+      <PrintSection title={t('labCases.print.details')}>
+        <PrintTable compact>
+          <tbody>
+            <tr>
+              <td>{t('labCases.labName')}</td>
+              <td>{labCase.labName}</td>
+            </tr>
+            <tr>
+              <td>{t('labCases.workType')}</td>
+              <td>{labCase.workTypeLabel}</td>
+            </tr>
+            <tr>
+              <td>{t('labCases.teeth')}</td>
+              <td>{labCase.teeth.join(', ') || '—'}</td>
+            </tr>
+            <tr>
+              <td>{t('labCases.sentDate')}</td>
+              <td>{labCase.sentDate ? formatDateDisplay(labCase.sentDate, language) : '—'}</td>
+            </tr>
+            <tr>
+              <td>{t('labCases.expectedDelivery')}</td>
+              <td>
+                {labCase.expectedDeliveryDate ? formatDateDisplay(labCase.expectedDeliveryDate, language) : '—'}
+              </td>
+            </tr>
+            <tr>
+              <td>{t('labCases.status')}</td>
+              <td>{t(`labCases.statuses.${labCase.status}`)}</td>
+            </tr>
+            <tr>
+              <td>{t('labCases.financial.labCost')}</td>
+              <td>{formatMoney(labCase.labCostCents)}</td>
+            </tr>
+            {labCase.notes && (
+              <tr>
+                <td>{t('common.note')}</td>
+                <td>{labCase.notes}</td>
+              </tr>
+            )}
+          </tbody>
+        </PrintTable>
+      </PrintSection>
       <PrintFooter />
     </PrintDocument>
   );

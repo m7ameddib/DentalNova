@@ -8,7 +8,8 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AppointmentStatus, AppointmentWithPatient, Patient } from '@/types/domain';
 import { formatClockTime } from '@/utils/calendar';
-import { todayIso } from '@/utils/date';
+import { currentTimeRounded, todayIso } from '@/utils/date';
+import { getErrorMessage } from '@/utils/errors';
 import { DEFAULT_DURATION, EMERGENCY_STATUS_OPTIONS, EMERGENCY_TYPE } from './constants';
 
 interface EmergencyPanelProps {
@@ -16,14 +17,6 @@ interface EmergencyPanelProps {
   onOpenPatient: (patientId: number) => void;
   onManageEmergency: (appt: AppointmentWithPatient) => void;
   onConvertToRegular: (appt: AppointmentWithPatient) => void;
-}
-
-function currentTimeRounded(): string {
-  const now = new Date();
-  const min = Math.round(now.getMinutes() / 5) * 5;
-  const h = now.getHours().toString().padStart(2, '0');
-  const m = (min === 60 ? 0 : min).toString().padStart(2, '0');
-  return `${h}:${m}`;
 }
 
 export function EmergencyPanel({
@@ -70,7 +63,7 @@ export function EmergencyPanel({
       queryClient.invalidateQueries({ queryKey: ['day-schedule', today] });
       resetForm();
     },
-    onError: () => setError(t('common.error')),
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
   const statusMutation = useMutation({

@@ -103,6 +103,27 @@ export class PaymentsRepository {
     return row.total;
   }
 
+  update(
+    id: number,
+    input: { amountCents?: number; method?: string; date?: string; note?: string | null },
+  ): Payment | undefined {
+    const existing = this.findById(id);
+    if (!existing || existing.status === 'VOID') return undefined;
+    this.db.connection
+      .prepare(
+        `UPDATE payments SET amount_cents = ?, method = ?, date = ?, note = ?
+         WHERE id = ? AND COALESCE(status, 'ACTIVE') != 'VOID'`,
+      )
+      .run(
+        input.amountCents ?? existing.amountCents,
+        input.method ?? existing.method,
+        input.date ?? existing.date,
+        input.note !== undefined ? input.note : existing.note ?? null,
+        id,
+      );
+    return this.findById(id);
+  }
+
   create(input: CreatePaymentInput): Payment {
     const result = this.db.connection
       .prepare(

@@ -102,6 +102,7 @@ export default function App() {
                 <Route path="/patients/:id/prescription/new" element={<PrescriptionBuilderPage />} />
 
                 <Route path="/patients/:id/prescription/xray/new" element={<XrayPrescriptionBuilderPage />} />
+                <Route path="/patients/:id/prescription/xray/:rxId" element={<XrayPrescriptionBuilderPage />} />
 
               </Route>
 

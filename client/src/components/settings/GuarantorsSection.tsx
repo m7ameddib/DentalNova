@@ -28,6 +28,7 @@ export function GuarantorsSection() {
   const [name, setName] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [priceEdits, setPriceEdits] = useState<Record<number, string>>({});
+  const [deletingId, setDeletingId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const invalidate = () => {
@@ -56,18 +57,29 @@ export function GuarantorsSection() {
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
 
-  const upsertPriceMutation = useMutation({
-    mutationFn: ({
-      guarantorId,
-      treatmentTypeId,
-      price,
-    }: {
-      guarantorId: number;
-      treatmentTypeId: number;
-      price: number;
-    }) => guarantorsApi.upsertPrice(guarantorId, treatmentTypeId, price),
-    onSuccess: (_, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['guarantor-prices', vars.guarantorId] });
+  const deleteMutation = useMutation({
+    mutationFn: (id: number) => guarantorsApi.remove(id),
+    onSuccess: () => {
+      invalidate();
+      setDeletingId(null);
+      setExpandedId(null);
+    },
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+  });
+
+  const savePricesMutation = useMutation({
+    mutationFn: async (guarantorId: number) => {
+      const entries = Object.entries(priceEdits);
+      for (const [typeId, raw] of entries) {
+        if (raw.trim() === '') continue;
+        const price = Number(raw);
+        if (Number.isNaN(price) || price < 0) continue;
+        await guarantorsApi.upsertPrice(guarantorId, Number(typeId), price);
+      }
+    },
+    onSuccess: (_, guarantorId) => {
+      queryClient.invalidateQueries({ queryKey: ['guarantor-prices', guarantorId] });
+      setError(null);
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
   });
@@ -147,6 +159,9 @@ export function GuarantorsSection() {
                       <button type="button" className="btn btn--ghost btn--small" onClick={() => toggleActive(g)}>
                         {g.isActive ? t('common.disable') : t('common.enable')}
                       </button>
+                      <button type="button" className="btn btn--ghost btn--small" onClick={() => setDeletingId(g.id)}>
+                        {t('common.delete')}
+                      </button>
                     </>
                   )}
                 </td>
@@ -159,9 +174,8 @@ export function GuarantorsSection() {
                       treatmentTypes={treatmentTypes}
                       priceEdits={priceEdits}
                       setPriceEdits={setPriceEdits}
-                      onSavePrice={(treatmentTypeId, price) =>
-                        upsertPriceMutation.mutate({ guarantorId: g.id, treatmentTypeId, price })
-                      }
+                      onSaveAll={() => savePricesMutation.mutate(g.id)}
+                      saving={savePricesMutation.isPending}
                     />
                   </td>
                 </tr>
@@ -196,6 +210,25 @@ export function GuarantorsSection() {
       )}
 
       {error && !adding && editingId === null && <div className="form-error-banner">{error}</div>}
+
+      {deletingId != null && (
+        <div className="inline-form">
+          <p>{t('settings.guarantors.deleteConfirm')}</p>
+          <div className="form-actions">
+            <button type="button" className="btn btn--ghost" onClick={() => setDeletingId(null)}>
+              {t('common.cancel')}
+            </button>
+            <button
+              type="button"
+              className="btn btn--danger"
+              onClick={() => deleteMutation.mutate(deletingId)}
+              disabled={deleteMutation.isPending}
+            >
+              {t('common.delete')}
+            </button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -205,13 +238,15 @@ function GuarantorPricesPanel({
   treatmentTypes,
   priceEdits,
   setPriceEdits,
-  onSavePrice,
+  onSaveAll,
+  saving,
 }: {
   guarantorId: number;
   treatmentTypes: import('@/types/domain').TreatmentType[];
   priceEdits: Record<number, string>;
   setPriceEdits: Dispatch<SetStateAction<Record<number, string>>>;
-  onSavePrice: (treatmentTypeId: number, price: number) => void;
+  onSaveAll: () => void;
+  saving: boolean;
 }) {
   const { t } = useTranslation();
   const { data: prices = [] } = useQuery({
@@ -230,7 +265,6 @@ function GuarantorPricesPanel({
             <th>{t('settings.treatmentCatalog.name')}</th>
             <th>{t('settings.guarantors.defaultPrice')}</th>
             <th>{t('settings.guarantors.guarantorPrice')}</th>
-            <th />
           </tr>
         </thead>
         <tbody>
@@ -251,23 +285,16 @@ function GuarantorPricesPanel({
                     placeholder="0.00"
                   />
                 </td>
-                <td>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--small"
-                    onClick={() => {
-                      const price = Number(editVal);
-                      if (price >= 0) onSavePrice(tt.id, price);
-                    }}
-                  >
-                    {t('common.save')}
-                  </button>
-                </td>
               </tr>
             );
           })}
         </tbody>
       </table>
+      <div className="form-actions form-actions--start">
+        <button type="button" className="btn btn--primary btn--small" onClick={onSaveAll} disabled={saving}>
+          {t('settings.guarantors.savePrices')}
+        </button>
+      </div>
     </div>
   );
 }

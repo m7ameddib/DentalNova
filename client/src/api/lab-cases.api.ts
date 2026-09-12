@@ -92,6 +92,9 @@ export const labCasesApi = {
   recordPayment: (labCaseId: number, payload: RecordLabPaymentPayload) =>
     apiClient.post(`/lab-cases/${labCaseId}/payments`, payload).then((r) => r.data),
 
+  updatePayment: (labCaseId: number, paymentId: number, payload: Partial<RecordLabPaymentPayload>) =>
+    apiClient.patch(`/lab-cases/${labCaseId}/payments/${paymentId}`, payload).then((r) => r.data),
+
   voidPayment: (labCaseId: number, paymentId: number, reason: string) =>
     apiClient.patch(`/lab-cases/${labCaseId}/payments/${paymentId}/void`, { reason }).then((r) => r.data),
 

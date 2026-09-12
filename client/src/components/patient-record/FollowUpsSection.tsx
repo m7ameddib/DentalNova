@@ -19,6 +19,7 @@ export function FollowUpsSection({ patientId }: { patientId: number }) {
 
   const activeCount = data?.activeCount ?? 0;
   const nextDate = data?.nextFollowUpDate;
+  const activeItems = data?.active ?? [];
 
   return (
     <SectionCard
@@ -31,16 +32,30 @@ export function FollowUpsSection({ patientId }: { patientId: number }) {
       {activeCount === 0 ? (
         <p className="muted">{t('followUp.patientEmpty')}</p>
       ) : (
-        <div className="follow-ups-compact">
-          <span className="follow-ups-compact__count">
-            {t('followUp.activeCount', { count: activeCount })}
-          </span>
-          {nextDate && (
-            <span className="follow-ups-compact__next">
-              {t('followUp.nextDate')}: {formatDateDisplay(nextDate, language)}
+        <ul className="compact-follow-up-list">
+          <li className="follow-ups-compact">
+            <span className="follow-ups-compact__count">
+              {t('followUp.activeCount', { count: activeCount })}
             </span>
-          )}
-        </div>
+            {nextDate && (
+              <span className="follow-ups-compact__next">
+                {t('followUp.nextDate')}: {formatDateDisplay(nextDate, language)}
+              </span>
+            )}
+          </li>
+          {activeItems.map((fu) => (
+            <li key={fu.id}>
+              <button
+                type="button"
+                className="compact-follow-up-list__item"
+                onClick={() => navigate(`/follow-ups?patientId=${patientId}&followUpId=${fu.id}`)}
+              >
+                <span>{fu.reason}</span>
+                <span className="muted">{formatDateDisplay(fu.followUpDate, language)}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </SectionCard>
   );

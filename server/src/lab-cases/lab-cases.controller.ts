@@ -6,7 +6,7 @@ import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../common/rbac.constants';
 import { LabCasesService } from './lab-cases.service';
 import { CreateLabCaseDto, UpdateLabCaseDto } from './dto/lab-case.dto';
-import { RecordLabPaymentDto, VoidLabPaymentDto } from './dto/lab-payment.dto';
+import { RecordLabPaymentDto, UpdateLabPaymentDto, VoidLabPaymentDto } from './dto/lab-payment.dto';
 import {
   RecordLabAccountPaymentDto,
   UpdateLabAccountPaymentDto,
@@ -180,6 +180,17 @@ export class LabCasesController {
     @CurrentUser() user: AuthenticatedUser,
   ) {
     return this.labCasesService.recordPayment(id, dto, user);
+  }
+
+  @RequirePermissions(PERMISSIONS.LAB_PAYMENTS_RECORD)
+  @Patch(':id/payments/:paymentId')
+  updatePayment(
+    @Param('id', ParseIntPipe) id: number,
+    @Param('paymentId', ParseIntPipe) paymentId: number,
+    @Body() dto: UpdateLabPaymentDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.labCasesService.updatePayment(id, paymentId, dto, user);
   }
 
   @RequirePermissions(PERMISSIONS.LAB_PAYMENTS_VOID)

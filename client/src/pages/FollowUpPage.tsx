@@ -13,6 +13,7 @@ import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { formatDateDisplay, todayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
 import { formatMoney } from '@/utils/money';
 import { openFollowUpWhatsApp, openFollowUpsWhatsAppBulk } from '@/utils/followUpWhatsApp';
@@ -26,11 +27,14 @@ export function FollowUpPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const patientFilter = searchParams.get('patientId');
+  const followUpFilterId = searchParams.get('followUpId');
 
   const [showHistory, setShowHistory] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [filter, setFilter] = useState<FilterType>('ALL');
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [expandedId, setExpandedId] = useState<number | null>(
+    followUpFilterId ? Number(followUpFilterId) : null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [addingClinical, setAddingClinical] = useState(false);
   const [newPatientQuery, setNewPatientQuery] = useState('');
@@ -168,13 +172,12 @@ export function FollowUpPage() {
         <label className="follow-up-date-bar__label" htmlFor="follow-up-selected-date">
           {t('followUp.selectDate')}
         </label>
-        <input
+        <DateField
           id="follow-up-selected-date"
-          type="date"
           className="follow-up-date-bar__input"
           value={selectedDate}
-          onChange={(e) => {
-            setSelectedDate(e.target.value);
+          onChange={(value) => {
+            setSelectedDate(value);
             setExpandedId(null);
             setError(null);
           }}
@@ -250,7 +253,7 @@ export function FollowUpPage() {
           </label>
           <label className="form-field">
             <span className="form-field__label">{t('followUp.columns.date')}</span>
-            <input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} />
+            <DateField value={newDate} onChange={setNewDate} />
           </label>
           <div className="form-actions">
             <button type="button" className="btn btn--ghost btn--small" onClick={() => setAddingClinical(false)}>

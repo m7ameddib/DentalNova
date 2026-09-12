@@ -18,4 +18,5 @@ export const guarantorsApi = {
       .then((r) => r.data),
   deletePrice: (id: number, treatmentTypeId: number) =>
     apiClient.delete(`/guarantors/${id}/prices/${treatmentTypeId}`).then((r) => r.data),
+  remove: (id: number) => apiClient.delete(`/guarantors/${id}`).then((r) => r.data),
 };

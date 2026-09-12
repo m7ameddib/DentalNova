@@ -9,6 +9,7 @@ import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { formatDateDisplay, formatDateTimeDisplay, localTodayIso } from '@/utils/date';
+import { DateField } from '@/components/common/DateField';
 import { formatMoney } from '@/utils/money';
 import { openWhatsApp } from '@/utils/whatsapp';
 
@@ -122,12 +123,11 @@ export function DailyReportPage() {
         <label className="follow-up-date-bar__label" htmlFor="daily-report-selected-date">
           {t('dailyReport.selectDate')}
         </label>
-        <input
+        <DateField
           id="daily-report-selected-date"
-          type="date"
           className="follow-up-date-bar__input"
           value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
+          onChange={setSelectedDate}
         />
         {!isToday && (
           <button
