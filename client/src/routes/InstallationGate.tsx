@@ -2,10 +2,15 @@ import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { installationApi, checkServerHealth } from '@/api/installation.api';
+import { installationApi, checkServerHealth, InstallationStatus } from '@/api/installation.api';
 import { isClientMode } from '@/api/api-config';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { isPublicEntryPath } from '@/routes/public-entry-routes';
+import { useAuthStore } from '@/store/auth.store';
+import { getCachedInstallation, getCachedSubscription } from '@/offline/storage';
+import { rememberOnlineScope } from '@/offline/scope';
+import { queryClient } from '@/queryClient';
+import { useOfflineStatusStore } from '@/offline/status.store';
 
 export function InstallationGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
@@ -38,7 +43,45 @@ export function InstallationGate({ children }: { children: ReactNode }) {
     staleTime: 60_000,
   });
 
-  if (serverUp === false) {
+  const [cachedOnlineReady, setCachedOnlineReady] = useState(false);
+  const [fallbackChecked, setFallbackChecked] = useState(false);
+
+  useEffect(() => {
+    if (serverUp !== false) {
+      setFallbackChecked(false);
+      setCachedOnlineReady(false);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const cached = (await getCachedInstallation()) as InstallationStatus | null;
+      const authed = useAuthStore.getState().isAuthenticated;
+      const canFallback =
+        cached?.deploymentMode === 'online' && cached.phase === 'ready' && authed;
+      if (cancelled) return;
+      if (!canFallback) {
+        setFallbackChecked(true);
+        return;
+      }
+      await rememberOnlineScope(cached);
+      queryClient.setQueryData(['installation-status'], cached);
+      const sub = await getCachedSubscription();
+      if (sub) queryClient.setQueryData(['subscription-status'], sub);
+      useOfflineStatusStore.getState().setConnection('offline');
+      setCachedOnlineReady(true);
+      setFallbackChecked(true);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [serverUp]);
+
+  if (serverUp === false && !fallbackChecked) {
+    if (isPublic) return <>{children}</>;
+    return <div className="page-loading">{t('common.loading')}</div>;
+  }
+
+  if (serverUp === false && !cachedOnlineReady) {
     return (
       <div className="login-page">
         <div className="login-card setup-card">
@@ -55,6 +98,13 @@ export function InstallationGate({ children }: { children: ReactNode }) {
         </div>
       </div>
     );
+  }
+
+  if (serverUp === false && cachedOnlineReady) {
+    const cached = queryClient.getQueryData<InstallationStatus>(['installation-status']);
+    if (cached) {
+      return <>{children}</>;
+    }
   }
 
   if (serverUp === null) {

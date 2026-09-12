@@ -8,7 +8,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AppointmentStatus, AppointmentWithPatient, Patient } from '@/types/domain';
 import { formatClockTime } from '@/utils/calendar';
-import { todayIso, localAddDaysIso, formatDateDisplay } from '@/utils/date';
+import { todayIso } from '@/utils/date';
 import { DEFAULT_DURATION, EMERGENCY_STATUS_OPTIONS, EMERGENCY_TYPE, CalendarViewMode } from './constants';
 
 interface AgendaSidebarProps {
@@ -74,7 +74,7 @@ export function AgendaSidebar({
   const canCreate = usePermission(PERMISSIONS.APPOINTMENTS_CREATE);
   const canEdit = usePermission(PERMISSIONS.APPOINTMENTS_EDIT);
   const today = todayIso();
-  const [emergencyDate, setEmergencyDate] = useState(today);
+  const emergencyDate = today;
 
   const [year, month] = focusDate.split('-').map(Number);
   const [viewYear, setViewYear] = useState(year);
@@ -291,48 +291,15 @@ export function AgendaSidebar({
           {canCreate && (
             <button
               type="button"
-              className="emergency-panel__add-btn"
+              className="emergency-panel__add-btn emergency-panel__add-btn--labeled"
               onClick={() => setShowEmergencyForm((v) => !v)}
               title={t('appointmentsPage.emergency.add')}
             >
               <Plus size={14} />
+              {t('appointmentsPage.emergency.add')}
             </button>
           )}
         </div>
-
-        <div className="emergency-panel__date-nav">
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => setEmergencyDate((d) => localAddDaysIso(d, -1))}
-            title={t('appointmentsPage.emergency.previousDay')}
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span
-            className={[
-              'emergency-panel__date',
-              emergencyDate === today ? 'emergency-panel__date--today' : '',
-            ]
-              .filter(Boolean)
-              .join(' ')}
-          >
-            {formatDateDisplay(emergencyDate, language)}
-            {emergencyDate === today ? ` · ${t('common.today')}` : ''}
-          </span>
-          <button
-            type="button"
-            className="icon-btn"
-            onClick={() => setEmergencyDate((d) => localAddDaysIso(d, 1))}
-            title={t('appointmentsPage.emergency.nextDay')}
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-
-        <p className="emergency-panel__hint emergency-panel__hint--compact">
-          {t('appointmentsPage.emergency.dragHint')}
-        </p>
 
         {showEmergencyForm && canCreate && (
           <div className="emergency-panel__form emergency-panel__form--compact">
@@ -475,6 +442,10 @@ export function AgendaSidebar({
             </div>
           ))}
         </div>
+
+        <p className="emergency-panel__hint emergency-panel__hint--compact">
+          {t('appointmentsPage.emergency.dragHint')}
+        </p>
       </div>
     </aside>
   );

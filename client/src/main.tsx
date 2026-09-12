@@ -10,8 +10,10 @@ import './styles/follow-up.css';
 import './styles/daily-report.css';
 import { registerPwaServiceWorker } from '@/pwa/registerPwa';
 import { queryClient } from '@/queryClient';
+import { startOfflineFallback } from '@/offline/bootstrap';
 
 registerPwaServiceWorker();
+void startOfflineFallback();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

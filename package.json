@@ -35,7 +35,8 @@
     "release:test-update": "powershell -ExecutionPolicy Bypass -File release/scripts/test-install-update.ps1",
     "release:test-licensing": "node release/scripts/test-offline-licensing.js",
     "release:test-license-rotation": "node release/scripts/test-license-key-rotation.js",
-    "test:online-multiclinic": "node release/scripts/test-online-multiclinic.js"
+    "test:online-multiclinic": "node release/scripts/test-online-multiclinic.js",
+    "test:offline-fallback": "npx --yes tsx --test client/src/offline/core.test.ts"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"

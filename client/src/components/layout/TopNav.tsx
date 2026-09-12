@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
+import { ConnectionStatusChip } from '@/components/common/ConnectionStatusChip';
 import { useAuthStore } from '@/store/auth.store';
 import { useUiStore } from '@/store/ui.store';
 import { usePermission } from '@/hooks/usePermission';
@@ -52,6 +53,7 @@ export function TopNav() {
     <header className="top-nav">
       <div className="top-nav__brand">
         <BrandLogo variant="nav" />
+        <ConnectionStatusChip />
       </div>
 
       <button

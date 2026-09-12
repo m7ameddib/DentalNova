@@ -164,7 +164,7 @@ body.top-nav-menu-open {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 10px 16px;
+  padding: 8px 16px;
   background: #fef3c7;
   color: #92400e;
   border-bottom: 1px solid #fcd34d;
@@ -173,6 +173,12 @@ body.top-nav-menu-open {
   position: sticky;
   top: 0;
   z-index: 30;
+}
+
+.online-status-banner--syncing {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border-bottom-color: #bfdbfe;
 }
 
 .pwa-install-banner {
@@ -626,7 +632,7 @@ body.top-nav-menu-open {
 /* ---------- Auth & public pages ---------- */
 
 @media (max-width: 768px) {
-  .login-page,
+  .login-page:not(.login-page--showcase),
   .subscription-status-page,
   .activation-page,
   .setup-page,

@@ -44,14 +44,19 @@ export const installationApi = {
 };
 
 export async function checkServerHealth(): Promise<boolean> {
-  for (let attempt = 0; attempt < 5; attempt += 1) {
+  const offlineBrowser = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const attempts = offlineBrowser ? 1 : 5;
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
-      const res = await apiClient.get('/health', { timeout: 8000 });
+      const res = await apiClient.get('/health', {
+        timeout: offlineBrowser ? 2000 : 8000,
+        skipOfflineFallback: true,
+      });
       if (res.data?.ok === true) return true;
     } catch {
       // retry while server is finishing setup work
     }
-    if (attempt < 4) {
+    if (attempt < attempts - 1) {
       await new Promise((resolve) => setTimeout(resolve, 2000));
     }
   }

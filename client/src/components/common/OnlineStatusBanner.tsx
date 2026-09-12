@@ -1,34 +1,43 @@
-import { useEffect, useState } from 'react';
+import { WifiOff, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { WifiOff } from 'lucide-react';
+import { useOfflineStatusStore } from '@/offline/status.store';
 
 export function OnlineStatusBanner() {
   const { t } = useTranslation();
-  const [online, setOnline] = useState(
-    typeof navigator !== 'undefined' ? navigator.onLine : true,
-  );
+  const enabled = useOfflineStatusStore((s) => s.enabled);
+  const connection = useOfflineStatusStore((s) => s.connection);
+  const pending = useOfflineStatusStore((s) => s.pending);
+  const conflicts = useOfflineStatusStore((s) => s.conflicts);
+  const needsReauth = useOfflineStatusStore((s) => s.needsReauth);
 
-  useEffect(() => {
-    const handleOnline = () => setOnline(true);
-    const handleOffline = () => setOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
-  if (online) {
+  if (!enabled) {
     return null;
   }
 
+  if (connection === 'online' && pending === 0 && conflicts === 0 && !needsReauth) {
+    return null;
+  }
+
+  const message = needsReauth
+    ? t('offlineFallback.reauth')
+    : connection === 'syncing'
+      ? t('offlineFallback.syncing', { count: pending })
+      : pending > 0
+        ? t('offlineFallback.offlinePending', { count: pending })
+        : t('offlineFallback.offline');
+
   return (
-    <div className="online-status-banner" role="status">
-      <WifiOff size={16} aria-hidden />
-      <span>{t('pwa.offlineMessage')}</span>
+    <div
+      className={
+        connection === 'syncing'
+          ? 'online-status-banner online-status-banner--syncing'
+          : 'online-status-banner'
+      }
+      role="status"
+    >
+      {connection === 'syncing' ? <RefreshCw size={14} aria-hidden /> : <WifiOff size={14} aria-hidden />}
+      <span>{message}</span>
+      {conflicts > 0 && <span>{t('offlineFallback.conflicts', { count: conflicts })}</span>}
     </div>
   );
 }

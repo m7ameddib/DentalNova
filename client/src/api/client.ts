@@ -1,6 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from '@/store/auth.store';
 import { getApiBaseUrl } from '@/api/api-config';
+import { installOfflineFallback } from '@/offline/intercept';
 
 export const apiClient = axios.create();
 
@@ -14,12 +15,4 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    if (error?.response?.status === 401) {
-      useAuthStore.getState().logout();
-    }
-    return Promise.reject(error);
-  },
-);
+installOfflineFallback(apiClient);
