@@ -8,7 +8,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AppointmentStatus, AppointmentWithPatient, Patient } from '@/types/domain';
 import { formatClockTime } from '@/utils/calendar';
-import { todayIso } from '@/utils/date';
+import { todayIso, formatDateDisplay } from '@/utils/date';
 import { DEFAULT_DURATION, EMERGENCY_STATUS_OPTIONS, EMERGENCY_TYPE, CalendarViewMode } from './constants';
 
 interface AgendaSidebarProps {
@@ -74,7 +74,7 @@ export function AgendaSidebar({
   const canCreate = usePermission(PERMISSIONS.APPOINTMENTS_CREATE);
   const canEdit = usePermission(PERMISSIONS.APPOINTMENTS_EDIT);
   const today = todayIso();
-  const emergencyDate = today;
+  const [emergencyDate, setEmergencyDate] = useState(today);
 
   const [year, month] = focusDate.split('-').map(Number);
   const [viewYear, setViewYear] = useState(year);
@@ -300,6 +300,29 @@ export function AgendaSidebar({
             </button>
           )}
         </div>
+
+        <label className="emergency-panel__date-nav">
+          <input
+            type="date"
+            className="emergency-panel__date-input"
+            value={emergencyDate}
+            onChange={(e) => {
+              if (e.target.value) setEmergencyDate(e.target.value);
+            }}
+            aria-label={t('appointmentsPage.emergency.title')}
+          />
+          <span
+            className={[
+              'emergency-panel__date',
+              emergencyDate === today ? 'emergency-panel__date--today' : '',
+            ]
+              .filter(Boolean)
+              .join(' ')}
+          >
+            {formatDateDisplay(emergencyDate, language)}
+            {emergencyDate === today ? ` · ${t('common.today')}` : ''}
+          </span>
+        </label>
 
         {showEmergencyForm && canCreate && (
           <div className="emergency-panel__form emergency-panel__form--compact">

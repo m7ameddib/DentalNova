@@ -61,6 +61,8 @@ const TRUST = [
   { icon: Heart, titleKey: 'auth.trustDentistsTitle', textKey: 'auth.trustDentistsText' },
 ] as const;
 
+const SUPPORT_WHATSAPP_URL = 'https://wa.me/96170793486';
+
 export function LoginPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -151,59 +153,56 @@ export function LoginPage() {
 
       <div className="login-entry">
         <aside className="login-entry__hero">
-          <div className="login-entry__clinic" aria-hidden="true">
-            <img src="/assets/login-operatory.svg" alt="" />
-            <p className="login-entry__wall-quote">{t('auth.wallQuote')}</p>
-          </div>
-          <div className="login-entry__hero-brand">
-            <BrandLogo variant="auth-lg" />
-            <p className="login-entry__tagline">{t('auth.tagline')}</p>
-          </div>
+          <div className="login-entry__copy">
+            <h2 className="login-entry__hero-title">{t('auth.heroHeadline')}</h2>
+            <p className="login-entry__hero-text">{t('auth.heroLead')}</p>
 
-          <h2 className="login-entry__hero-title">{t('auth.heroHeadline')}</h2>
-          <p className="login-entry__hero-text">{t('auth.heroLead')}</p>
-
-          <ul className="login-entry__features">
-            {FEATURES.map(({ icon: Icon, titleKey, textKey }) => (
-              <li key={titleKey} className="login-entry__feature">
-                <span className="login-entry__feature-icon">
-                  <Icon size={18} />
-                </span>
-                <strong>{t(titleKey)}</strong>
-                <span>{t(textKey)}</span>
-              </li>
-            ))}
-          </ul>
-
-          <div className="login-entry__ai">
-            <div className="login-entry__ai-bot" aria-hidden="true">
-              <Bot size={36} />
-            </div>
-            <div className="login-entry__ai-copy">
-              <h3>{t('auth.aiTitle')}</h3>
-              <p>{t('auth.aiIntro')}</p>
-              <p className="login-entry__ai-quote">{t('auth.aiQuote')}</p>
-            </div>
-            <ul className="login-entry__ai-points">
-              {AI_POINTS.map((key) => (
-                <li key={key}>
-                  <Check size={13} />
-                  {t(key)}
+            <ul className="login-entry__features">
+              {FEATURES.map(({ icon: Icon, titleKey, textKey }) => (
+                <li key={titleKey} className="login-entry__feature">
+                  <span className="login-entry__feature-icon">
+                    <Icon size={18} />
+                  </span>
+                  <strong>{t(titleKey)}</strong>
+                  <span>{t(textKey)}</span>
                 </li>
               ))}
             </ul>
-            <p className="login-entry__ai-script">{t('auth.aiScript')}</p>
+
+            <div className="login-entry__ai">
+              <div className="login-entry__ai-bot" aria-hidden="true">
+                <Bot size={36} />
+              </div>
+              <div className="login-entry__ai-copy">
+                <h3>{t('auth.aiTitle')}</h3>
+                <p>{t('auth.aiIntro')}</p>
+                <p className="login-entry__ai-quote">{t('auth.aiQuote')}</p>
+              </div>
+              <ul className="login-entry__ai-points">
+                {AI_POINTS.map((key) => (
+                  <li key={key}>
+                    <Check size={13} />
+                    {t(key)}
+                  </li>
+                ))}
+              </ul>
+              <p className="login-entry__ai-script">{t('auth.aiScript')}</p>
+            </div>
+
+            <ul className="login-entry__trust">
+              {TRUST.map(({ icon: Icon, titleKey, textKey }) => (
+                <li key={titleKey}>
+                  <Icon size={16} />
+                  <strong>{t(titleKey)}</strong>
+                  <span>{t(textKey)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
 
-          <ul className="login-entry__trust">
-            {TRUST.map(({ icon: Icon, titleKey, textKey }) => (
-              <li key={titleKey}>
-                <Icon size={16} />
-                <strong>{t(titleKey)}</strong>
-                <span>{t(textKey)}</span>
-              </li>
-            ))}
-          </ul>
+          <figure className="login-entry__clinic">
+            <img src="/assets/login-clinic.jpg" alt="" />
+          </figure>
         </aside>
 
         <div className="login-entry__main login-entry__main--form">
@@ -282,7 +281,7 @@ export function LoginPage() {
 
             <a
               className="btn btn--ghost btn--block login-card__support"
-              href="https://dibnova.com"
+              href={SUPPORT_WHATSAPP_URL}
               target="_blank"
               rel="noreferrer"
             >
