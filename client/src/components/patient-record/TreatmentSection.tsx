@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Stethoscope, Trash2, FileText, History, Pencil, Printer } from 'lucide-react';
+import { Stethoscope, Trash2, History, Pencil, Printer } from 'lucide-react';
 import { TreatmentPlanEstimatePrintable } from './PrintableTemplates';
 import { usePrintStore } from '@/store/print.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
@@ -14,7 +14,6 @@ import { patientsApi } from '@/api/patients.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { PatientTreatment, TreatmentStatus, Patient } from '@/types/domain';
-import { TreatmentPlanModal } from './TreatmentPlanModal';
 import { centsToAmount, formatMoney } from '@/utils/money';
 import { formatDateDisplay, formatDateTimeDisplay, todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
@@ -50,7 +49,6 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
   const [error, setError] = useState<string | null>(null);
   const [deletingRow, setDeletingRow] = useState<TreatmentDisplayRow | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null);
-  const [showTreatmentPlan, setShowTreatmentPlan] = useState(false);
   const [editingTreatment, setEditingTreatment] = useState<PatientTreatment | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
 
@@ -63,7 +61,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
   const { data: treatmentTypes = [] } = useQuery({
     queryKey: ['treatment-types'],
     queryFn: () => treatmentsApi.listTypes(),
-    enabled: adding || !!editingTreatment || showTreatmentPlan,
+    enabled: adding || !!editingTreatment,
     staleTime: 10 * 60_000,
   });
 
@@ -295,7 +293,8 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
           <>
             <button
               type="button"
-              className="link-btn treatment-plan-open-btn"
+              className="icon-btn icon-btn--small treatment-plan-open-btn"
+              title={t('patientRecord.treatmentPlan.printPlan')}
               onClick={async () => {
                 const clinic = await loadClinicPrintInfo();
                 const printable = treatments.filter((tr) => tr.status !== 'VOID');
@@ -310,10 +309,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
                 );
               }}
             >
-              <Printer size={14} /> {t('patientRecord.treatment.print')}
-            </button>
-            <button type="button" className="link-btn treatment-plan-open-btn" onClick={() => setShowTreatmentPlan(true)}>
-              <FileText size={14} /> {t('patientRecord.treatmentPlan.open')}
+              <Printer size={14} />
             </button>
           </>
         }
@@ -590,8 +586,6 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
           onSave={(payload) => updateMutation.mutate({ id: editingTreatment.id, payload })}
         />
       )}
-
-      {showTreatmentPlan && <TreatmentPlanModal patient={patient} onClose={() => setShowTreatmentPlan(false)} />}
 
       {deletingRow && (
         <Modal

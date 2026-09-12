@@ -418,12 +418,13 @@
       "followUpHint": "Optional. Leave blank to skip a follow-up slot."
     },
     "treatmentPlan": {
-      "title": "Treatment Plan / Estimate",
-      "open": "Plan / Estimate",
-      "print": "Print estimate",
-      "total": "Total estimate",
-      "disclaimer": "This is a treatment plan / estimate — not a payment receipt and not a final invoice.",
-      "noPlanned": "No planned treatments to include in an estimate. Add treatments with status Planned first."
+      "title": "Treatment Plan",
+      "open": "Treatment Plan",
+      "print": "Print Plan",
+      "printPlan": "Print Plan",
+      "total": "Total",
+      "disclaimer": "This is a treatment plan — not a payment receipt and not a final invoice.",
+      "noPlanned": "No planned treatments to include in the plan. Add treatments with status Planned first."
     },
     "medicalAlerts": {
       "title": "Medical Alerts",
@@ -643,6 +644,8 @@
   "patientRecordPrint": {
     "title": "Patient Record",
     "printAction": "Print Patient Record",
+    "printCompactAction": "Print Compact Record",
+    "compactTitle": "Patient Record (Summary)",
     "fileDate": "File date",
     "account": "Patient Account",
     "odontogram": "Odontogram",

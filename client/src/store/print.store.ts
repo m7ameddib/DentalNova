@@ -3,6 +3,7 @@ import { create } from 'zustand';
 
 interface PrintState {
   content: ReactNode | null;
+  requestId: number;
   /** Mounts the given printable content and triggers the browser print dialog. */
   print: (content: ReactNode) => void;
   clear: () => void;
@@ -16,6 +17,7 @@ interface PrintState {
  */
 export const usePrintStore = create<PrintState>((set) => ({
   content: null,
-  print: (content) => set({ content }),
+  requestId: 0,
+  print: (content) => set((state) => ({ content, requestId: state.requestId + 1 })),
   clear: () => set({ content: null }),
 }));

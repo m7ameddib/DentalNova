@@ -318,24 +318,34 @@ export function LabAccountPage() {
                   <td>{formatMoney(o.labCostCents)}</td>
                   <td>{t(`labCases.statuses.${o.status}`)}</td>
                   <td>
-                    <button type="button" className="link-btn" onClick={() => navigate(`/lab-cases?caseId=${o.id}`)}>
-                      {t('common.edit')}
-                    </button>
-                    <button
-                      type="button"
-                      className="link-btn"
-                      onClick={async () => {
-                        const clinic = await loadClinicPrintInfo();
-                        print(<LabOrderPrintable labCase={o} clinic={clinic} language={language} />);
-                      }}
-                    >
-                      {t('common.print')}
-                    </button>
-                    {o.status !== 'CANCELLED' && (
-                      <button type="button" className="link-btn link-btn--danger" onClick={() => setCancellingOrder(o)}>
-                        {t('common.cancel')}
+                    <div className="table-row-actions">
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--small"
+                        onClick={() => navigate(`/lab-cases?caseId=${o.id}`)}
+                      >
+                        {t('common.edit')}
                       </button>
-                    )}
+                      <button
+                        type="button"
+                        className="btn btn--ghost btn--small"
+                        onClick={async () => {
+                          const clinic = await loadClinicPrintInfo();
+                          print(<LabOrderPrintable labCase={o} clinic={clinic} language={language} />);
+                        }}
+                      >
+                        {t('common.print')}
+                      </button>
+                      {o.status !== 'CANCELLED' && (
+                        <button
+                          type="button"
+                          className="btn btn--ghost btn--small btn--danger"
+                          onClick={() => setCancellingOrder(o)}
+                        >
+                          {t('common.cancel')}
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -375,16 +385,22 @@ export function LabAccountPage() {
                             : p.note || '—'}
                       </td>
                       <td>
-                        {p.status !== 'VOID' && p.editable && (
-                          <button type="button" className="link-btn" onClick={() => openEdit(p)}>
-                            {t('common.edit')}
-                          </button>
-                        )}
-                        {p.status !== 'VOID' && canVoid && (
-                          <button type="button" className="link-btn link-btn--danger" onClick={() => setVoiding(p)}>
-                            {t('labCases.financial.voidPayment')}
-                          </button>
-                        )}
+                        <div className="table-row-actions">
+                          {p.status !== 'VOID' && p.editable && (
+                            <button type="button" className="btn btn--ghost btn--small" onClick={() => openEdit(p)}>
+                              {t('common.edit')}
+                            </button>
+                          )}
+                          {p.status !== 'VOID' && canVoid && (
+                            <button
+                              type="button"
+                              className="btn btn--ghost btn--small btn--danger"
+                              onClick={() => setVoiding(p)}
+                            >
+                              {t('labCases.financial.voidPayment')}
+                            </button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

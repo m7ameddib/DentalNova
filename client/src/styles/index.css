@@ -3581,19 +3581,6 @@ textarea {
   justify-content: center;
   gap: 8px;
   margin: 0 0 10px;
-  position: relative;
-}
-.emergency-panel__date-input {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  cursor: pointer;
-}
-.emergency-panel__date-input::-webkit-inner-spin-button,
-.emergency-panel__date-input::-webkit-outer-spin-button {
-  display: none;
-  -webkit-appearance: none;
-  margin: 0;
 }
 .emergency-panel__date {
   flex: 1;
@@ -3602,7 +3589,6 @@ textarea {
   font-weight: 700;
   color: var(--color-text);
   line-height: 1.3;
-  pointer-events: none;
 }
 .emergency-panel__date--today {
   color: var(--color-primary);
@@ -5691,6 +5677,25 @@ textarea {
   font-size: 11px;
   margin-top: 4px;
   line-height: 1.3;
+}
+.dmy-date-field {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.dmy-date-field select {
+  min-width: 0;
+  flex: 1;
+}
+.table-row-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.table-row-actions .btn {
+  min-height: 28px;
+  padding: 4px 10px;
 }
 .treatment-plan-open-btn {
   font-size: 12px;

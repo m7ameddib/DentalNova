@@ -270,7 +270,83 @@ export function buildOptimisticRecord(
     };
   }
 
+  if (path === '/lab-cases' || path.startsWith('/lab-cases/')) {
+    const labCost =
+      payload.labCostCents ??
+      (payload.labCost != null ? Math.round(Number(payload.labCost) * 100) : 0);
+    return {
+      patientId: payload.patientId,
+      laboratoryId: payload.laboratoryId ?? null,
+      workType: payload.workType ?? '',
+      workTypeLabel: payload.workTypeLabel ?? payload.workType ?? '',
+      labCostCents: labCost,
+      labCost,
+      shade: payload.shade ?? null,
+      notes: payload.notes ?? null,
+      status: payload.status ?? 'SENT',
+      ...base,
+    };
+  }
+
   return base;
+}
+
+export function patientMatchesQuery(patient: Record<string, unknown>, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+  const name = String(patient.fullName ?? '').toLowerCase();
+  const phone = String(patient.phone ?? '');
+  const file = String(patient.fileNumber ?? '').toLowerCase();
+  return name.includes(q) || phone.includes(q) || file.includes(q);
+}
+
+export function collectCachedPatients(caches: Record<string, CachedGet>): Record<string, unknown>[] {
+  const byId = new Map<number, Record<string, unknown>>();
+  const ingest = (item: unknown) => {
+    const rec = asRecord(item);
+    if (!rec || typeof rec.id !== 'number') return;
+    byId.set(rec.id, { ...byId.get(rec.id), ...rec });
+  };
+  for (const [key, entry] of Object.entries(caches)) {
+    if (key === 'GET /patients' || key.startsWith('GET /patients?')) {
+      if (Array.isArray(entry.data)) entry.data.forEach(ingest);
+    }
+    if (/^GET \/patients\/-?\d+$/.test(key)) ingest(entry.data);
+  }
+  return [...byId.values()];
+}
+
+export function searchCachedPatients(
+  caches: Record<string, CachedGet>,
+  query: string,
+): Record<string, unknown>[] {
+  return collectCachedPatients(caches).filter((patient) => patientMatchesQuery(patient, query));
+}
+
+export function parsePatientsQuery(url: string): string | null {
+  const path = normalizePath(url.split('?')[0] ?? url);
+  if (path !== '/patients') return null;
+  const query = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
+  const params = new URLSearchParams(query);
+  return params.get('q');
+}
+
+/** Keep locally created (temp-id) rows when a server list arrives so reconnect does not drop unsynced work. */
+export function mergeServerListWithLocal(
+  serverData: unknown,
+  localData: unknown,
+): unknown {
+  if (!Array.isArray(serverData) || !Array.isArray(localData)) return serverData;
+  const serverIds = new Set(
+    serverData
+      .map((item) => asRecord(item)?.id)
+      .filter((id): id is number => typeof id === 'number'),
+  );
+  const extras = localData.filter((item) => {
+    const rec = asRecord(item);
+    return rec && typeof rec.id === 'number' && rec.id < 0 && !serverIds.has(rec.id);
+  });
+  return extras.length === 0 ? serverData : [...extras, ...serverData];
 }
 
 export function applyMutationToCaches(

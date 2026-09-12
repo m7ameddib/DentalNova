@@ -933,6 +933,117 @@ export function PatientRecordPrintable({
   );
 }
 
+/** Compact patient record — information, account, and odontogram only. */
+export function PatientRecordCompactPrintable({
+  patient,
+  summary,
+  toothMap,
+  clinic,
+  language,
+}: {
+  patient: Patient;
+  summary: AccountSummary;
+  toothMap: Map<number, ToothTreatmentBadge[]>;
+  clinic: ClinicPrintInfo;
+  language: string;
+}) {
+  const { t } = useTranslation();
+  const age = patient.dateOfBirth ? calculateAge(patient.dateOfBirth) : patient.approxAge;
+  const weightLabel =
+    patient.weightKg != null ? `${patient.weightKg} ${t('patientRecord.patient.weightUnit')}` : '—';
+
+  return (
+    <PrintDocument orientation="portrait" className="print-doc--patient-record print-doc--patient-record-compact">
+      <PrintReportHeader
+        clinic={clinic}
+        title={t('patientRecordPrint.compactTitle')}
+        meta={
+          <PrintMetaRow grid>
+            <PrintMetaItem label={t('receipt.patient')} value={patient.fullName} />
+            <PrintMetaItem label={t('receipt.fileNumber')} value={patient.fileNumber} />
+            {age != null && (
+              <PrintMetaItem label={t('patientRecord.patient.age')} value={`${age} ${t('common.years')}`} />
+            )}
+            <PrintMetaItem label={t('patientRecord.patient.weight')} value={weightLabel} />
+            <PrintMetaItem
+              label={t('patientRecordPrint.fileDate')}
+              value={formatDateDisplay(patient.createdAt.slice(0, 10), language)}
+            />
+            <PrintMetaItem label={t('receipt.date')} value={formatDateDisplay(todayIso(), language)} />
+          </PrintMetaRow>
+        }
+      />
+
+      <PrintSection title={t('patientRecord.sections.patient')}>
+        <PrintTable compact>
+          <tbody>
+            <tr>
+              <td>{t('patientRecord.patient.phone')}</td>
+              <td>{patient.phone || '—'}</td>
+            </tr>
+            {patient.gender && (
+              <tr>
+                <td>{t('patientRecord.patient.gender')}</td>
+                <td>{t(`gender.${patient.gender}`)}</td>
+              </tr>
+            )}
+            {patient.dateOfBirth && (
+              <tr>
+                <td>{t('patientRecord.patient.dob')}</td>
+                <td>{formatDateDisplay(patient.dateOfBirth, language)}</td>
+              </tr>
+            )}
+            {patient.address && (
+              <tr>
+                <td>{t('patientRecord.patient.address')}</td>
+                <td>{patient.address}</td>
+              </tr>
+            )}
+          </tbody>
+        </PrintTable>
+      </PrintSection>
+
+      <PrintSection title={t('patientRecordPrint.account')}>
+        <PrintTotals
+          rows={[
+            {
+              label: t('patientRecordPrint.total'),
+              value: formatMoney(summary.subtotalCents ?? summary.totalCostCents),
+            },
+            {
+              label: t('patientRecordPrint.discount'),
+              value:
+                (summary.accountDiscountCents ?? 0) > 0
+                  ? `-${formatMoney(summary.accountDiscountCents ?? 0)}`
+                  : formatMoney(0),
+            },
+            { label: t('patientRecordPrint.paid'), value: formatMoney(summary.totalPaidCents) },
+            {
+              label: t('patientRecordPrint.remaining'),
+              value: formatMoney(summary.remainingCents),
+              kind: 'balance',
+            },
+          ]}
+        />
+      </PrintSection>
+
+      <PrintSection title={t('patientRecordPrint.odontogram')}>
+        <div className="print-odontogram">
+          <Odontogram
+            toothMap={toothMap}
+            selectable={false}
+            selectedTeeth={[]}
+            onToggleTooth={() => undefined}
+            printLayout
+          />
+        </div>
+      </PrintSection>
+
+      <PrintFooter />
+    </PrintDocument>
+  );
+}
+
 export function LabOrderPrintable({
   labCase,
   clinic,

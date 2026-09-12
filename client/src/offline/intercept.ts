@@ -1,7 +1,14 @@
 import { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '@/store/auth.store';
-import { buildOptimisticRecord, isNetworkError, isQueueableWrite, isReadMethod, isWriteMethod } from './core';
-import { applyLocalMutation, readGetCache, saveGetCache } from './cache';
+import {
+  buildOptimisticRecord,
+  isNetworkError,
+  isQueueableWrite,
+  isReadMethod,
+  isWriteMethod,
+  parsePatientsQuery,
+} from './core';
+import { applyLocalMutation, readCachedPatientSearch, readGetCache, saveGetCache } from './cache';
 import { allocateTempId, enqueueOutbox, newOutboxId } from './outbox';
 import { rememberOnlineScope } from './scope';
 import { setCachedSubscription } from './storage';
@@ -17,6 +24,15 @@ function asAxiosResponse<T>(data: T, config: InternalAxiosRequestConfig, status 
     headers: { 'x-dnt-offline-cache': '1' },
     config,
   };
+}
+
+function parseRequestBody(data: unknown): unknown {
+  if (typeof data !== 'string') return data;
+  try {
+    return JSON.parse(data);
+  } catch {
+    return data;
+  }
 }
 
 function persistSessionForFallback(): void {
@@ -54,8 +70,21 @@ export function installOfflineFallback(api: AxiosInstance): void {
         await setCachedSubscription(response.data);
       }
 
-      if (useOfflineStatusStore.getState().enabled && isReadMethod(method) && !response.config.skipOfflineFallback) {
-        await saveGetCache(method, url, response.status, response.data);
+      if (useOfflineStatusStore.getState().enabled && !response.config.skipOfflineFallback) {
+        if (isReadMethod(method)) {
+          await saveGetCache(method, url, response.status, response.data);
+        } else if (isWriteMethod(method) && isQueueableWrite(method, url, response.config.data)) {
+          const result =
+            response.data && typeof response.data === 'object'
+              ? (response.data as Record<string, unknown>)
+              : undefined;
+          await applyLocalMutation({
+            method,
+            url,
+            body: parseRequestBody(response.config.data),
+            result,
+          });
+        }
       }
 
       return response;
@@ -94,6 +123,13 @@ export function installOfflineFallback(api: AxiosInstance): void {
         if (cached) {
           return asAxiosResponse(cached.data, config, cached.status);
         }
+        const patientQuery = parsePatientsQuery(url);
+        if (patientQuery != null) {
+          const localPatients = await readCachedPatientSearch(patientQuery);
+          if (localPatients) {
+            return asAxiosResponse(localPatients, config);
+          }
+        }
         if (url.includes('/auth/me')) {
           const user = useAuthStore.getState().user;
           if (user) return asAxiosResponse(user, config);
@@ -101,19 +137,21 @@ export function installOfflineFallback(api: AxiosInstance): void {
         return Promise.reject(error);
       }
 
-      if (isWriteMethod(method) && isQueueableWrite(method, url, config.data)) {
+      const queuedBody = parseRequestBody(config.data);
+      if (isWriteMethod(method) && isQueueableWrite(method, url, queuedBody)) {
         const tempId = method === 'POST' ? await allocateTempId() : undefined;
         const result =
           method === 'POST' && tempId != null
-            ? buildOptimisticRecord(method, url, config.data, tempId)
-            : { ...(typeof config.data === 'object' && config.data ? config.data : {}) };
+            ? buildOptimisticRecord(method, url, queuedBody, tempId)
+            : { ...(typeof queuedBody === 'object' && queuedBody ? queuedBody : {}) };
         const itemId = newOutboxId();
         const user = useAuthStore.getState().user;
+        const body = queuedBody ?? {};
         await enqueueOutbox({
           id: itemId,
           method: method as 'POST' | 'PUT' | 'PATCH' | 'DELETE',
           url,
-          data: config.data ?? {},
+          data: body,
           headers: {},
           tempId,
           createdAt: new Date().toISOString(),
@@ -124,7 +162,7 @@ export function installOfflineFallback(api: AxiosInstance): void {
         await applyLocalMutation({
           method,
           url,
-          body: config.data,
+          body,
           result: result as Record<string, unknown>,
           tempId,
         });

@@ -355,6 +355,23 @@ body.top-nav-menu-open {
     order: 0;
   }
 
+  .dmy-date-field {
+    display: flex;
+    gap: 6px;
+    width: 100%;
+  }
+
+  .dmy-date-field select {
+    min-height: 40px;
+    flex: 1;
+  }
+
+  .table-row-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
   [dir='rtl'] .patient-view__actions {
     order: 0;
     margin-right: 0;

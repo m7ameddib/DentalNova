@@ -9,7 +9,8 @@ import { FormField } from '@/components/common/FormField';
 import { Modal } from '@/components/common/Modal';
 import { PatientSearchBox } from '@/components/patient-record/PatientSearchBox';
 import { AreaPicker } from '@/components/patient-record/AreaPicker';
-import { PatientRecordPrintable } from '@/components/patient-record/PrintableTemplates';
+import { PatientRecordCompactPrintable, PatientRecordPrintable } from '@/components/patient-record/PrintableTemplates';
+import { DmyDateField } from '@/components/common/DateField';
 import type { ToothTreatmentBadge } from '@/components/patient-record/odontogram/types';
 import { patientsApi, CreatePatientPayload, UpdatePatientPayload } from '@/api/patients.api';
 import { clinicalApi } from '@/api/clinical.api';
@@ -25,7 +26,7 @@ import { usePrintStore } from '@/store/print.store';
 import { useAuthStore } from '@/store/auth.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { openWhatsApp } from '@/utils/whatsapp';
-import { calculateAge, formatDateDisplay } from '@/utils/date';
+import { calculateAge, formatDateDisplay, todayIso } from '@/utils/date';
 import { getErrorMessage } from '@/utils/errors';
 import { getAreaTextForEdit, getPatientAreaDisplay, resolveAreaFields } from '@/utils/patientArea';
 import { loadRecentPatients, rememberRecentPatient } from '@/utils/recentPatients';
@@ -61,7 +62,7 @@ export function PatientSection({
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState('');
+  const [dateOfBirth, setDateOfBirth] = useState(forceAdd ? todayIso() : '');
   const [approxAge, setApproxAge] = useState('');
   const [gender, setGender] = useState('');
   const [weightKg, setWeightKg] = useState('');
@@ -201,6 +202,7 @@ export function PatientSection({
 
   function startAdd() {
     resetForm();
+    setDateOfBirth(todayIso());
     setMode('add');
   }
 
@@ -245,49 +247,7 @@ export function PatientSection({
     createMutation.mutate({ ...duplicate.pendingPayload, linkFamilyOfPatientId: existingPatientId });
   }
 
-  async function handlePrintPatientFile() {
-    if (!patient) return;
-    const clinic = await loadClinicPrintInfo();
-    const [treatments, summary, alerts, payments, discounts, appointments, followUps, labCases, prescriptions] =
-      await Promise.all([
-        queryClient.fetchQuery({
-          queryKey: ['patient-treatments', patient.id],
-          queryFn: () => patientsApi.treatments(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['account-summary', patient.id],
-          queryFn: () => patientsApi.accountSummary(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['medical-alerts', patient.id],
-          queryFn: () => clinicalApi.listAlerts(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['patient-payments', patient.id],
-          queryFn: () => patientsApi.payments(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['patient-account-discounts', patient.id],
-          queryFn: () => patientsApi.accountDiscounts(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['patient-appointments', patient.id],
-          queryFn: () => patientsApi.appointments(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['patient-follow-ups', patient.id],
-          queryFn: () => patientsApi.followUps(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['patient-lab-cases', patient.id],
-          queryFn: () => labCasesApi.forPatient(patient.id),
-        }),
-        queryClient.fetchQuery({
-          queryKey: ['patient-prescriptions', patient.id],
-          queryFn: () => prescriptionsApi.list(patient.id),
-        }).catch(() => []),
-      ]);
-
+  function buildToothMap(treatments: { status: string; teeth: number[]; toothNumber: number | null; treatmentAbbreviation: string; treatmentColor: string }[]) {
     const toothMap = new Map<number, ToothTreatmentBadge[]>();
     for (const treatment of treatments) {
       if (treatment.status === 'VOID') continue;
@@ -303,26 +263,97 @@ export function PatientSection({
         toothMap.set(tooth, list);
       }
     }
+    return toothMap;
+  }
 
-    if (!summary) return;
+  const emptySummary = {
+    subtotalCents: 0,
+    accountDiscountCents: 0,
+    totalCostCents: 0,
+    totalPaidCents: 0,
+    remainingCents: 0,
+    lastPayments: [],
+    lastDiscounts: [],
+  };
 
-    print(
-      <PatientRecordPrintable
-        patient={patient}
-        treatments={treatments}
-        summary={summary}
-        toothMap={toothMap}
-        clinic={clinic}
-        language={language}
-        alerts={alerts}
-        payments={payments}
-        discounts={discounts}
-        appointments={appointments}
-        followUps={followUps.active ?? []}
-        labCases={labCases.all ?? labCases.active ?? []}
-        prescriptions={prescriptions}
-      />,
-    );
+  async function resolvePrintQuery<T>(queryKey: unknown[], queryFn: () => Promise<T>, fallback: T): Promise<T> {
+    const cached = queryClient.getQueryData<T>(queryKey);
+    if (cached !== undefined) return cached;
+    try {
+      return await queryClient.fetchQuery({ queryKey, queryFn });
+    } catch {
+      return fallback;
+    }
+  }
+
+  async function handlePrintPatientFile() {
+    if (!patient) return;
+    try {
+      const clinic = await loadClinicPrintInfo();
+      const [treatments, summary, alerts, payments, discounts, appointments, followUps, labCases, prescriptions] =
+        await Promise.all([
+          resolvePrintQuery(['patient-treatments', patient.id], () => patientsApi.treatments(patient.id), []),
+          resolvePrintQuery(['account-summary', patient.id], () => patientsApi.accountSummary(patient.id), emptySummary),
+          resolvePrintQuery(['medical-alerts', patient.id], () => clinicalApi.listAlerts(patient.id), []),
+          resolvePrintQuery(['patient-payments', patient.id], () => patientsApi.payments(patient.id), []),
+          resolvePrintQuery(['patient-account-discounts', patient.id], () => patientsApi.accountDiscounts(patient.id), []),
+          resolvePrintQuery(['patient-appointments', patient.id], () => patientsApi.appointments(patient.id), []),
+          resolvePrintQuery(['patient-follow-ups', patient.id], () => patientsApi.followUps(patient.id), {
+            activeCount: 0,
+            nextFollowUpDate: null,
+            active: [],
+            history: [],
+          }),
+          resolvePrintQuery(['patient-lab-cases', patient.id], () => labCasesApi.forPatient(patient.id), {
+            activeCount: 0,
+            active: [],
+            all: [],
+          }),
+          resolvePrintQuery(['patient-prescriptions', patient.id], () => prescriptionsApi.list(patient.id), []),
+        ]);
+
+      print(
+        <PatientRecordPrintable
+          patient={patient}
+          treatments={treatments}
+          summary={summary ?? emptySummary}
+          toothMap={buildToothMap(treatments)}
+          clinic={clinic}
+          language={language}
+          alerts={alerts}
+          payments={payments}
+          discounts={discounts}
+          appointments={appointments}
+          followUps={followUps.active ?? []}
+          labCases={labCases.all ?? labCases.active ?? []}
+          prescriptions={prescriptions}
+        />,
+      );
+    } catch (error) {
+      setSubmitError(getErrorMessage(error, t('common.error')));
+    }
+  }
+
+  async function handlePrintPatientRecordCompact() {
+    if (!patient) return;
+    try {
+      const clinic = await loadClinicPrintInfo();
+      const [treatments, summary] = await Promise.all([
+        resolvePrintQuery(['patient-treatments', patient.id], () => patientsApi.treatments(patient.id), []),
+        resolvePrintQuery(['account-summary', patient.id], () => patientsApi.accountSummary(patient.id), emptySummary),
+      ]);
+      print(
+        <PatientRecordCompactPrintable
+          patient={patient}
+          summary={summary ?? emptySummary}
+          toothMap={buildToothMap(treatments)}
+          clinic={clinic}
+          language={language}
+        />,
+      );
+    } catch (error) {
+      setSubmitError(getErrorMessage(error, t('common.error')));
+    }
   }
 
   function handleWhatsAppPatient() {
@@ -465,12 +496,12 @@ export function PatientSection({
 
             <div className="inline-form__row">
               <FormField label={t('patientRecord.patient.dob')} className="inline-form__col">
-                <input
-                  type="date"
+                <DmyDateField
                   value={dateOfBirth}
-                  onChange={(e) => {
-                    setDateOfBirth(e.target.value);
-                    if (e.target.value) setApproxAge('');
+                  startOnToday={mode === 'add'}
+                  onChange={(next) => {
+                    setDateOfBirth(next);
+                    if (next) setApproxAge('');
                   }}
                 />
               </FormField>
@@ -718,6 +749,14 @@ export function PatientSection({
               className="icon-btn icon-btn--small"
               title={t('patientRecordPrint.printAction') ?? ''}
               onClick={handlePrintPatientFile}
+            >
+              <Printer size={13} />
+            </button>
+            <button
+              type="button"
+              className="icon-btn icon-btn--small"
+              title={t('patientRecordPrint.printCompactAction') ?? ''}
+              onClick={handlePrintPatientRecordCompact}
             >
               <Printer size={13} />
             </button>

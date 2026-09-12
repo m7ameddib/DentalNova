@@ -8,7 +8,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AppointmentStatus, AppointmentWithPatient, Patient } from '@/types/domain';
 import { formatClockTime } from '@/utils/calendar';
-import { todayIso, formatDateDisplay, currentTimeRounded } from '@/utils/date';
+import { todayIso, formatDateDisplay, currentTimeRounded, localAddDaysIso } from '@/utils/date';
 import { getErrorMessage } from '@/utils/errors';
 import { DEFAULT_DURATION, EMERGENCY_STATUS_OPTIONS, EMERGENCY_TYPE, CalendarViewMode } from './constants';
 
@@ -294,16 +294,15 @@ export function AgendaSidebar({
           )}
         </div>
 
-        <label className="emergency-panel__date-nav">
-          <input
-            type="date"
-            className="emergency-panel__date-input"
-            value={emergencyDate}
-            onChange={(e) => {
-              if (e.target.value) setEmergencyDate(e.target.value);
-            }}
-            aria-label={t('appointmentsPage.emergency.title')}
-          />
+        <div className="emergency-panel__date-nav">
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setEmergencyDate((d) => localAddDaysIso(d, -1))}
+            title={t('appointmentsPage.emergency.previousDay')}
+          >
+            <ChevronLeft size={16} />
+          </button>
           <span
             className={[
               'emergency-panel__date',
@@ -315,7 +314,15 @@ export function AgendaSidebar({
             {formatDateDisplay(emergencyDate, language)}
             {emergencyDate === today ? ` · ${t('common.today')}` : ''}
           </span>
-        </label>
+          <button
+            type="button"
+            className="icon-btn"
+            onClick={() => setEmergencyDate((d) => localAddDaysIso(d, 1))}
+            title={t('appointmentsPage.emergency.nextDay')}
+          >
+            <ChevronRight size={16} />
+          </button>
+        </div>
 
         {showEmergencyForm && canCreate && (
           <div className="emergency-panel__form emergency-panel__form--compact">

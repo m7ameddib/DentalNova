@@ -8,9 +8,11 @@ import {
   isNetworkError,
   isQueueableWrite,
   isTempId,
+  mergeServerListWithLocal,
   nextTempId,
   pendingCount,
   remapIds,
+  searchCachedPatients,
 } from './core';
 
 test('cache keys and temp ids stay stable', () => {
@@ -96,6 +98,37 @@ test('creating an appointment updates the day schedule without duplicating', () 
   const appointments = (second['GET /appointments?date=2026-09-12'].data as { appointments: unknown[] })
     .appointments;
   assert.equal(appointments.length, 1);
+});
+
+test('offline patient search filters the locally cached clinic list', () => {
+  const caches = {
+    'GET /patients': {
+      key: 'GET /patients',
+      status: 200,
+      data: [
+        { id: 1, fullName: 'Sara Ali', phone: '050111', fileNumber: 'P-1' },
+        { id: 2, fullName: 'Omar', phone: '050222', fileNumber: 'P-2' },
+      ],
+      cachedAt: '',
+    },
+  };
+  assert.equal(searchCachedPatients(caches, 'sara').length, 1);
+  assert.equal(searchCachedPatients(caches, '050222')[0].id, 2);
+  assert.equal(searchCachedPatients(caches, 'missing').length, 0);
+});
+
+test('reconnect merge keeps unsynced local patients', () => {
+  const merged = mergeServerListWithLocal(
+    [{ id: 10, fullName: 'Cloud' }],
+    [{ id: -2, fullName: 'Local' }, { id: 10, fullName: 'Old' }],
+  ) as { id: number }[];
+  assert.equal(merged.some((row) => row.id === -2), true);
+  assert.equal(merged.filter((row) => row.id === 10).length, 1);
+});
+
+test('lab case optimistic records keep Lab Cost', () => {
+  const result = buildOptimisticRecord('POST', '/lab-cases', { patientId: 1, labCost: 75, workType: 'CROWN' }, -8);
+  assert.equal(result.labCostCents, 7500);
 });
 
 test('pending count ignores finished conflicts', () => {
