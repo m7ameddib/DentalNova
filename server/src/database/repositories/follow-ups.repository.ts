@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
 import { toCamel, toCamelList } from '../row-mapper.util';
 import { localDayUtcBounds, localTodayIso } from '../../common/local-date.util';
+import { remainingCents } from '../../common/money.util';
 import {
   FollowUp,
   FollowUpHistoryEntry,
@@ -57,7 +58,7 @@ function applyFinancialTotals<T extends {
   const totalCostCents = Math.max(0, (row.totalCostCents ?? 0) - discountCents);
   row.accountDiscountCents = discountCents;
   row.totalCostCents = totalCostCents;
-  row.remainingCents = Math.max(0, totalCostCents - (row.totalPaidCents ?? 0));
+  row.remainingCents = remainingCents(totalCostCents, row.totalPaidCents ?? 0);
   return row;
 }
 

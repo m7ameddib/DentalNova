@@ -27,6 +27,7 @@ import { FinancialActionDto } from './dto/financial-action.dto';
 import { AppointmentsService } from '../appointments/appointments.service';
 
 import { addLocalDays, localTodayIso } from '../common/local-date.util';
+import { remainingCents } from '../common/money.util';
 
 
 
@@ -768,7 +769,7 @@ export class FollowUpsService {
 
         totalPaidCents: outstanding.totalPaidCents,
 
-        remainingCents: outstanding.remainingCents,
+        remainingCents: remainingCents(outstanding.totalCostCents, outstanding.totalPaidCents),
 
       };
 

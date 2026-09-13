@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
 import { toCamel, toCamelList } from '../row-mapper.util';
 import { localDayUtcBounds } from '../../common/local-date.util';
+import { remainingCents } from '../../common/money.util';
 import { FamilyGroup, Patient } from '../../common/types';
 
 export interface CreatePatientInput {
@@ -140,7 +141,7 @@ export class PatientsRepository {
       .all() as Record<string, unknown>[];
     return rows.map((row) => {
       const mapped = toCamel<Patient & { totalCostCents: number; totalPaidCents: number }>(row);
-      return { ...mapped, remainingCents: mapped.totalCostCents - mapped.totalPaidCents };
+      return { ...mapped, remainingCents: remainingCents(mapped.totalCostCents, mapped.totalPaidCents) };
     });
   }
 
