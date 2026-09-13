@@ -32,16 +32,16 @@ async function resolveDuplicatePatient(
 
 export async function flushOutbox(api: AxiosInstance): Promise<void> {
   if (flushing) return;
-  if (!useOfflineStatusStore.getState().enabled) return;
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
-
-  const token = useAuthStore.getState().token;
-  if (!token) return;
-
   flushing = true;
-  useOfflineStatusStore.getState().setLastError(null);
-
   try {
+    if (!useOfflineStatusStore.getState().enabled) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+
+    const token = useAuthStore.getState().token;
+    if (!token) return;
+
+    useOfflineStatusStore.getState().setLastError(null);
+
     const released = requeueStuckItems(await getOutbox());
     await setOutbox(released);
     const items = released
