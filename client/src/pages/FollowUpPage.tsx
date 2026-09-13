@@ -188,26 +188,6 @@ export function FollowUpPage() {
         </div>
       </header>
 
-      <div className="ops-toolbar">
-        <div className="ops-datebar">
-          <label htmlFor="follow-up-selected-date">{t('followUp.selectDate')}</label>
-          <DateField
-            id="follow-up-selected-date"
-            value={selectedDate}
-            onChange={(value) => {
-              setSelectedDate(value);
-              setExpandedId(null);
-              setError(null);
-            }}
-          />
-          {!isToday && (
-            <button type="button" className="link-btn" onClick={() => setSelectedDate(todayIso())}>
-              {t('followUp.backToToday')}
-            </button>
-          )}
-        </div>
-      </div>
-
       <div className="ops-kpis">
         <div className="ops-kpi is-due">
           <span className="ops-kpi-label">
@@ -302,6 +282,23 @@ export function FollowUpPage() {
       )}
 
       <div className="ops-toolbar">
+        <div className="ops-datebar">
+          <label htmlFor="follow-up-selected-date">{t('followUp.selectDate')}</label>
+          <DateField
+            id="follow-up-selected-date"
+            value={selectedDate}
+            onChange={(value) => {
+              setSelectedDate(value);
+              setExpandedId(null);
+              setError(null);
+            }}
+          />
+          {!isToday && (
+            <button type="button" className="link-btn" onClick={() => setSelectedDate(todayIso())}>
+              {t('followUp.backToToday')}
+            </button>
+          )}
+        </div>
         <div className="ops-seg" role="tablist">
           {(['ALL', 'CLINICAL', 'FINANCIAL'] as FilterType[]).map((f) => (
             <button

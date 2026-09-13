@@ -78,7 +78,7 @@
 
 .ops-kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 10px;
   margin: 0 0 16px;
 }
@@ -493,6 +493,7 @@
 
 .ops-kpis-tight {
   margin: 0;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
 .ops-cat-strip {
@@ -657,7 +658,7 @@
 .ops-shell.ai-page .ops-ai-thread {
   display: flex;
   flex-direction: column;
-  min-height: 420px;
+  min-height: min(640px, calc(100dvh - 220px));
   border: 1px solid var(--ops-line);
   border-radius: 16px;
   background: #f8fafc;
