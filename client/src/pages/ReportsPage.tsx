@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { CalendarCheck, ScrollText, Users2, Wallet } from 'lucide-react';
+import { ScrollText } from 'lucide-react';
 import { reportsApi } from '@/api/reports.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
@@ -48,11 +48,16 @@ export function ReportsPage() {
     queryFn: () => reportsApi.summary(from, to),
   });
 
+  const financial = summary?.financial;
+
   return (
-    <div className="reports-page">
-      <div className="reports-page__header">
-        <div className="reports-page__title-row">
+    <div className="ops-shell reports-page">
+      <header className="ops-page-head">
+        <div className="ops-page-head-copy">
           <h1>{t('reports.title')}</h1>
+          <p>{t('reports.pageHint')}</p>
+        </div>
+        <div className="ops-page-head-actions">
           <Link to="/daily-report" className="page-feature-link page-feature-link--report">
             <span className="page-feature-link__icon" aria-hidden="true">
               <ScrollText size={16} />
@@ -60,130 +65,109 @@ export function ReportsPage() {
             {t('nav.dailyReport')}
           </Link>
         </div>
-        <div className="reports-period-group">
-          <button
-            type="button"
-            className={period === 'today' ? 'day-toggle-btn day-toggle-btn--active' : 'day-toggle-btn'}
-            onClick={() => setPeriod('today')}
-          >
+      </header>
+
+      <div className="ops-toolbar">
+        <div className="ops-seg">
+          <button type="button" aria-pressed={period === 'today'} className={period === 'today' ? 'active' : undefined} onClick={() => setPeriod('today')}>
             {t('reports.periods.today')}
           </button>
-          <button
-            type="button"
-            className={period === 'month' ? 'day-toggle-btn day-toggle-btn--active' : 'day-toggle-btn'}
-            onClick={() => setPeriod('month')}
-          >
+          <button type="button" aria-pressed={period === 'month'} className={period === 'month' ? 'active' : undefined} onClick={() => setPeriod('month')}>
             {t('reports.periods.thisMonth')}
           </button>
-          <button
-            type="button"
-            className={period === 'custom' ? 'day-toggle-btn day-toggle-btn--active' : 'day-toggle-btn'}
-            onClick={() => setPeriod('custom')}
-          >
+          <button type="button" aria-pressed={period === 'custom'} className={period === 'custom' ? 'active' : undefined} onClick={() => setPeriod('custom')}>
             {t('reports.periods.custom')}
           </button>
-          {period === 'custom' && (
-            <span className="reports-custom-range">
-              <DateField value={customFrom} onChange={setCustomFrom} />
-              <span className="muted">—</span>
-              <DateField value={customTo} onChange={setCustomTo} />
-            </span>
-          )}
         </div>
+        {period === 'custom' && (
+          <div className="ops-datebar">
+            <DateField value={customFrom} onChange={setCustomFrom} />
+            <span className="muted">—</span>
+            <DateField value={customTo} onChange={setCustomTo} />
+          </div>
+        )}
       </div>
 
       {canViewFinancial && (
-        <section className="settings-section">
-          <h2>
-            <Wallet size={16} className="reports-section-icon" /> {t('reports.financial.title')}
-          </h2>
-          <div className="report-cards">
-            <ReportCard
-              label={t('reports.financial.totalTreatmentValue')}
-              value={formatMoney(summary?.financial?.totalTreatmentValueCents ?? 0)}
-              onClick={() => setDetail({ kind: 'treatments', onlyDiscounted: false })}
-            />
-            <ReportCard
-              label={t('reports.financial.totalDiscounts')}
-              value={formatMoney(summary?.financial?.totalDiscountCents ?? 0)}
-              onClick={() => setDetail({ kind: 'treatments', onlyDiscounted: true })}
-            />
-            <ReportCard
-              label={t('reports.financial.totalCollected')}
-              value={formatMoney(summary?.financial?.totalCollectedCents ?? 0)}
-              onClick={() => setDetail({ kind: 'payments' })}
-            />
-            <ReportCard
-              label={t('reports.financial.outstandingBalance')}
-              value={formatMoney(summary?.financial?.outstandingBalanceCents ?? 0)}
-              emphasize
-              onClick={() => setDetail({ kind: 'outstanding' })}
-            />
-            <ReportCard
-              label={t('reports.financial.totalExpenses')}
-              value={formatMoney(summary?.financial?.totalExpensesCents ?? 0)}
-              onClick={() => setDetail({ kind: 'expenses' })}
-            />
-            <ReportCard
-              label={t('reports.financial.netCash')}
-              value={formatMoney(summary?.financial?.netCashCents ?? 0)}
-              emphasize
-              onClick={() => setDetail({ kind: 'netCash' })}
+        <>
+          <div className="ops-report-lead">
+            <button type="button" className="ops-kpi is-hero clickable" onClick={() => setDetail({ kind: 'netCash' })}>
+              <span className="ops-kpi-label">{t('reports.financial.netCash')}</span>
+              <span className="ops-kpi-value">{formatMoney(financial?.netCashCents ?? 0)}</span>
+              <span className="ops-kpi-hint">{t('reports.financial.netCashHint')}</span>
+            </button>
+            <div className="ops-kpis ops-kpis-tight">
+              <button type="button" className="ops-kpi is-ok clickable" onClick={() => setDetail({ kind: 'payments' })}>
+                <span className="ops-kpi-label">{t('reports.financial.totalCollected')}</span>
+                <span className="ops-kpi-value">{formatMoney(financial?.totalCollectedCents ?? 0)}</span>
+              </button>
+              <button type="button" className="ops-kpi is-overdue clickable" onClick={() => setDetail({ kind: 'outstanding' })}>
+                <span className="ops-kpi-label">{t('reports.financial.outstandingBalance')}</span>
+                <span className="ops-kpi-value">{formatMoney(financial?.outstandingBalanceCents ?? 0)}</span>
+              </button>
+              <button type="button" className="ops-kpi clickable" onClick={() => setDetail({ kind: 'expenses' })}>
+                <span className="ops-kpi-label">{t('reports.financial.totalExpenses')}</span>
+                <span className="ops-kpi-value">{formatMoney(financial?.totalExpensesCents ?? 0)}</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="ops-kpis">
+            <button type="button" className="ops-kpi clickable" onClick={() => setDetail({ kind: 'treatments', onlyDiscounted: false })}>
+              <span className="ops-kpi-label">{t('reports.financial.totalTreatmentValue')}</span>
+              <span className="ops-kpi-value">{formatMoney(financial?.totalTreatmentValueCents ?? 0)}</span>
+            </button>
+            <button type="button" className="ops-kpi clickable" onClick={() => setDetail({ kind: 'treatments', onlyDiscounted: true })}>
+              <span className="ops-kpi-label">{t('reports.financial.totalDiscounts')}</span>
+              <span className="ops-kpi-value">{formatMoney(financial?.totalDiscountCents ?? 0)}</span>
+            </button>
+          </div>
+          <p className="ops-meta ops-hint">{t('reports.financial.outstandingBalanceHint')}</p>
+
+          <div className="ops-chart">
+            <SimpleMoneyChart
+              title={t('reports.chart.title')}
+              bars={[
+                { label: t('reports.financial.totalCollected'), valueCents: financial?.totalCollectedCents ?? 0 },
+                { label: t('reports.financial.outstandingBalance'), valueCents: financial?.outstandingBalanceCents ?? 0 },
+                { label: t('reports.financial.totalExpenses'), valueCents: financial?.totalExpensesCents ?? 0 },
+                { label: t('reports.financial.netCash'), valueCents: financial?.netCashCents ?? 0 },
+              ]}
             />
           </div>
-          <p className="muted reports-financial-hint">{t('reports.financial.outstandingBalanceHint')}</p>
-          <SimpleMoneyChart
-            title={t('reports.chart.title')}
-            bars={[
-              { label: t('reports.financial.totalCollected'), valueCents: summary?.financial?.totalCollectedCents ?? 0 },
-              { label: t('reports.financial.outstandingBalance'), valueCents: summary?.financial?.outstandingBalanceCents ?? 0 },
-              { label: t('reports.financial.totalExpenses'), valueCents: summary?.financial?.totalExpensesCents ?? 0 },
-              { label: t('reports.financial.netCash'), valueCents: summary?.financial?.netCashCents ?? 0 },
-            ]}
-          />
-        </section>
+        </>
       )}
 
-      <section className="settings-section">
-        <h2>
-          <CalendarCheck size={16} className="reports-section-icon" /> {t('reports.appointmentsSummary.title')}
-        </h2>
-        <div className="report-cards">
-          <ReportCard
-            label={t('reports.appointmentsSummary.total')}
-            value={String(summary?.appointments.total ?? 0)}
-            emphasize
-            onClick={() => setDetail({ kind: 'appointments' })}
-          />
-          {APPOINTMENT_STATUS_KEYS.map(({ key, statusCode }) => (
-            <ReportCard
-              key={key}
-              label={t(`appointmentsPage.status.${statusCode}`)}
-              value={String(summary?.appointments[key] ?? 0)}
-              onClick={() => setDetail({ kind: 'appointments', status: statusCode })}
-            />
-          ))}
-        </div>
-      </section>
+      <h2 className="ops-section-title">{t('reports.appointmentsSummary.title')}</h2>
+      <div className="ops-kpis">
+        <button type="button" className="ops-kpi is-hero clickable" onClick={() => setDetail({ kind: 'appointments' })}>
+          <span className="ops-kpi-label">{t('reports.appointmentsSummary.total')}</span>
+          <span className="ops-kpi-value">{summary?.appointments.total ?? 0}</span>
+        </button>
+        {APPOINTMENT_STATUS_KEYS.map(({ key, statusCode }) => (
+          <button
+            key={key}
+            type="button"
+            className="ops-kpi clickable"
+            onClick={() => setDetail({ kind: 'appointments', status: statusCode })}
+          >
+            <span className="ops-kpi-label">{t(`appointmentsPage.status.${statusCode}`)}</span>
+            <span className="ops-kpi-value">{summary?.appointments[key] ?? 0}</span>
+          </button>
+        ))}
+      </div>
 
-      <section className="settings-section">
-        <h2>
-          <Users2 size={16} className="reports-section-icon" /> {t('reports.patientsSummary.title')}
-        </h2>
-        <div className="report-cards">
-          <ReportCard
-            label={t('reports.patientsSummary.totalPatients')}
-            value={String(summary?.patients.totalPatients ?? 0)}
-            onClick={() => setDetail({ kind: 'patients', onlyNew: false })}
-          />
-          <ReportCard
-            label={t('reports.patientsSummary.newPatients')}
-            value={String(summary?.patients.newPatients ?? 0)}
-            emphasize
-            onClick={() => setDetail({ kind: 'patients', onlyNew: true })}
-          />
-        </div>
-      </section>
+      <h2 className="ops-section-title">{t('reports.patientsSummary.title')}</h2>
+      <div className="ops-kpis">
+        <button type="button" className="ops-kpi clickable" onClick={() => setDetail({ kind: 'patients', onlyNew: false })}>
+          <span className="ops-kpi-label">{t('reports.patientsSummary.totalPatients')}</span>
+          <span className="ops-kpi-value">{summary?.patients.totalPatients ?? 0}</span>
+        </button>
+        <button type="button" className="ops-kpi is-ok clickable" onClick={() => setDetail({ kind: 'patients', onlyNew: true })}>
+          <span className="ops-kpi-label">{t('reports.patientsSummary.newPatients')}</span>
+          <span className="ops-kpi-value">{summary?.patients.newPatients ?? 0}</span>
+        </button>
+      </div>
 
       {detail && (
         <ReportDetailModal
@@ -196,34 +180,5 @@ export function ReportsPage() {
         />
       )}
     </div>
-  );
-}
-
-function ReportCard({
-  label,
-  value,
-  emphasize,
-  onClick,
-}: {
-  label: string;
-  value: string;
-  emphasize?: boolean;
-  onClick?: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      className={[
-        'report-card',
-        emphasize ? 'report-card--emphasize' : '',
-        onClick ? 'report-card--clickable' : '',
-      ]
-        .filter(Boolean)
-        .join(' ')}
-      onClick={onClick}
-    >
-      <span className="report-card__value">{value}</span>
-      <span className="report-card__label">{label}</span>
-    </button>
   );
 }

@@ -7,6 +7,7 @@ import './styles/index.css';
 import './styles/mobile.css';
 import './styles/print.css';
 import './styles/follow-up.css';
+import './styles/ops-pages.css';
 import './styles/daily-report.css';
 import { registerPwaServiceWorker } from '@/pwa/registerPwa';
 import { queryClient } from '@/queryClient';

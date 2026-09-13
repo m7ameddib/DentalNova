@@ -1091,6 +1091,7 @@
   },
   "reports": {
     "title": "Reports",
+    "pageHint": "Clinic cash, collections, expenses, and activity for the selected period.",
     "periods": {
       "today": "Today",
       "thisMonth": "This month",
@@ -1122,8 +1123,11 @@
     },
     "expenses": {
       "title": "Clinic Expenses",
+      "pageHint": "Clinic spending by date, category, payee, and payment method.",
       "add": "Add expense",
       "emptyTitle": "No expenses in this period.",
+      "emptyHint": "Change the period or record the first expense.",
+      "byCategory": "By category",
       "edit": "Edit expense",
       "amount": "Amount",
       "category": "Category",
@@ -1162,7 +1166,9 @@
   },
   "aiAssistant": {
     "title": "AI Assistant",
-    "subtitle": "Administrative help + general dental knowledge",
+    "subtitle": "Ask in your own words — search patients, draft records, or explain dental terms.",
+    "emptyTitle": "How can I help?",
+    "statusOn": "Ready",
     "welcome": "Hello! I can help you search patients, prepare new records, treatments, payments, explain dental terms, and read doctor papers. What would you like to do?",
     "inputPlaceholder": "Type in Arabic, English, or both…",
     "thinking": "Thinking…",
@@ -1460,6 +1466,9 @@
   },
   "followUp": {
     "title": "Patient Follow-up",
+    "pageHint": "Clinical and payment check-ins — overdue, due today, upcoming, and completed at a glance.",
+    "searchPlaceholder": "Search patient, file #, or reason",
+    "emptyHint": "Change the date, clear filters, or add a clinical follow-up.",
     "addClinical": "Add clinical follow-up",
     "empty": "No active follow-ups",
     "clearPatientFilter": "Show all patients",
@@ -1609,6 +1618,8 @@
   },
   "labCases": {
     "title": "Lab Cases",
+    "pageHint": "Laboratory work for patients — status, dates, and lab cost in one place.",
+    "emptyHint": "Try another filter or search, or add a new lab case.",
     "addCase": "Add Lab Case",
     "editCase": "Edit Lab Case",
     "cancelConfirmTitle": "Cancel lab case",
