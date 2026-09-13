@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { settingsApi } from '@/api/settings.api';
+import { subscriptionApi } from '@/api/subscription.api';
+import { remainingTrialDays } from '@/utils/subscription';
 import { getErrorMessage } from '@/utils/errors';
 
 export function ClinicInfoSection() {
@@ -11,6 +13,12 @@ export function ClinicInfoSection() {
   const { data: settings } = useQuery({
     queryKey: ['clinic-settings'],
     queryFn: () => settingsApi.getClinic(),
+  });
+
+  const { data: subscription } = useQuery({
+    queryKey: ['subscription-status'],
+    queryFn: subscriptionApi.status,
+    staleTime: 30_000,
   });
 
   const [clinicName, setClinicName] = useState('');
@@ -96,6 +104,18 @@ export function ClinicInfoSection() {
   return (
     <section className="settings-section">
       <h2>{t('settings.clinicInfo.title')}</h2>
+
+      {subscription?.status === 'TRIAL_ACTIVE' && (
+        <div className="trial-account-banner">
+          <strong>{t('subscription.trialActiveTitle')}</strong>
+          <p>
+            {t('subscription.trialDaysLeft', {
+              count: subscription.remainingTrialDays ?? remainingTrialDays(subscription.expiresAt) ?? 0,
+              days: subscription.remainingTrialDays ?? remainingTrialDays(subscription.expiresAt) ?? 0,
+            })}
+          </p>
+        </div>
+      )}
 
       <div className="clinic-info-form">
         <div className="clinic-info-form__logo">

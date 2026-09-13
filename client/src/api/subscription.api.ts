@@ -1,6 +1,16 @@
 import { apiClient } from '@/api/client';
 
-export type OnlineSubscriptionStatus = 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'CANCELLED';
+export type OnlineSubscriptionStatus =
+  | 'PENDING'
+  | 'TRIAL_PENDING'
+  | 'TRIAL_ACTIVE'
+  | 'TRIAL_EXPIRED'
+  | 'ACTIVE'
+  | 'EXPIRED'
+  | 'SUSPENDED'
+  | 'CANCELLED';
+
+export type ClinicTrialType = 'website' | 'marketing';
 
 export interface SubscriptionStatus {
   deploymentMode: 'offline' | 'online';
@@ -11,6 +21,8 @@ export interface SubscriptionStatus {
   suspendedAt: string | null;
   suspendedReason: string | null;
   canUseSystem: boolean;
+  trialType?: ClinicTrialType | null;
+  remainingTrialDays?: number | null;
 }
 
 export const subscriptionApi = {

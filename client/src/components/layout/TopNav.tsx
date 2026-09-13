@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { ConnectionStatusChip } from '@/components/common/ConnectionStatusChip';
+import { TrialRemainingChip } from '@/components/common/TrialRemainingChip';
 import { useAuthStore } from '@/store/auth.store';
 import { useUiStore } from '@/store/ui.store';
 import { usePermission } from '@/hooks/usePermission';
@@ -142,6 +143,7 @@ export function TopNav() {
           </div>
 
           <div className="top-nav__user">
+            <TrialRemainingChip compact />
             <div className="top-nav__user-info">
               <span className="top-nav__user-name">{user?.fullName}</span>
               <span className="top-nav__user-role">{user?.roleLabel}</span>
@@ -171,6 +173,7 @@ export function TopNav() {
       </div>
 
       <div className="top-nav__user top-nav__user--desktop">
+        <TrialRemainingChip compact />
         <div className="top-nav__user-info">
           <span className="top-nav__user-name">{user?.fullName}</span>
           <span className="top-nav__user-role">{user?.roleLabel}</span>

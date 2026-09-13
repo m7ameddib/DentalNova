@@ -2,7 +2,8 @@ import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuar
 import { DibNovaAdminGuard } from './dibnova-admin.guard';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { OfflineLicensingService } from '../offline-licensing/offline-licensing.service';
-import { AdminNotesDto, AdminPaymentDto, AdminResetPasswordDto } from './dto/admin-notes.dto';
+import { AdminMarketingTrialDto, AdminNotesDto, AdminPaymentDto, AdminResetPasswordDto } from './dto/admin-notes.dto';
+import { InstallationService } from '../installation/installation.service';
 import { CreateOfflineLicenseSlotDto } from '../offline-licensing/dto/offline-licensing.dto';
 import { SKIP_INSTALLATION_GUARD } from '../installation/guards/installation-ready.guard';
 import { SKIP_SUBSCRIPTION_GUARD } from '../subscription/guards/subscription-active.guard';
@@ -20,6 +21,7 @@ export class DibNovaAdminController {
     private readonly subscription: SubscriptionService,
     private readonly offlineLicensing: OfflineLicensingService,
     private readonly platform: PlatformService,
+    private readonly installation: InstallationService,
   ) {}
 
   /** Clinic installation info — online subscription or offline license metadata. */
@@ -46,6 +48,25 @@ export class DibNovaAdminController {
   @Get('history')
   history(@Query('clinicId') clinicId?: string) {
     return this.platform.isEnabled() ? this.platform.listEvents(clinicId) : [];
+  }
+
+  @Get('trials')
+  listTrials() {
+    return this.subscription.listAdminClinics().filter((clinic) => {
+      const status = clinic.subscription.status;
+      return Boolean(clinic.trialType) || status === 'TRIAL_PENDING' || status === 'TRIAL_ACTIVE' || status === 'TRIAL_EXPIRED' || status === 'PENDING';
+    });
+  }
+
+  @Post('trials/marketing')
+  createMarketingTrial(@Body() dto: AdminMarketingTrialDto) {
+    return this.installation.createMarketingTrial({ doctorName: dto.doctorName, phone: dto.phone });
+  }
+
+  @Post('trials/activate')
+  activateTrial(@Body() dto: AdminNotesDto) {
+    if (!dto.clinicId) throw new BadRequestException('Clinic id is required.');
+    return this.subscription.activateTrial(dto.notes, dto.clinicId);
   }
 
   /** Activate a PENDING online clinic. */

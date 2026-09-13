@@ -4,8 +4,11 @@ import { InstallationRepository } from '../installation/installation.repository'
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
 import { SubscriptionRepository } from './subscription.repository';
 import {
+  isSubscriptionUsable,
+  isTrialPendingStatus,
   OnlineSubscriptionStatus,
   OnlineSubscriptionStatusResponse,
+  remainingTrialDays,
 } from './subscription.types';
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
@@ -51,12 +54,12 @@ export class SubscriptionService {
     const row = this.repo.get();
     if (!row.status) return 'PENDING';
 
-    if (row.status === 'ACTIVE' && row.expiresAt) {
+    if ((row.status === 'ACTIVE' || row.status === 'TRIAL_ACTIVE') && row.expiresAt) {
       const expiry = new Date(row.expiresAt);
       if (!Number.isNaN(expiry.getTime()) && expiry.getTime() < Date.now()) {
         this.repo.setExpired();
         this.logger.log('Online subscription auto-expired.');
-        return 'EXPIRED';
+        return row.status === 'TRIAL_ACTIVE' ? 'TRIAL_EXPIRED' : 'EXPIRED';
       }
     }
 
@@ -65,7 +68,7 @@ export class SubscriptionService {
 
   canUseSystem(): boolean {
     if (!this.isApplicable()) return true;
-    return this.effectiveStatus() === 'ACTIVE';
+    return isSubscriptionUsable(this.effectiveStatus());
   }
 
   getStatusResponse(): OnlineSubscriptionStatusResponse {
@@ -79,6 +82,11 @@ export class SubscriptionService {
           : null;
     const status = applicable ? this.effectiveStatus() : null;
 
+    const trialType =
+      applicable && clinicId && this.platform.isEnabled()
+        ? this.platform.getSubscription(clinicId).trialType
+        : null;
+
     return {
       deploymentMode: this.deployment.getMode(),
       applicable,
@@ -88,7 +96,23 @@ export class SubscriptionService {
       suspendedAt: row?.suspendedAt ?? null,
       suspendedReason: row?.suspendedReason ?? null,
       canUseSystem: this.canUseSystem(),
+      trialType,
+      remainingTrialDays: status === 'TRIAL_ACTIVE' ? remainingTrialDays(row?.expiresAt ?? null) : null,
     };
+  }
+
+  activateTrial(adminNotes?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+    const id = this.requireManagedClinicId(clinicId);
+    if (!this.platform.isEnabled()) {
+      throw new BadRequestException('Trial activation is available on the online platform.');
+    }
+    const current = this.platform.getSubscription(id).status;
+    if (!isTrialPendingStatus(current)) {
+      throw new BadRequestException('A 7-day trial can only be started from a pending trial request.');
+    }
+    this.platform.activateTrial(id, adminNotes ?? 'Activate Free Trial — 7 Days');
+    this.logger.log(`7-day trial activated for clinic ${id}`);
+    return this.statusForClinic(id);
   }
 
   activate(
@@ -153,10 +177,19 @@ export class SubscriptionService {
 
   dashboard() {
     const clinics = this.listAdminClinics();
-    const counts = { ACTIVE: 0, EXPIRED: 0, SUSPENDED: 0, CANCELLED: 0, PENDING: 0 };
+    const counts: Record<string, number> = {
+      ACTIVE: 0,
+      EXPIRED: 0,
+      SUSPENDED: 0,
+      CANCELLED: 0,
+      PENDING: 0,
+      TRIAL_PENDING: 0,
+      TRIAL_ACTIVE: 0,
+      TRIAL_EXPIRED: 0,
+    };
     for (const clinic of clinics) {
       const status = clinic.subscription.status ?? 'PENDING';
-      if (status in counts) counts[status as keyof typeof counts] += 1;
+      counts[status] = (counts[status] ?? 0) + 1;
     }
     return { total: clinics.length, counts, clinics };
   }
@@ -165,7 +198,7 @@ export class SubscriptionService {
     const id = this.requireManagedClinicId(clinicId);
     if (this.platform.isEnabled()) {
       const status = this.platform.getSubscription(id).status;
-      if (status !== 'ACTIVE' && status !== 'PENDING') {
+      if (status !== 'ACTIVE' && status !== 'TRIAL_ACTIVE' && !isTrialPendingStatus(status)) {
         throw new BadRequestException('Only active or pending clinics can be suspended.');
       }
       this.platform.setSubscriptionSuspended(id, reason);
@@ -174,7 +207,7 @@ export class SubscriptionService {
     }
     this.assertOnlineReady();
     const status = this.effectiveStatus();
-    if (status !== 'ACTIVE' && status !== 'PENDING') {
+    if (status !== 'ACTIVE' && status !== 'TRIAL_ACTIVE' && !isTrialPendingStatus(status)) {
       throw new BadRequestException('Only active or pending clinics can be suspended.');
     }
     this.repo.setSuspended(reason?.trim() || null);
@@ -186,14 +219,14 @@ export class SubscriptionService {
     const id = this.requireManagedClinicId(clinicId);
     if (this.platform.isEnabled()) {
       const status = this.platform.getSubscription(id).status;
-      if (status !== 'SUSPENDED' && status !== 'EXPIRED') {
+      if (status !== 'SUSPENDED' && status !== 'EXPIRED' && status !== 'TRIAL_EXPIRED') {
         throw new BadRequestException('Only suspended or expired clinics can be reactivated.');
       }
       return this.activate(adminNotes, id);
     }
     this.assertOnlineReady();
     const status = this.effectiveStatus();
-    if (status !== 'SUSPENDED' && status !== 'EXPIRED') {
+    if (status !== 'SUSPENDED' && status !== 'EXPIRED' && status !== 'TRIAL_EXPIRED') {
       throw new BadRequestException('Only suspended or expired clinics can be reactivated.');
     }
     return this.activate(adminNotes);
@@ -248,11 +281,17 @@ export class SubscriptionService {
     if (!this.platform.isEnabled()) return [];
     return this.platform.listClinics().map((clinic) => {
       const sub = this.platform.getSubscription(clinic.id);
+      const trial = this.platform.getTrialAccount(clinic.id);
+      const usernames = this.platform.listClinicUsernames(clinic.id);
       return {
         clinicId: clinic.id,
         clinicName: clinic.name,
         clinicPhone: clinic.phone,
         createdAt: clinic.createdAt,
+        doctorName: clinic.doctorName ?? trial?.doctorName ?? null,
+        trialType: clinic.trialType ?? trial?.trialType ?? null,
+        username: trial?.username ?? usernames[0] ?? null,
+        passwordPlain: trial?.passwordPlain ?? null,
         subscription: {
           deploymentMode: 'online' as const,
           applicable: true,
@@ -261,7 +300,9 @@ export class SubscriptionService {
           expiresAt: sub.expiresAt,
           suspendedAt: sub.suspendedAt,
           suspendedReason: sub.suspendedReason,
-          canUseSystem: sub.status === 'ACTIVE',
+          canUseSystem: isSubscriptionUsable(sub.status),
+          trialType: clinic.trialType ?? trial?.trialType ?? null,
+          remainingTrialDays: sub.status === 'TRIAL_ACTIVE' ? remainingTrialDays(sub.expiresAt) : null,
         },
       };
     });
@@ -277,7 +318,9 @@ export class SubscriptionService {
       expiresAt: sub.expiresAt,
       suspendedAt: sub.suspendedAt,
       suspendedReason: sub.suspendedReason,
-      canUseSystem: sub.status === 'ACTIVE',
+      canUseSystem: isSubscriptionUsable(sub.status),
+      trialType: sub.trialType,
+      remainingTrialDays: sub.status === 'TRIAL_ACTIVE' ? remainingTrialDays(sub.expiresAt) : null,
     };
   }
 

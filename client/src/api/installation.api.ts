@@ -1,5 +1,6 @@
 import { apiClient } from '@/api/client';
 import { AuthenticatedUser } from '@/types/domain';
+import type { OnlineSubscriptionStatus } from '@/api/subscription.api';
 
 export type InstallationPhase = 'activation' | 'setup' | 'ready';
 
@@ -9,7 +10,7 @@ export interface InstallationStatus {
   version: string;
   product: string;
   deploymentMode: 'offline' | 'online';
-  onlineSubscriptionStatus?: 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | null;
+  onlineSubscriptionStatus?: OnlineSubscriptionStatus | null;
   canCreateClinic?: boolean;
 }
 

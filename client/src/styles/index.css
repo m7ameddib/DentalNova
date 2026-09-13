@@ -548,6 +548,125 @@ h4 {
   margin-top: 4px;
 }
 
+.login-form-panel__secondary--trial {
+  padding: 12px;
+  border: 1px dashed rgba(21, 101, 114, 0.28);
+  border-radius: 12px;
+  background: rgba(21, 101, 114, 0.04);
+}
+
+.login-offer {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding: 14px 16px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(21, 101, 114, 0.1), rgba(21, 101, 114, 0.04));
+  border: 1px solid rgba(21, 101, 114, 0.16);
+}
+
+.login-offer--form {
+  margin: 12px 0 4px;
+  text-align: center;
+}
+
+.login-offer__trial {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--color-primary);
+}
+
+.login-offer__prices {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 10px 14px;
+}
+
+.login-offer--form .login-offer__prices {
+  justify-content: center;
+}
+
+.login-offer__was {
+  color: var(--color-text-muted);
+  text-decoration: line-through;
+  font-size: 13px;
+}
+
+.login-offer__now {
+  font-size: 18px;
+  color: #0f172a;
+}
+
+.login-offer__month {
+  font-size: 13px;
+  color: var(--color-text-muted);
+}
+
+.login-card__support-hint {
+  margin: -4px 0 0;
+  text-align: center;
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.subscription-renew-offer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 14px;
+  border-radius: 12px;
+  background: rgba(21, 101, 114, 0.06);
+}
+
+.subscription-renew-offer__title {
+  margin: 0;
+  font-weight: 800;
+}
+
+.trial-chip {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #ecfdf5;
+  color: #047857;
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.trial-chip--compact {
+  max-width: 180px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.trial-account-banner {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+}
+
+.trial-account-banner p {
+  margin: 4px 0 0;
+  color: #047857;
+}
+
+.admin-actions--compact {
+  flex-wrap: wrap;
+}
+
+.admin-info-table--wide {
+  min-width: 860px;
+}
+
 .login-form-panel .form-field input {
   padding: 10px 12px;
   border-radius: 8px;
@@ -1247,19 +1366,27 @@ h4 {
   text-transform: uppercase;
 }
 
-.status-badge--pending {
+.status-badge--pending,
+.status-badge--trial_pending {
   background: #fef3c7;
   color: #92400e;
 }
 
-.status-badge--active {
+.status-badge--active,
+.status-badge--trial_active {
   background: #d1fae5;
   color: #065f46;
 }
 
-.status-badge--expired {
+.status-badge--expired,
+.status-badge--trial_expired {
   background: #fee2e2;
   color: #991b1b;
+}
+
+.status-badge--cancelled {
+  background: #f1f5f9;
+  color: #475569;
 }
 
 .status-badge--suspended {
@@ -3068,6 +3195,8 @@ textarea {
 .appointments-page {
   position: relative;
   min-height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
 }
 
 .appointments-page__header {
@@ -3142,7 +3271,9 @@ textarea {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 220px;
   gap: 10px;
-  align-items: start;
+  align-items: stretch;
+  flex: 1;
+  min-height: calc(100vh - 80px);
 }
 .agenda-layout__calendar {
   min-width: 0;
@@ -3323,8 +3454,11 @@ textarea {
   padding-bottom: 0;
 }
 .agenda-sidebar--compact {
-  max-height: calc(100vh - 80px);
-  overflow-y: auto;
+  height: 100%;
+  min-height: calc(100vh - 80px);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }
 .mini-calendar__nav {
   display: flex;
@@ -3450,6 +3584,8 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: var(--radius-md);
   padding: 14px;
+  display: flex;
+  flex-direction: column;
 }
 .agenda-sidebar__section + .agenda-sidebar__section {
   margin-top: 16px;
@@ -3609,8 +3745,17 @@ textarea {
   white-space: nowrap;
 }
 .agenda-sidebar__section--emergency {
-  max-height: min(42vh, 420px);
-  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.agenda-sidebar__section--emergency::-webkit-scrollbar-button,
+.emergency-panel__list::-webkit-scrollbar-button {
+  display: none;
+  height: 0;
+  width: 0;
 }
 .emergency-panel__date-nav {
   display: flex;
@@ -3683,10 +3828,14 @@ textarea {
 }
 .emergency-panel__list {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+.emergency-panel__list--compact {
+  flex: 1;
 }
 .emergency-panel__empty {
   font-size: 0.85rem;

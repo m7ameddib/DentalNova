@@ -6,9 +6,10 @@ import { DibNovaAdminGuard } from './dibnova-admin.guard';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { OfflineLicensingModule } from '../offline-licensing/offline-licensing.module';
 import { AuthModule } from '../auth/auth.module';
+import { InstallationModule } from '../installation/installation.module';
 
 @Module({
-  imports: [SubscriptionModule, OfflineLicensingModule, AuthModule, JwtModule.register({})],
+  imports: [SubscriptionModule, OfflineLicensingModule, AuthModule, InstallationModule, JwtModule.register({})],
   controllers: [DibNovaAdminController, DibNovaAdminAuthController],
   providers: [DibNovaAdminGuard],
 })

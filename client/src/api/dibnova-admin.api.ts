@@ -1,6 +1,6 @@
 import axios from 'axios';
 import { getApiBaseUrl } from '@/api/api-config';
-import { SubscriptionStatus } from '@/api/subscription.api';
+import { ClinicTrialType, SubscriptionStatus } from '@/api/subscription.api';
 import { AuthenticatedUser } from '@/types/domain';
 
 const ADMIN_TOKEN_KEY = 'dnt-dibnova-admin-token';
@@ -39,7 +39,21 @@ export interface AdminManagedClinic {
   clinicName: string;
   clinicPhone: string | null;
   createdAt: string;
+  doctorName?: string | null;
+  trialType?: ClinicTrialType | null;
+  username?: string | null;
+  passwordPlain?: string | null;
   subscription: SubscriptionStatus;
+}
+
+export interface AdminMarketingTrial {
+  clinicId: string;
+  clinicName: string;
+  doctorName: string;
+  phone: string;
+  username: string;
+  password: string;
+  status: string;
 }
 
 export interface AdminClinicInfo {
@@ -232,6 +246,19 @@ export const dibnovaAdminApi = {
   issueRecoveryCode: (clinicId: string) =>
     adminClient()
       .post<{ recoveryCode: string }>('/dibnova-admin/recovery-code', { clinicId })
+      .then((r) => r.data),
+
+  listTrials: () =>
+    adminClient().get<AdminManagedClinic[]>('/dibnova-admin/trials').then((r) => r.data),
+
+  activateTrial: (clinicId: string, notes?: string) =>
+    adminClient()
+      .post<SubscriptionStatus>('/dibnova-admin/trials/activate', { clinicId, notes })
+      .then((r) => r.data),
+
+  createMarketingTrial: (doctorName: string, phone: string) =>
+    adminClient()
+      .post<AdminMarketingTrial>('/dibnova-admin/trials/marketing', { doctorName, phone })
       .then((r) => r.data),
 };
 

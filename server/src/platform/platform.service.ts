@@ -5,8 +5,13 @@ import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DeploymentService } from '../common/deployment.service';
-import { OnlineSubscriptionStatus } from '../subscription/subscription.types';
-import { ClinicUserDirectoryRow, PlatformClinic } from './platform.types';
+import {
+  ClinicTrialType,
+  isSubscriptionUsable,
+  OnlineSubscriptionStatus,
+  TRIAL_DURATION_DAYS,
+} from '../subscription/subscription.types';
+import { ClinicTrialAccount, ClinicUserDirectoryRow, PlatformClinic } from './platform.types';
 
 const SUBSCRIPTION_TERM_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -54,17 +59,32 @@ export class PlatformService implements OnModuleInit {
     return path.join(process.cwd(), 'data', 'clinic.db');
   }
 
-  createClinic(input: { name: string; phone?: string | null }): PlatformClinic {
+  createClinic(input: {
+    name: string;
+    phone?: string | null;
+    trialType?: ClinicTrialType | null;
+    doctorName?: string | null;
+    status?: OnlineSubscriptionStatus;
+  }): PlatformClinic {
     this.assertEnabled();
     const id = crypto.randomBytes(16).toString('hex');
     const dbPath = this.clinicDbPath(id);
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+    const status = input.status ?? (input.trialType ? 'TRIAL_PENDING' : 'PENDING');
     this.db
       .prepare(
-        `INSERT INTO clinics (id, name, phone, db_path, subscription_status)
-         VALUES (?, ?, ?, ?, 'PENDING')`,
+        `INSERT INTO clinics (id, name, phone, db_path, subscription_status, trial_type, doctor_name)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, input.name.trim(), input.phone?.trim() || null, dbPath);
+      .run(
+        id,
+        input.name.trim(),
+        input.phone?.trim() || null,
+        dbPath,
+        status,
+        input.trialType ?? null,
+        input.doctorName?.trim() || null,
+      );
     this.logger.log(`Created online clinic ${id} (${input.name.trim()})`);
     return this.requireClinic(id);
   }
@@ -223,11 +243,11 @@ export class PlatformService implements OnModuleInit {
   getSubscription(clinicId: string) {
     const clinic = this.requireClinic(clinicId);
     let status = clinic.subscriptionStatus;
-    if (status === 'ACTIVE' && clinic.subscriptionExpiresAt) {
+    if ((status === 'ACTIVE' || status === 'TRIAL_ACTIVE') && clinic.subscriptionExpiresAt) {
       const expiry = new Date(clinic.subscriptionExpiresAt);
       if (!Number.isNaN(expiry.getTime()) && expiry.getTime() < Date.now()) {
-        this.db.prepare(`UPDATE clinics SET subscription_status = 'EXPIRED' WHERE id = ?`).run(clinicId);
-        status = 'EXPIRED';
+        status = status === 'TRIAL_ACTIVE' ? 'TRIAL_EXPIRED' : 'EXPIRED';
+        this.db.prepare(`UPDATE clinics SET subscription_status = ? WHERE id = ?`).run(status, clinicId);
       }
     }
     return {
@@ -237,26 +257,90 @@ export class PlatformService implements OnModuleInit {
       suspendedAt: clinic.subscriptionSuspendedAt,
       suspendedReason: clinic.subscriptionSuspendedReason,
       adminNotes: clinic.adminNotes,
+      trialType: clinic.trialType,
+      doctorName: clinic.doctorName,
     };
   }
 
   canUseSystem(clinicId: string): boolean {
-    return this.getSubscription(clinicId).status === 'ACTIVE';
+    return isSubscriptionUsable(this.getSubscription(clinicId).status);
   }
 
-  setSubscriptionPending(clinicId: string): void {
+  setSubscriptionPending(clinicId: string, status: 'PENDING' | 'TRIAL_PENDING' = 'PENDING'): void {
     this.assertEnabled();
     this.db
       .prepare(
         `UPDATE clinics SET
-          subscription_status = 'PENDING',
+          subscription_status = ?,
           subscription_started_at = NULL,
           subscription_expires_at = NULL,
           subscription_suspended_at = NULL,
           subscription_suspended_reason = NULL
          WHERE id = ?`,
       )
-      .run(clinicId);
+      .run(status, clinicId);
+  }
+
+  activateTrial(clinicId: string, adminNotes?: string | null): void {
+    this.assertEnabled();
+    const now = new Date();
+    const expires = new Date(now.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
+    this.db
+      .prepare(
+        `UPDATE clinics SET
+          subscription_status = 'TRIAL_ACTIVE',
+          subscription_started_at = ?,
+          subscription_expires_at = ?,
+          subscription_suspended_at = NULL,
+          subscription_suspended_reason = NULL,
+          admin_notes = COALESCE(?, admin_notes)
+         WHERE id = ?`,
+      )
+      .run(now.toISOString(), expires.toISOString(), adminNotes ?? '7-day free trial', clinicId);
+    this.logEvent(clinicId, 'TRIAL_ACTIVATE', expires.toISOString());
+  }
+
+  upsertTrialAccount(input: {
+    clinicId: string;
+    trialType: ClinicTrialType;
+    doctorName?: string | null;
+    username?: string | null;
+    passwordPlain?: string | null;
+  }): void {
+    this.assertEnabled();
+    this.db
+      .prepare(
+        `INSERT INTO clinic_trial_accounts (clinic_id, trial_type, doctor_name, username, password_plain)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(clinic_id) DO UPDATE SET
+           trial_type = excluded.trial_type,
+           doctor_name = COALESCE(excluded.doctor_name, clinic_trial_accounts.doctor_name),
+           username = COALESCE(excluded.username, clinic_trial_accounts.username),
+           password_plain = COALESCE(excluded.password_plain, clinic_trial_accounts.password_plain)`,
+      )
+      .run(
+        input.clinicId,
+        input.trialType,
+        input.doctorName?.trim() || null,
+        input.username?.trim() || null,
+        input.passwordPlain ?? null,
+      );
+  }
+
+  getTrialAccount(clinicId: string): ClinicTrialAccount | null {
+    this.assertEnabled();
+    const row = this.db
+      .prepare('SELECT * FROM clinic_trial_accounts WHERE clinic_id = ?')
+      .get(clinicId) as Record<string, unknown> | undefined;
+    return row ? this.mapTrialAccount(row) : null;
+  }
+
+  listClinicUsernames(clinicId: string): string[] {
+    this.assertEnabled();
+    const rows = this.db
+      .prepare(`SELECT username FROM clinic_user_directory WHERE clinic_id = ? ORDER BY created_at ASC`)
+      .all(clinicId) as { username: string }[];
+    return rows.map((row) => row.username);
   }
 
   setSubscriptionActive(clinicId: string, adminNotes?: string | null): void {
@@ -354,6 +438,7 @@ export class PlatformService implements OnModuleInit {
     this.logEvent(clinicId, 'DELETE_DIRECTORY', 'Clinic directory record removed; clinic.db kept');
     this.db.prepare('DELETE FROM clinic_user_directory WHERE clinic_id = ?').run(clinicId);
     this.db.prepare('DELETE FROM clinic_recovery WHERE clinic_id = ?').run(clinicId);
+    this.db.prepare('DELETE FROM clinic_trial_accounts WHERE clinic_id = ?').run(clinicId);
     this.db.prepare('DELETE FROM clinics WHERE id = ?').run(clinicId);
   }
 
@@ -558,6 +643,12 @@ export class PlatformService implements OnModuleInit {
     this.adoptLegacyClinicIfNeeded();
   }
 
+  private addColumnIfMissing(table: string, column: string, definition: string): void {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[];
+    if (cols.some((col) => col.name === column)) return;
+    this.db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+
   private ensureSchema(): void {
     this.db.exec(`
       CREATE TABLE IF NOT EXISTS clinics (
@@ -571,7 +662,9 @@ export class PlatformService implements OnModuleInit {
         subscription_expires_at TEXT,
         subscription_suspended_at TEXT,
         subscription_suspended_reason TEXT,
-        admin_notes TEXT
+        admin_notes TEXT,
+        trial_type TEXT,
+        doctor_name TEXT
       );
       CREATE TABLE IF NOT EXISTS clinic_user_directory (
         username TEXT NOT NULL COLLATE NOCASE PRIMARY KEY,
@@ -605,7 +698,29 @@ export class PlatformService implements OnModuleInit {
         recovery_code_hash TEXT NOT NULL,
         updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
+      CREATE TABLE IF NOT EXISTS clinic_trial_accounts (
+        clinic_id TEXT PRIMARY KEY,
+        trial_type TEXT NOT NULL,
+        doctor_name TEXT,
+        username TEXT,
+        password_plain TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+      );
     `);
+    this.addColumnIfMissing('clinics', 'trial_type', 'TEXT');
+    this.addColumnIfMissing('clinics', 'doctor_name', 'TEXT');
+  }
+
+  private mapTrialAccount(row: Record<string, unknown>): ClinicTrialAccount {
+    return {
+      clinicId: String(row.clinic_id ?? ''),
+      trialType: row.trial_type as ClinicTrialType,
+      doctorName: (row.doctor_name as string | null) ?? null,
+      username: (row.username as string | null) ?? null,
+      passwordPlain: (row.password_plain as string | null) ?? null,
+      createdAt: String(row.created_at ?? ''),
+    };
   }
 
   private mapClinic(row: Record<string, unknown>): PlatformClinic {
@@ -621,6 +736,8 @@ export class PlatformService implements OnModuleInit {
       subscriptionSuspendedAt: (row.subscription_suspended_at as string | null) ?? null,
       subscriptionSuspendedReason: (row.subscription_suspended_reason as string | null) ?? null,
       adminNotes: (row.admin_notes as string | null) ?? null,
+      trialType: (row.trial_type as ClinicTrialType | null) ?? null,
+      doctorName: (row.doctor_name as string | null) ?? null,
     };
   }
 

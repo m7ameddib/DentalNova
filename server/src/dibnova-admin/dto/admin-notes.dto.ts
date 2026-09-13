@@ -53,6 +53,16 @@ export class AdminPaymentDto {
   note?: string;
 }
 
+export class AdminMarketingTrialDto {
+  @IsString()
+  @MaxLength(200)
+  doctorName!: string;
+
+  @IsString()
+  @MaxLength(40)
+  phone!: string;
+}
+
 export class AdminResetPasswordDto {
   @IsString()
   @MaxLength(64)

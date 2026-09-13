@@ -1,10 +1,15 @@
+import { Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { AlertCircle, Clock, Mail, ShieldOff } from 'lucide-react';
+import { AlertCircle, Clock, ShieldOff } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { AuthLangSwitch } from '@/components/auth/AuthLangSwitch';
 import { SubscriptionStatusBadge } from '@/components/admin/SubscriptionStatusBadge';
+import { WhatsAppIcon } from '@/components/common/WhatsAppIcon';
 import { subscriptionApi } from '@/api/subscription.api';
+import { DIBNOVA_WHATSAPP_PHONE } from '@/constants/dibnova-contact';
+import { buildWhatsAppUrl } from '@/utils/whatsapp';
+import { isTrialPendingStatus } from '@/utils/subscription';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -20,24 +25,34 @@ export function SubscriptionStatusPage() {
     refetchInterval: 30_000,
   });
 
-  const subStatus = status?.status ?? 'PENDING';
+  const subStatus = status?.status ?? 'TRIAL_PENDING';
+  const whatsappUrl = buildWhatsAppUrl(DIBNOVA_WHATSAPP_PHONE) ?? 'https://wa.me/96170793486';
 
-  const titleKey =
-    subStatus === 'PENDING'
-      ? 'subscription.pendingTitle'
-      : subStatus === 'EXPIRED'
+  if (status?.canUseSystem) {
+    return <Navigate to="/" replace />;
+  }
+
+  const isTrialPending = isTrialPendingStatus(subStatus);
+  const isTrialExpired = subStatus === 'TRIAL_EXPIRED';
+  const isPaidExpired = subStatus === 'EXPIRED';
+
+  const titleKey = isTrialPending
+    ? 'subscription.trialPendingTitle'
+    : isTrialExpired
+      ? 'subscription.trialExpiredTitle'
+      : isPaidExpired
         ? 'subscription.expiredTitle'
         : 'subscription.suspendedTitle';
 
-  const messageKey =
-    subStatus === 'PENDING'
-      ? 'subscription.pendingMessage'
-      : subStatus === 'EXPIRED'
+  const messageKey = isTrialPending
+    ? 'subscription.trialPendingMessage'
+    : isTrialExpired
+      ? 'subscription.trialExpiredMessage'
+      : isPaidExpired
         ? 'subscription.expiredMessage'
         : 'subscription.suspendedMessage';
 
-  const Icon =
-    subStatus === 'PENDING' ? Clock : subStatus === 'EXPIRED' ? AlertCircle : ShieldOff;
+  const Icon = isTrialPending ? Clock : isTrialExpired || isPaidExpired ? AlertCircle : ShieldOff;
 
   return (
     <div className="login-page login-page--entry">
@@ -58,7 +73,17 @@ export function SubscriptionStatusPage() {
           <h1 className="subscription-status-card__title">{t(titleKey)}</h1>
           <p className="subscription-status-card__message">{t(messageKey)}</p>
 
-          {status?.expiresAt && subStatus === 'EXPIRED' && (
+          {isTrialExpired && (
+            <div className="subscription-renew-offer">
+              <p className="subscription-renew-offer__title">{t('subscription.renewTitle')}</p>
+              <div className="login-offer__prices">
+                <span className="login-offer__was">{t('auth.priceYearWas')}</span>
+                <strong className="login-offer__now">{t('auth.priceYearNow')}</strong>
+              </div>
+            </div>
+          )}
+
+          {status?.expiresAt && (isTrialExpired || isPaidExpired) && (
             <p className="subscription-status-card__meta">
               {t('subscription.expiredOn', { date: formatDate(status.expiresAt) })}
             </p>
@@ -69,16 +94,25 @@ export function SubscriptionStatusPage() {
           )}
 
           <div className="subscription-status-card__contact">
-            <p>{t('subscription.contactMessage')}</p>
+            <p>
+              {isTrialExpired
+                ? t('subscription.renewContact')
+                : isTrialPending
+                  ? t('subscription.contactWhatsAppHint')
+                  : t('subscription.contactMessage')}
+            </p>
             <a
-              href="https://dibnova.com"
+              href={whatsappUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="btn btn--secondary subscription-status-card__contact-btn"
             >
-              <Mail size={16} />
-              {t('subscription.contactButton')}
+              <WhatsAppIcon />
+              {isTrialExpired ? t('subscription.renewWhatsApp') : t('auth.contactWhatsApp')}
             </a>
+            {(isTrialPending || isTrialExpired) && (
+              <p className="login-card__support-hint">{t('auth.contactWhatsAppHint')}</p>
+            )}
           </div>
         </div>
       </div>

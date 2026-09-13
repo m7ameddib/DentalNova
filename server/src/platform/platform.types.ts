@@ -1,4 +1,4 @@
-import { OnlineSubscriptionStatus } from '../subscription/subscription.types';
+import { ClinicTrialType, OnlineSubscriptionStatus } from '../subscription/subscription.types';
 
 export interface PlatformClinic {
   id: string;
@@ -12,6 +12,17 @@ export interface PlatformClinic {
   subscriptionSuspendedAt: string | null;
   subscriptionSuspendedReason: string | null;
   adminNotes: string | null;
+  trialType: ClinicTrialType | null;
+  doctorName: string | null;
+}
+
+export interface ClinicTrialAccount {
+  clinicId: string;
+  trialType: ClinicTrialType;
+  doctorName: string | null;
+  username: string | null;
+  passwordPlain: string | null;
+  createdAt: string;
 }
 
 export interface ClinicUserDirectoryRow {

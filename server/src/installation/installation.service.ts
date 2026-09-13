@@ -19,6 +19,7 @@ import { DeploymentService } from '../common/deployment.service';
 import { ConfigService } from '@nestjs/config';
 import { ActivateLicenseDto, ActivateOnlineDto, FirstSetupDto } from './dto/installation.dto';
 import { APP_VERSION } from '../common/version';
+import { OnlineSubscriptionStatus } from '../subscription/subscription.types';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { SubscriptionRepository } from '../subscription/subscription.repository';
 import { OnlineClinicAccountsRepository } from '../database/repositories/online-clinic-accounts.repository';
@@ -32,7 +33,7 @@ export interface InstallationStatusResponse {
   version: string;
   product: string;
   deploymentMode: 'offline' | 'online';
-  onlineSubscriptionStatus?: 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | null;
+  onlineSubscriptionStatus?: OnlineSubscriptionStatus | null;
   canCreateClinic?: boolean;
 }
 
@@ -259,6 +260,9 @@ export class InstallationService {
     const clinic = this.platform.createClinic({
       name: dto.clinicName.trim(),
       phone: dto.clinicPhone.trim(),
+      trialType: 'website',
+      doctorName: dto.doctorName.trim(),
+      status: 'TRIAL_PENDING',
     });
     this.db.ensureClinicConnection(clinic.id);
 
@@ -274,6 +278,7 @@ export class InstallationService {
           clinicName: dto.clinicName.trim(),
           clinicPhone: dto.clinicPhone.trim(),
           doctorPhone: dto.doctorPhone.trim(),
+          doctorNameEn: dto.doctorName.trim(),
           address: dto.address?.trim() || null,
           workingDays: dto.workingDays,
           workStartTime: dto.workStartTime,
@@ -304,8 +309,14 @@ export class InstallationService {
       userId: created.id,
       phoneNormalized,
     });
-    this.platform.setSubscriptionPending(clinic.id);
-    this.logger.log(`Online clinic setup complete for ${clinic.id} — subscription PENDING.`);
+    this.platform.setSubscriptionPending(clinic.id, 'TRIAL_PENDING');
+    this.platform.upsertTrialAccount({
+      clinicId: clinic.id,
+      trialType: 'website',
+      doctorName: dto.doctorName.trim(),
+      username,
+    });
+    this.logger.log(`Online clinic setup complete for ${clinic.id} — trial request pending.`);
 
     const authUser = runInTenant(clinic.id, () =>
       this.authService.toAuthenticatedUser(created.id, clinic.id),
@@ -317,10 +328,120 @@ export class InstallationService {
       version: APP_VERSION,
       product: 'DNT Dental',
       deploymentMode: 'online',
-      onlineSubscriptionStatus: 'PENDING',
+      onlineSubscriptionStatus: 'TRIAL_PENDING',
       canCreateClinic: true,
       ...session,
     };
+  }
+
+  async createMarketingTrial(input: { doctorName: string; phone: string }): Promise<{
+    clinicId: string;
+    clinicName: string;
+    doctorName: string;
+    phone: string;
+    username: string;
+    password: string;
+    status: OnlineSubscriptionStatus;
+  }> {
+    if (!this.platform.isEnabled()) {
+      throw new BadRequestException('Marketing trials are available on the online platform only.');
+    }
+    const doctorName = input.doctorName.trim();
+    const phone = input.phone.trim();
+    if (!doctorName) throw new BadRequestException('Doctor name is required.');
+    if (!isValidPhone(phone)) throw new BadRequestException('Enter a valid phone number.');
+
+    const phoneNormalized = normalizePhone(phone);
+    if (this.platform.findUserByPhone(phoneNormalized)) {
+      throw new ConflictException('This phone number is already registered to another clinic account.');
+    }
+
+    let username = this.suggestMarketingUsername(doctorName);
+    for (let attempt = 0; attempt < 6 && this.platform.findUserByUsername(username); attempt += 1) {
+      username = this.suggestMarketingUsername(doctorName);
+    }
+    if (this.platform.findUserByUsername(username)) {
+      throw new ConflictException('Could not generate a unique username. Try again.');
+    }
+
+    const password = `Dn7-${crypto.randomBytes(4).toString('hex')}`;
+    const clinicName = 'Dental Nova Virtual Clinic';
+    const clinic = this.platform.createClinic({
+      name: clinicName,
+      phone,
+      trialType: 'marketing',
+      doctorName,
+      status: 'TRIAL_PENDING',
+    });
+    this.db.ensureClinicConnection(clinic.id);
+
+    const passwordHash = await bcrypt.hash(password, 10);
+    const created = runInTenant(clinic.id, () => {
+      const doctorRole = this.rolesRepo.findByName('doctor');
+      if (!doctorRole) {
+        throw new BadRequestException('System roles are not initialized.');
+      }
+      this.paths.ensureDataDirs();
+      return this.db.connection.transaction(() => {
+        this.clinicSettings.update({
+          clinicName,
+          clinicPhone: phone,
+          doctorPhone: phone,
+          doctorNameEn: doctorName,
+          workingDays: '0,1,2,3,4,5,6',
+          workStartTime: '09:00',
+          workEndTime: '18:00',
+        });
+        const user = this.usersRepo.create({
+          fullName: doctorName,
+          username,
+          passwordHash,
+          roleId: doctorRole.id,
+          phone,
+          phoneNormalized,
+        });
+        this.onlineAccountsRepo.create({
+          username,
+          phoneNormalized,
+          installationId: clinic.id,
+          adminUserId: user.id,
+        });
+        this.repo.markSetupComplete();
+        return user;
+      })();
+    });
+
+    this.platform.registerUser({
+      username,
+      clinicId: clinic.id,
+      userId: created.id,
+      phoneNormalized,
+    });
+    this.platform.setSubscriptionPending(clinic.id, 'TRIAL_PENDING');
+    this.platform.upsertTrialAccount({
+      clinicId: clinic.id,
+      trialType: 'marketing',
+      doctorName,
+      username,
+      passwordPlain: password,
+    });
+    this.logger.log(`Marketing trial created for ${clinic.id} — pending admin activation.`);
+
+    return {
+      clinicId: clinic.id,
+      clinicName,
+      doctorName,
+      phone,
+      username,
+      password,
+      status: 'TRIAL_PENDING',
+    };
+  }
+
+  private suggestMarketingUsername(doctorName: string): string {
+    const ascii = doctorName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const base = ascii.slice(0, 10) || 'dntrial';
+    return `${base}${crypto.randomBytes(2).toString('hex')}`;
   }
 
   isReady(): boolean {

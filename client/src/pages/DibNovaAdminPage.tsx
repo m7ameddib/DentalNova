@@ -31,6 +31,21 @@ import { useUiStore } from '@/store/ui.store';
 import { todayIso } from '@/utils/date';
 import { formatMoney } from '@/utils/money';
 import { AdminPaymentReceiptPrintable, OperatingContractPrintable } from '@/components/admin/AdminPrintables';
+import { WhatsAppIcon } from '@/components/common/WhatsAppIcon';
+import { DIBNOVA_LOGIN_URL, DIBNOVA_WHATSAPP_PHONE } from '@/constants/dibnova-contact';
+import { isTrialPendingStatus } from '@/utils/subscription';
+import { openWhatsApp } from '@/utils/whatsapp';
+
+const ADMIN_STATUS_OPTIONS = [
+  'PENDING',
+  'TRIAL_PENDING',
+  'TRIAL_ACTIVE',
+  'TRIAL_EXPIRED',
+  'ACTIVE',
+  'EXPIRED',
+  'SUSPENDED',
+  'CANCELLED',
+] as const;
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -65,6 +80,14 @@ export function DibNovaAdminPage() {
   const [payNote, setPayNote] = useState('');
   const [resetUserId, setResetUserId] = useState<number | null>(null);
   const [resetPassword, setResetPassword] = useState('');
+  const [marketingDoctor, setMarketingDoctor] = useState('');
+  const [marketingPhone, setMarketingPhone] = useState('');
+  const [createdMarketing, setCreatedMarketing] = useState<{
+    clinicId: string;
+    username: string;
+    password: string;
+    phone: string;
+  } | null>(null);
   const print = usePrintStore((s) => s.print);
   const language = useUiStore((s) => s.language);
 
@@ -84,6 +107,8 @@ export function DibNovaAdminPage() {
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ['dibnova-admin-installation'] });
+    queryClient.invalidateQueries({ queryKey: ['dibnova-admin-dashboard'] });
+    queryClient.invalidateQueries({ queryKey: ['dibnova-admin-trials'] });
     queryClient.invalidateQueries({ queryKey: ['subscription-status'] });
     queryClient.invalidateQueries({ queryKey: ['installation-status'] });
   };
@@ -203,6 +228,55 @@ export function DibNovaAdminPage() {
     queryFn: dibnovaAdminApi.dashboard,
     enabled: authenticated && isOnline,
   });
+
+  const { data: trialRequests = [] } = useQuery({
+    queryKey: ['dibnova-admin-trials'],
+    queryFn: dibnovaAdminApi.listTrials,
+    enabled: authenticated && isOnline,
+  });
+
+  const activateTrialMutation = useMutation({
+    mutationFn: (clinicId: string) => dibnovaAdminApi.activateTrial(clinicId, notes),
+    onSuccess: () => {
+      setSuccess(t('dibnovaAdmin.success.activateTrial'));
+      setError(null);
+      invalidate();
+      void refetch();
+    },
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+  });
+
+  const marketingMutation = useMutation({
+    mutationFn: () => dibnovaAdminApi.createMarketingTrial(marketingDoctor.trim(), marketingPhone.trim()),
+    onSuccess: (result) => {
+      setCreatedMarketing({
+        clinicId: result.clinicId,
+        username: result.username,
+        password: result.password,
+        phone: result.phone,
+      });
+      setSelectedClinicId(result.clinicId);
+      setMarketingDoctor('');
+      setMarketingPhone('');
+      setSuccess(t('dibnovaAdmin.success.createMarketingTrial'));
+      setError(null);
+      invalidate();
+      void refetch();
+    },
+    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+  });
+
+  function sendTrialWhatsApp(phone: string, username: string, password: string) {
+    const sent = openWhatsApp(
+      phone || DIBNOVA_WHATSAPP_PHONE,
+      t('dibnovaAdmin.trialWhatsAppMessage', {
+        url: DIBNOVA_LOGIN_URL,
+        username,
+        password,
+      }),
+    );
+    if (!sent) setError(t('dibnovaAdmin.trialWhatsAppMissingPhone'));
+  }
 
   const { data: payments = [] } = useQuery({
     queryKey: ['dibnova-admin-payments', selectedClinicId],
@@ -331,7 +405,7 @@ export function DibNovaAdminPage() {
                           <th>{t('dibnovaAdmin.totalClinics')}</th>
                           <td>{dashboard.total}</td>
                         </tr>
-                        {(['ACTIVE', 'EXPIRED', 'SUSPENDED', 'CANCELLED'] as const).map((key) => (
+                        {ADMIN_STATUS_OPTIONS.map((key) => (
                           <tr key={key}>
                             <th>{t(`dibnovaAdmin.status.${key}`)}</th>
                             <td>{dashboard.counts[key] ?? 0}</td>
@@ -340,6 +414,166 @@ export function DibNovaAdminPage() {
                       </tbody>
                     </table>
                   </div>
+                </section>
+              )}
+
+              {isOnline && (
+                <section className="admin-card">
+                  <h2 className="admin-card__title">{t('dibnovaAdmin.trialRequestsTitle')}</h2>
+                  <p className="admin-card__note">{t('dibnovaAdmin.trialRequestsHint')}</p>
+                  <div className="admin-info-table-wrap">
+                    <table className="admin-info-table admin-info-table--wide">
+                      <thead>
+                        <tr>
+                          <th>{t('dibnovaAdmin.doctorName')}</th>
+                          <th>{t('dibnovaAdmin.clinicName')}</th>
+                          <th>{t('dibnovaAdmin.clinicPhone')}</th>
+                          <th>{t('dibnovaAdmin.requestDate')}</th>
+                          <th>{t('dibnovaAdmin.subscriptionStatus')}</th>
+                          <th>{t('dibnovaAdmin.trialStart')}</th>
+                          <th>{t('dibnovaAdmin.trialExpiry')}</th>
+                          <th>{t('dibnovaAdmin.trialTypeLabel')}</th>
+                          <th>{t('common.actions')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {trialRequests.length === 0 && (
+                          <tr>
+                            <td colSpan={9}>{t('dibnovaAdmin.noTrialRequests')}</td>
+                          </tr>
+                        )}
+                        {trialRequests.map((clinic) => (
+                          <tr key={clinic.clinicId}>
+                            <td>{clinic.doctorName || '—'}</td>
+                            <td>{clinic.clinicName}</td>
+                            <td>{clinic.clinicPhone || '—'}</td>
+                            <td>{formatDate(clinic.createdAt)}</td>
+                            <td>
+                              <SubscriptionStatusBadge status={clinic.subscription.status} />
+                            </td>
+                            <td>{formatDate(clinic.subscription.startedAt)}</td>
+                            <td>{formatDate(clinic.subscription.expiresAt)}</td>
+                            <td>
+                              {clinic.trialType
+                                ? t(`dibnovaAdmin.trialType.${clinic.trialType}`)
+                                : '—'}
+                            </td>
+                            <td>
+                              <div className="admin-actions admin-actions--compact">
+                                <button
+                                  type="button"
+                                  className="btn btn--primary btn--small"
+                                  disabled={
+                                    activateTrialMutation.isPending ||
+                                    !isTrialPendingStatus(clinic.subscription.status)
+                                  }
+                                  onClick={() => {
+                                    setSelectedClinicId(clinic.clinicId);
+                                    activateTrialMutation.mutate(clinic.clinicId);
+                                  }}
+                                >
+                                  {t('dibnovaAdmin.activateTrial')}
+                                </button>
+                                {clinic.trialType === 'marketing' && clinic.username && clinic.passwordPlain && (
+                                  <button
+                                    type="button"
+                                    className="btn btn--ghost btn--small"
+                                    onClick={() =>
+                                      sendTrialWhatsApp(
+                                        clinic.clinicPhone || '',
+                                        clinic.username || '',
+                                        clinic.passwordPlain || '',
+                                      )
+                                    }
+                                  >
+                                    <WhatsAppIcon />
+                                    {t('dibnovaAdmin.sendTrialWhatsApp')}
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {isOnline && (
+                <section className="admin-card">
+                  <h2 className="admin-card__title">{t('dibnovaAdmin.marketingTrialTitle')}</h2>
+                  <p className="admin-card__note">{t('dibnovaAdmin.marketingTrialHint')}</p>
+                  <div className="setup-grid">
+                    <label className="form-field">
+                      <span className="form-field__label">{t('dibnovaAdmin.doctorName')}</span>
+                      <input
+                        value={marketingDoctor}
+                        onChange={(e) => setMarketingDoctor(e.target.value)}
+                      />
+                    </label>
+                    <label className="form-field">
+                      <span className="form-field__label">{t('dibnovaAdmin.clinicPhone')}</span>
+                      <input
+                        value={marketingPhone}
+                        onChange={(e) => setMarketingPhone(e.target.value)}
+                      />
+                    </label>
+                  </div>
+                  <div className="admin-actions">
+                    <button
+                      type="button"
+                      className="btn btn--secondary"
+                      disabled={
+                        marketingMutation.isPending ||
+                        !marketingDoctor.trim() ||
+                        !marketingPhone.trim()
+                      }
+                      onClick={() => marketingMutation.mutate()}
+                    >
+                      {t('dibnovaAdmin.createMarketingTrial')}
+                    </button>
+                  </div>
+                  {createdMarketing && (
+                    <div className="admin-info-table-wrap">
+                      <table className="admin-info-table">
+                        <tbody>
+                          <tr>
+                            <th>{t('auth.username')}</th>
+                            <td className="mono-text">{createdMarketing.username}</td>
+                          </tr>
+                          <tr>
+                            <th>{t('auth.password')}</th>
+                            <td className="mono-text">{createdMarketing.password}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                      <div className="admin-actions">
+                        <button
+                          type="button"
+                          className="btn btn--ghost"
+                          onClick={() =>
+                            sendTrialWhatsApp(
+                              createdMarketing.phone,
+                              createdMarketing.username,
+                              createdMarketing.password,
+                            )
+                          }
+                        >
+                          <WhatsAppIcon />
+                          {t('dibnovaAdmin.sendTrialWhatsApp')}
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn--primary"
+                          disabled={activateTrialMutation.isPending}
+                          onClick={() => activateTrialMutation.mutate(createdMarketing.clinicId)}
+                        >
+                          {t('dibnovaAdmin.activateTrial')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </section>
               )}
 
@@ -356,7 +590,7 @@ export function DibNovaAdminPage() {
                         <span className="form-field__label">{t('common.status')}</span>
                         <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
                           <option value="ALL">{t('common.all')}</option>
-                          {['PENDING', 'ACTIVE', 'EXPIRED', 'SUSPENDED', 'CANCELLED'].map((s) => (
+                          {ADMIN_STATUS_OPTIONS.map((s) => (
                             <option key={s} value={s}>{t(`dibnovaAdmin.status.${s}`)}</option>
                           ))}
                         </select>
@@ -477,15 +711,33 @@ export function DibNovaAdminPage() {
                     <button
                       type="button"
                       className="btn btn--primary"
-                      disabled={actionMutation.isPending || effectiveStatus !== 'PENDING'}
+                      disabled={
+                        actionMutation.isPending ||
+                        !isTrialPendingStatus(effectiveStatus)
+                      }
                       onClick={() => actionMutation.mutate('activate')}
                     >
                       {t('dibnovaAdmin.activate')}
                     </button>
                     <button
                       type="button"
+                      className="btn btn--primary"
+                      disabled={
+                        activateTrialMutation.isPending ||
+                        !selectedClinic ||
+                        !isTrialPendingStatus(effectiveStatus)
+                      }
+                      onClick={() => selectedClinic && activateTrialMutation.mutate(selectedClinic.clinicId)}
+                    >
+                      {t('dibnovaAdmin.activateTrial')}
+                    </button>
+                    <button
+                      type="button"
                       className="btn btn--secondary"
-                      disabled={actionMutation.isPending || effectiveStatus !== 'ACTIVE'}
+                      disabled={
+                        actionMutation.isPending ||
+                        (effectiveStatus !== 'ACTIVE' && effectiveStatus !== 'TRIAL_ACTIVE')
+                      }
                       onClick={() => actionMutation.mutate('extend')}
                     >
                       {t('dibnovaAdmin.extend')}
@@ -495,7 +747,9 @@ export function DibNovaAdminPage() {
                       className="btn btn--secondary"
                       disabled={
                         actionMutation.isPending ||
-                        (effectiveStatus !== 'ACTIVE' && effectiveStatus !== 'PENDING')
+                        (effectiveStatus !== 'ACTIVE' &&
+                          effectiveStatus !== 'TRIAL_ACTIVE' &&
+                          !isTrialPendingStatus(effectiveStatus))
                       }
                       onClick={() => actionMutation.mutate('suspend')}
                     >
@@ -506,7 +760,9 @@ export function DibNovaAdminPage() {
                       className="btn btn--secondary"
                       disabled={
                         actionMutation.isPending ||
-                        (effectiveStatus !== 'SUSPENDED' && effectiveStatus !== 'EXPIRED')
+                        (effectiveStatus !== 'SUSPENDED' &&
+                          effectiveStatus !== 'EXPIRED' &&
+                          effectiveStatus !== 'TRIAL_EXPIRED')
                       }
                       onClick={() => actionMutation.mutate('reactivate')}
                     >

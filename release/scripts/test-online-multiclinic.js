@@ -121,7 +121,7 @@ async function main() {
       body: setupPayload('Clinic A', 'clinica'),
       expected: [200, 201],
     });
-    assert(clinicA.data.onlineSubscriptionStatus === 'PENDING', 'Clinic A should start PENDING');
+    assert(clinicA.data.onlineSubscriptionStatus === 'TRIAL_PENDING', 'Clinic A should start as a pending trial request');
     assert(clinicA.data.user.clinicId, 'Clinic A session must include clinicId');
 
     const clinicB = await request('POST', '/installation/setup', {

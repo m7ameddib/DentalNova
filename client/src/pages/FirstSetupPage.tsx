@@ -56,14 +56,19 @@ export function FirstSetupPage() {
       });
       if (result.accessToken && result.user) {
         setSession(result.accessToken, result.user);
-        if (result.deploymentMode === 'online' && result.onlineSubscriptionStatus === 'PENDING') {
+        if (
+          result.deploymentMode === 'online' &&
+          (result.onlineSubscriptionStatus === 'PENDING' ||
+            result.onlineSubscriptionStatus === 'TRIAL_PENDING')
+        ) {
           navigate('/subscription-status', { replace: true });
         } else {
           navigate('/', { replace: true });
         }
       } else {
         navigate('/login', { replace: true });
-      }    } catch (err: unknown) {
+      }
+    } catch (err: unknown) {
       const msg =
         (err as { response?: { data?: { message?: string | string[] } } })?.response?.data?.message ??
         t('common.error');
@@ -101,7 +106,7 @@ export function FirstSetupPage() {
           <h1>{t('installation.setupTitle')}</h1>
         </div>
         <p className="login-card__subtitle">
-          {isOnline ? t('installation.setupSubtitleOnline') : t('installation.setupSubtitle')}
+          {isOnline ? t('installation.setupSubtitleTrial') : t('installation.setupSubtitle')}
         </p>
 
         <div className="setup-grid">
