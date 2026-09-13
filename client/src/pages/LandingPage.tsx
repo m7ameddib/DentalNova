@@ -121,7 +121,12 @@ export function LandingPage() {
             <span />
             <em>{t('landing.clinical.window')}</em>
           </div>
-          <img src="/assets/dental-chart.jpg" alt={t('landing.clinical.window')} />
+          <div className="dn-file-mock" aria-hidden="true">
+            <strong>Mostafa</strong>
+            <i>{t('landing.agenda.slot2')}</i>
+            <i>{t('landing.agenda.slot1')}</i>
+            <i>{t('landing.clinical.window')}</i>
+          </div>
         </div>
       </section>
 
@@ -203,7 +208,9 @@ export function LandingPage() {
             <div className="dn-phone-ui dn-phone-ui--chart">
               <small>Patient</small>
               <strong>Mostafa</strong>
-              <img src="/assets/dental-chart.jpg" alt="" />
+              <b>{t('landing.agenda.slot2')}</b>
+              <b>{t('landing.agenda.slot1')}</b>
+              <b>{t('landing.mobile.p3')}</b>
             </div>
           </PhoneFrame>
           <PhoneFrame title={t('landing.mobile.phoneAi')}>

@@ -6548,12 +6548,28 @@ textarea {
   font-style: normal;
 }
 
-.dn-window img {
-  display: block;
-  width: 100%;
-  height: min(420px, 54vh);
-  object-fit: cover;
-  background: #fff;
+.dn-file-mock {
+  min-height: 280px;
+  background: #f8fafc;
+  color: #111827;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.dn-file-mock strong {
+  font-size: 18px;
+}
+
+.dn-file-mock i {
+  font-style: normal;
+  font-weight: 700;
+  font-size: 13px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: #eef2ff;
+  color: #312e81;
 }
 
 .dn-agenda-mock {
