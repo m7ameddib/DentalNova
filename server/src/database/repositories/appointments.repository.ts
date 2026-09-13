@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
 import { toCamel, toCamelList } from '../row-mapper.util';
 import { Appointment, AppointmentStatus } from '../../common/types';
+import { localTodayIso } from '../../common/local-date.util';
 
 export interface CreateAppointmentInput {
   patientId?: number | null;
@@ -33,21 +34,28 @@ export class AppointmentsRepository {
    * today's appointments whose time has already gone by are excluded too.
    */
   findByPatient(patientId: number, upcomingOnly = false, limit = 20): Appointment[] {
-    const query = upcomingOnly
-      ? `SELECT * FROM appointments
-         WHERE patient_id = ?
-           AND status NOT IN ('COMPLETED', 'CANCELLED')
-           AND (
-             status IN ('WAITING', 'IN_TREATMENT')
-             OR date(date) > date('now')
-             OR (date(date) = date('now') AND time >= strftime('%H:%M', 'now'))
-           )
-         ORDER BY date ASC, time ASC LIMIT ?`
-      : `SELECT * FROM appointments WHERE patient_id = ? ORDER BY date DESC, time DESC LIMIT ?`;
-    const rows = this.db.connection.prepare(query).all(patientId, limit) as Record<
-      string,
-      unknown
-    >[];
+    if (upcomingOnly) {
+      const now = new Date();
+      const today = localTodayIso();
+      const time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+      const rows = this.db.connection
+        .prepare(
+          `SELECT * FROM appointments
+           WHERE patient_id = ?
+             AND status NOT IN ('COMPLETED', 'CANCELLED')
+             AND (
+               status IN ('WAITING', 'IN_TREATMENT')
+               OR date(date) > date(?)
+               OR (date(date) = date(?) AND time >= ?)
+             )
+           ORDER BY date ASC, time ASC LIMIT ?`,
+        )
+        .all(patientId, today, today, time, limit) as Record<string, unknown>[];
+      return toCamelList<Appointment>(rows);
+    }
+    const rows = this.db.connection
+      .prepare(`SELECT * FROM appointments WHERE patient_id = ? ORDER BY date DESC, time DESC LIMIT ?`)
+      .all(patientId, limit) as Record<string, unknown>[];
     return toCamelList<Appointment>(rows);
   }
 
@@ -80,7 +88,7 @@ export class AppointmentsRepository {
     return toCamelList(rows);
   }
 
-  /** Active (non-cancelled) appointments for overlap checks when booking/editing. */
+  /** Active appointments for overlap checks — completed/cancelled slots can be reused. */
   findActiveByDate(date: string): Appointment[] {
     const rows = this.db.connection
       .prepare(
@@ -90,7 +98,7 @@ export class AppointmentsRepository {
                 p.phone as patient_phone
          FROM appointments a
          LEFT JOIN patients p ON p.id = a.patient_id
-         WHERE a.date = ? AND a.status != 'CANCELLED'
+         WHERE a.date = ? AND a.status NOT IN ('CANCELLED', 'COMPLETED')
          ORDER BY a.time ASC`,
       )
       .all(date) as Record<string, unknown>[];

@@ -26,11 +26,13 @@ import { FinancialActionDto } from './dto/financial-action.dto';
 
 import { AppointmentsService } from '../appointments/appointments.service';
 
+import { addLocalDays, localTodayIso } from '../common/local-date.util';
+
 
 
 function todayIso(): string {
 
-  return new Date().toISOString().slice(0, 10);
+  return localTodayIso();
 
 }
 
@@ -38,11 +40,7 @@ function todayIso(): string {
 
 function addDays(isoDate: string, days: number): string {
 
-  const d = new Date(`${isoDate}T12:00:00`);
-
-  d.setDate(d.getDate() + days);
-
-  return d.toISOString().slice(0, 10);
+  return addLocalDays(isoDate, days);
 
 }
 

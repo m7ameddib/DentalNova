@@ -37,7 +37,7 @@ import { currentTimeRounded, formatDateDisplay, formatTimeDisplay, localAddDaysI
 import { DateField } from '@/components/common/DateField';
 import { buildWeekDays, expandSlotTimes, startOfWeekIso, timeToMinutes, trimTimesFromWorkingDayStart, weekRangeLabel } from '@/utils/calendar';
 import { getErrorMessage } from '@/utils/errors';
-import { openWhatsApp, openWhatsAppDesktop } from '@/utils/whatsapp';
+import { openWhatsApp, openWhatsAppPreferred } from '@/utils/whatsapp';
 import { buildAppointmentReminderMessage, resolveWhatsAppMessageLanguage } from '@/utils/whatsappTemplates';
 import { AppointmentStatus, AppointmentWithPatient, DaySchedule, Patient } from '@/types/domain';
 /** Fallback slot times shown while the first day's schedule is still loading. */
@@ -350,7 +350,7 @@ export function AppointmentsPage() {
       appointmentTime: managingAppt.time,
       appointmentReason: managingAppt.reason,
     });
-    if (!openWhatsAppDesktop(phone, message)) return;
+    if (!openWhatsAppPreferred(phone, message)) return;
     reminderMutation.mutate(managingAppt.id);
   }
 
@@ -644,15 +644,26 @@ export function AppointmentsPage() {
     const id = Number(manageAppointmentId);
     if (!id) return;
     let cancelled = false;
-    appointmentsApi.daySchedule(initialDate).then((day) => {
-      if (cancelled) return;
-      const found = day.appointments.find((a) => a.id === id);
-      if (found) handleAppointmentOpen(found);
-    });
+    appointmentsApi
+      .daySchedule(initialDate)
+      .then(async (day) => {
+        if (cancelled) return;
+        const found = day.appointments.find((a) => a.id === id);
+        if (found) {
+          handleAppointmentOpen(found);
+          return;
+        }
+        const appt = await appointmentsApi.getById(id);
+        if (cancelled || !appt) return;
+        setFocusDate(appt.date);
+        setWeekStart(startOfWeekIso(appt.date, language));
+        handleAppointmentOpen(appt);
+      })
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [manageAppointmentId, initialDate]);
+  }, [manageAppointmentId, initialDate, language]);
 
   function handleFabClick() {
     if (!canCreate) return;

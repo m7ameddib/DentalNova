@@ -16,6 +16,7 @@ import { useUiStore } from '@/store/ui.store';
 import { apiClient } from '@/api/client';
 import { syncWhenOnline } from '@/offline/intercept';
 import { useOfflineStatusStore } from '@/offline/status.store';
+import { defaultLandingPath } from '@/utils/landingPath';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -59,7 +60,8 @@ export function LoginPage() {
   }, [installReady, installStatus?.phase, isAuthenticated, logout]);
 
   if (installReady && isAuthenticated && clinicReady) {
-    return <Navigate to="/" replace />;
+    const landing = defaultLandingPath(useAuthStore.getState().user?.permissions);
+    return <Navigate to={landing} replace />;
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -76,7 +78,7 @@ export function LoginPage() {
       setSession(accessToken, user, rememberMe);
       useOfflineStatusStore.getState().setNeedsReauth(false);
       void syncWhenOnline(apiClient);
-      navigate('/', { replace: true });
+      navigate(defaultLandingPath(user.permissions), { replace: true });
     } catch {
       setError(t('auth.invalidCredentials'));
     } finally {

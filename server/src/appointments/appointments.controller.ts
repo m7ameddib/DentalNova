@@ -25,6 +25,12 @@ export class AppointmentsController {
   }
 
   @RequirePermissions(PERMISSIONS.APPOINTMENTS_VIEW)
+  @Get(':id')
+  getById(@Param('id', ParseIntPipe) id: number) {
+    return this.appointmentsService.getById(id);
+  }
+
+  @RequirePermissions(PERMISSIONS.APPOINTMENTS_VIEW)
   @Get()
   daySchedule(@Query('date') date: string) {
     return this.appointmentsService.getDaySchedule(date);

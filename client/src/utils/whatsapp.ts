@@ -63,3 +63,24 @@ export function openWhatsAppDesktop(phone: string | null | undefined, message?: 
   document.body.removeChild(link);
   return true;
 }
+
+/**
+ * Prefer the desktop protocol on machines that have WhatsApp installed,
+ * then fall back to wa.me if the app does not take focus.
+ */
+export function openWhatsAppPreferred(phone: string | null | undefined, message?: string): boolean {
+  const webUrl = buildWhatsAppUrl(phone, message);
+  if (!webUrl) return false;
+  const desktopUrl = buildWhatsAppDesktopUrl(phone, message);
+  if (!desktopUrl) {
+    window.open(webUrl, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+  openWhatsAppDesktop(phone, message);
+  window.setTimeout(() => {
+    if (document.hasFocus()) {
+      window.open(webUrl, '_blank', 'noopener,noreferrer');
+    }
+  }, 700);
+  return true;
+}

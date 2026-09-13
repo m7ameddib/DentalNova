@@ -24,9 +24,14 @@ export function localTodayIso(): string {
 }
 
 export function addDaysIso(dateIso: string, delta: number): string {
-  const d = new Date(`${dateIso}T00:00:00`);
-  d.setDate(d.getDate() + delta);
-  return d.toISOString().slice(0, 10);
+  return localAddDaysIso(dateIso, delta);
+}
+
+/** First day of the clinic-local month (YYYY-MM-01). */
+export function localMonthStartIso(from: Date = new Date()): string {
+  const y = from.getFullYear();
+  const m = String(from.getMonth() + 1).padStart(2, '0');
+  return `${y}-${m}-01`;
 }
 
 export function localAddDaysIso(dateIso: string, delta: number): string {
@@ -40,7 +45,8 @@ export function localAddDaysIso(dateIso: string, delta: number): string {
 }
 
 export function calculateAge(dateOfBirthIso: string): number {
-  const dob = new Date(dateOfBirthIso);
+  const [y, m, d] = dateOfBirthIso.split('-').map(Number);
+  const dob = new Date(y, (m ?? 1) - 1, d ?? 1);
   const now = new Date();
   let age = now.getFullYear() - dob.getFullYear();
   const monthDiff = now.getMonth() - dob.getMonth();

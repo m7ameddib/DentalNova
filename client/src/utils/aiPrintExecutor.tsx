@@ -138,6 +138,9 @@ export async function runAiClientPrint(
       const summary = await reportsApi.summary(from, to);
       const periodLabel = from === to ? formatDateDisplay(from, language) : `${from} — ${to}`;
       const f = summary.financial;
+      if (!f) {
+        throw new Error('Financial summary is not available for this account');
+      }
       print(
         <ReportPrintable
           title={t('reports.financial.title')}

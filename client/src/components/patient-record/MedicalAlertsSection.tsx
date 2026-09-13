@@ -210,7 +210,14 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
           {alertType === 'DISEASE' && (
             <label className="form-field">
               <span className="form-field__label">{t('patientRecord.medicalAlerts.disease')}</span>
-              {diseases.length === 0 ? (
+              {diseasesError ? (
+                <div className="form-error-banner">
+                  {t('common.error')}
+                  <button type="button" className="link-btn" onClick={() => refetchDiseases()}>
+                    {t('common.retry')}
+                  </button>
+                </div>
+              ) : diseases.length === 0 ? (
                 <p className="muted">{t('patientRecord.medicalAlerts.catalogEmpty')}</p>
               ) : (
                 <select

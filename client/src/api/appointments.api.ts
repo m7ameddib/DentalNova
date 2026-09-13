@@ -1,5 +1,5 @@
 import { apiClient } from './client';
-import { AppointmentStatus, DaySchedule, MonthOverviewEntry } from '@/types/domain';
+import { AppointmentStatus, AppointmentWithPatient, DaySchedule, MonthOverviewEntry } from '@/types/domain';
 
 export interface CreateAppointmentPayload {
   patientId?: number;
@@ -34,6 +34,9 @@ export const appointmentsApi = {
 
   daySchedule: (date: string) =>
     apiClient.get<DaySchedule>('/appointments', { params: { date } }).then((r) => r.data),
+
+  getById: (id: number) =>
+    apiClient.get<AppointmentWithPatient>(`/appointments/${id}`).then((r) => r.data),
 
   create: (payload: CreateAppointmentPayload) =>
     apiClient.post('/appointments', payload).then((r) => r.data),

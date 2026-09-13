@@ -81,9 +81,7 @@ export class PatientsService {
       ...payload,
       approxAge: payload.dateOfBirth ? null : payload.approxAge,
     };
-    if (payload.accountDiscount !== undefined) {
-      repoInput.accountDiscountCents = Math.round(payload.accountDiscount * 100);
-    }
+    // Legacy patients.account_discount_cents is unused — balances come from account_discounts.
     const updated = this.patientsRepo.update(id, repoInput);
     if (!updated) throw new NotFoundException('Patient not found');
     this.audit.log({

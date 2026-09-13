@@ -6,7 +6,7 @@ import { CalendarCheck, ScrollText, Users2, Wallet } from 'lucide-react';
 import { reportsApi } from '@/api/reports.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
-import { todayIso } from '@/utils/date';
+import { localMonthStartIso, todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { formatMoney } from '@/utils/money';
 import { ReportDetailModal, ReportDetailSpec } from '@/components/reports/ReportDetailModal';
@@ -15,8 +15,7 @@ import { AppointmentStatus } from '@/types/domain';
 type PeriodOption = 'today' | 'month' | 'custom';
 
 function monthStartIso(): string {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return localMonthStartIso();
 }
 
 const APPOINTMENT_STATUS_KEYS: { key: 'scheduled' | 'waiting' | 'inTreatment' | 'completed' | 'cancelled'; statusCode: AppointmentStatus }[] = [
@@ -100,33 +99,33 @@ export function ReportsPage() {
           <div className="report-cards">
             <ReportCard
               label={t('reports.financial.totalTreatmentValue')}
-              value={formatMoney(summary?.financial.totalTreatmentValueCents ?? 0)}
+              value={formatMoney(summary?.financial?.totalTreatmentValueCents ?? 0)}
               onClick={() => setDetail({ kind: 'treatments', onlyDiscounted: false })}
             />
             <ReportCard
               label={t('reports.financial.totalDiscounts')}
-              value={formatMoney(summary?.financial.totalDiscountCents ?? 0)}
+              value={formatMoney(summary?.financial?.totalDiscountCents ?? 0)}
               onClick={() => setDetail({ kind: 'treatments', onlyDiscounted: true })}
             />
             <ReportCard
               label={t('reports.financial.totalCollected')}
-              value={formatMoney(summary?.financial.totalCollectedCents ?? 0)}
+              value={formatMoney(summary?.financial?.totalCollectedCents ?? 0)}
               onClick={() => setDetail({ kind: 'payments' })}
             />
             <ReportCard
               label={t('reports.financial.outstandingBalance')}
-              value={formatMoney(summary?.financial.outstandingBalanceCents ?? 0)}
+              value={formatMoney(summary?.financial?.outstandingBalanceCents ?? 0)}
               emphasize
               onClick={() => setDetail({ kind: 'outstanding' })}
             />
             <ReportCard
               label={t('reports.financial.totalExpenses')}
-              value={formatMoney(summary?.financial.totalExpensesCents ?? 0)}
+              value={formatMoney(summary?.financial?.totalExpensesCents ?? 0)}
               onClick={() => setDetail({ kind: 'expenses' })}
             />
             <ReportCard
               label={t('reports.financial.netCash')}
-              value={formatMoney(summary?.financial.netCashCents ?? 0)}
+              value={formatMoney(summary?.financial?.netCashCents ?? 0)}
               emphasize
               onClick={() => setDetail({ kind: 'netCash' })}
             />

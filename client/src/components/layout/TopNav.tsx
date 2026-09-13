@@ -32,6 +32,7 @@ export function TopNav() {
   const isPatientWorkspaceActive =
     location.pathname === '/' || location.pathname.startsWith('/patients');
 
+  const canViewPatients = usePermission(PERMISSIONS.PATIENTS_VIEW);
   const canViewAppointments = usePermission(PERMISSIONS.APPOINTMENTS_VIEW);
   const canViewFollowUps = usePermission(PERMISSIONS.FOLLOWUPS_MANAGE);
   const canViewLabCases = usePermission(PERMISSIONS.LAB_CASES_MANAGE);
@@ -81,6 +82,7 @@ export function TopNav() {
         id="top-nav-menu"
         className={menuOpen ? 'top-nav__links top-nav__links--open' : 'top-nav__links'}
       >
+        {canViewPatients && (
         <NavLink
           to="/"
           className={isPatientWorkspaceActive ? 'top-nav__link active' : 'top-nav__link'}
@@ -88,6 +90,7 @@ export function TopNav() {
         >
           <Users size={16} /> {t('nav.patientWorkspace')}
         </NavLink>
+        )}
         {canViewAppointments && (
           <NavLink to="/appointments" className="top-nav__link" onClick={closeMenu}>
             <CalendarDays size={16} /> {t('nav.appointments')}

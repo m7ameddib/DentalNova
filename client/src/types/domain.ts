@@ -383,7 +383,7 @@ export interface PatientsSummary {
 
 export interface ReportsSummary {
   period: { from: string; to: string };
-  financial: FinancialSummary;
+  financial?: FinancialSummary;
   appointments: AppointmentsSummary;
   patients: PatientsSummary;
 }

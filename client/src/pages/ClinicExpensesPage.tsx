@@ -8,7 +8,7 @@ import { paymentMethodsApi } from '@/api/settings.api';
 import { Modal } from '@/components/common/Modal';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
-import { todayIso } from '@/utils/date';
+import { localMonthStartIso, todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { formatMoney, centsToAmount } from '@/utils/money';
 import { getErrorMessage } from '@/utils/errors';
@@ -17,8 +17,7 @@ import { ClinicExpense, ExpenseCategoryEntity } from '@/types/domain';
 type PeriodOption = 'today' | 'month' | 'custom';
 
 function monthStartIso(): string {
-  const d = new Date();
-  return new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
+  return localMonthStartIso();
 }
 
 function categoryLabel(categories: ExpenseCategoryEntity[], expense: ClinicExpense): string {

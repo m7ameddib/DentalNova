@@ -658,6 +658,7 @@ function TreatmentEditModal({
   const [discount, setDiscount] = useState(String(centsToAmount(treatment.discountCents)));
   const [status, setStatus] = useState<TreatmentStatus>(treatment.status);
   const [note, setNote] = useState(treatment.note ?? '');
+  const [validationError, setValidationError] = useState<string | null>(null);
 
   const selectedType = treatmentTypes.find((type) => type.id === treatmentTypeId) ?? null;
   const effectiveScope = resolveScope(treatmentScope, selectedType?.scope ?? null);
@@ -678,7 +679,11 @@ function TreatmentEditModal({
   }
 
   function handleSubmit() {
-    if (effectiveScope === 'SINGLE' && selectedTeeth.length === 0) return;
+    if (effectiveScope === 'SINGLE' && selectedTeeth.length === 0) {
+      setValidationError(t('patientRecord.treatment.validation.teethRequired'));
+      return;
+    }
+    setValidationError(null);
     onSave({
       treatmentTypeId,
       teeth: effectiveTeeth,
@@ -762,7 +767,7 @@ function TreatmentEditModal({
           <textarea rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
         </label>
 
-        {error && <div className="form-error-banner">{error}</div>}
+        {(validationError || error) && <div className="form-error-banner">{validationError || error}</div>}
 
         <div className="form-actions">
           <button type="button" className="btn btn--ghost" onClick={onClose}>

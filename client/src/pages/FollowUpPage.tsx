@@ -1,4 +1,4 @@
-import { Fragment, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
@@ -35,6 +35,10 @@ export function FollowUpPage() {
   const [expandedId, setExpandedId] = useState<number | null>(
     followUpFilterId ? Number(followUpFilterId) : null,
   );
+
+  useEffect(() => {
+    if (followUpFilterId) setExpandedId(Number(followUpFilterId));
+  }, [followUpFilterId]);
   const [error, setError] = useState<string | null>(null);
   const [addingClinical, setAddingClinical] = useState(false);
   const [newPatientQuery, setNewPatientQuery] = useState('');

@@ -7,11 +7,14 @@ import { labCasesApi } from '@/api/lab-cases.api';
 import { useUiStore } from '@/store/ui.store';
 import { formatDateDisplay } from '@/utils/date';
 import { formatMoney } from '@/utils/money';
+import { usePermission } from '@/hooks/usePermission';
+import { PERMISSIONS } from '@/constants/permissions';
 
 export function LabCasesSection({ patientId }: { patientId: number }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { language } = useUiStore();
+  const canManageLabCases = usePermission(PERMISSIONS.LAB_CASES_MANAGE);
 
   const { data } = useQuery({
     queryKey: ['patient-lab-cases', patientId],
@@ -24,7 +27,7 @@ export function LabCasesSection({ patientId }: { patientId: number }) {
     <SectionCard
       title={t('patientRecord.sections.labCases')}
       icon={<FlaskConical size={16} />}
-      onAdd={() => navigate(`/lab-cases?patientId=${patientId}`)}
+      onAdd={canManageLabCases ? () => navigate(`/lab-cases?patientId=${patientId}`) : undefined}
       addTitle={t('labCases.addCase') ?? ''}
       className="section-card--lab-cases"
     >

@@ -26,7 +26,7 @@ import { usePrintStore } from '@/store/print.store';
 import { useAuthStore } from '@/store/auth.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { openWhatsApp } from '@/utils/whatsapp';
-import { calculateAge, formatDateDisplay, todayIso } from '@/utils/date';
+import { calculateAge, formatDateDisplay } from '@/utils/date';
 import { getErrorMessage } from '@/utils/errors';
 import { getAreaTextForEdit, getPatientAreaDisplay, resolveAreaFields } from '@/utils/patientArea';
 import { loadRecentPatients, rememberRecentPatient } from '@/utils/recentPatients';
@@ -62,7 +62,7 @@ export function PatientSection({
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState(forceAdd ? todayIso() : '');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [approxAge, setApproxAge] = useState('');
   const [gender, setGender] = useState('');
   const [weightKg, setWeightKg] = useState('');
@@ -202,7 +202,6 @@ export function PatientSection({
 
   function startAdd() {
     resetForm();
-    setDateOfBirth(todayIso());
     setMode('add');
   }
 
@@ -498,7 +497,6 @@ export function PatientSection({
               <FormField label={t('patientRecord.patient.dob')} className="inline-form__col">
                 <DmyDateField
                   value={dateOfBirth}
-                  startOnToday={mode === 'add'}
                   onChange={(next) => {
                     setDateOfBirth(next);
                     if (next) setApproxAge('');

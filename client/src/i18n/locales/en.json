@@ -163,6 +163,7 @@
     "retry": "Retry",
     "logout": "Logout",
     "error": "Something went wrong",
+    "accessDenied": "You do not have access to this page.",
     "noResults": "No results found",
     "all": "All",
     "print": "Print",
