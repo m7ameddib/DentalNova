@@ -14,6 +14,12 @@ test('localMonthStartIso uses local year and month', () => {
   assert.equal(localMonthStartIso(new Date(2026, 0, 1)), '2026-01-01');
 });
 
+test('formatDateTimeDisplay skips invalid timestamps instead of Invalid Date', () => {
+  assert.equal(formatDateTimeDisplay('', 'en'), '');
+  assert.equal(formatDateTimeDisplay('not-a-date', 'en'), '');
+  assert.match(formatDateTimeDisplay('2026-09-13T12:30:00.000Z', 'en'), /2026/);
+});
+
 test('calculateAge uses the local calendar date of birth', () => {
   const now = new Date();
   const y = now.getFullYear() - 20;
