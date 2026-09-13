@@ -857,7 +857,39 @@
   }
 
   .ops-page-head-actions {
-    justify-content: flex-start;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: stretch;
+  }
+
+  .ops-page-head-actions .btn,
+  .ops-page-head-actions .page-feature-link {
+    flex: 1 1 calc(50% - 6px);
+    justify-content: center;
+  }
+
+  .ops-kpis {
+    display: flex;
+    overflow-x: auto;
+    grid-template-columns: none;
+    padding-bottom: 2px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .ops-kpi {
+    flex: 0 0 136px;
+    min-width: 136px;
+  }
+
+  .ops-kpis-tight {
+    display: grid;
+    overflow: visible;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .ops-kpis-tight .ops-kpi {
+    flex: unset;
+    min-width: 0;
   }
 
   .ops-shell.reports-page .ops-report-lead {
@@ -895,7 +927,35 @@
 
   .ops-row-actions { justify-content: flex-start; }
 
-  .ops-shell.ai-page { min-height: calc(100dvh - 180px); }
+  .ops-shell.ai-page {
+    min-height: calc(100dvh - 168px);
+    padding-bottom: 8px;
+  }
+  .ops-shell.ai-page .ops-page-head {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+  }
+  .ops-shell.ai-page .ops-ai-thread {
+    min-height: 0;
+    max-height: calc(100dvh - 250px);
+  }
+  .ops-shell.ai-page .ops-ai-composer {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+  }
+  .ops-shell.ai-page .ops-ai-composer textarea {
+    min-height: 56px;
+  }
+  .ops-shell.ai-page .ops-ai-tools .btn {
+    font-size: 0;
+    gap: 0;
+    padding: 8px 10px;
+  }
+  .ops-shell.ai-page .ops-ai-tools .btn svg {
+    width: 18px;
+    height: 18px;
+  }
   .ops-shell.ai-page .ops-msg { max-width: 92%; }
 }
 
