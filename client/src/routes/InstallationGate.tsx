@@ -28,6 +28,23 @@ export function InstallationGate({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let cancelled = false;
+    void (async () => {
+      const cached = (await getCachedInstallation()) as InstallationStatus | null;
+      const authed = useAuthStore.getState().isAuthenticated;
+      if (
+        !cancelled &&
+        cached?.deploymentMode === 'online' &&
+        cached.phase === 'ready' &&
+        authed
+      ) {
+        await rememberOnlineScope(cached);
+        queryClient.setQueryData(['installation-status'], cached);
+        const sub = await getCachedSubscription();
+        if (sub) queryClient.setQueryData(['subscription-status'], sub);
+        setCachedOnlineReady(true);
+        setFallbackChecked(true);
+      }
+    })();
     checkServerHealth().then((ok) => {
       if (!cancelled) setServerUp(ok);
     });
@@ -48,9 +65,12 @@ export function InstallationGate({ children }: { children: ReactNode }) {
   const [fallbackChecked, setFallbackChecked] = useState(false);
 
   useEffect(() => {
-    if (serverUp !== false) {
+    if (serverUp === true) {
       setFallbackChecked(false);
       setCachedOnlineReady(false);
+      return;
+    }
+    if (serverUp !== false) {
       return;
     }
     let cancelled = false;
@@ -116,7 +136,7 @@ export function InstallationGate({ children }: { children: ReactNode }) {
   }
 
   if (serverUp === null) {
-    if (isPublic) return <>{children}</>;
+    if (isPublic || cachedOnlineReady) return <>{children}</>;
     return (
       <div className="startup-splash" role="status">
         <BrandLogo variant="auth" />

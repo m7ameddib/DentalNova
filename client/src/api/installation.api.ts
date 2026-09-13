@@ -1,4 +1,5 @@
 import { apiClient } from '@/api/client';
+import { useOfflineStatusStore } from '@/offline/status.store';
 import { AuthenticatedUser } from '@/types/domain';
 import type { OnlineSubscriptionStatus } from '@/api/subscription.api';
 
@@ -46,11 +47,13 @@ export const installationApi = {
 
 export async function checkServerHealth(): Promise<boolean> {
   const offlineBrowser = typeof navigator !== 'undefined' && navigator.onLine === false;
-  const attempts = offlineBrowser ? 1 : 5;
+  const alreadyOffline = useOfflineStatusStore.getState().connection === 'offline';
+  const shortProbe = offlineBrowser || alreadyOffline;
+  const attempts = shortProbe ? 1 : 5;
   for (let attempt = 0; attempt < attempts; attempt += 1) {
     try {
       const res = await apiClient.get('/health', {
-        timeout: offlineBrowser ? 2000 : 8000,
+        timeout: shortProbe ? 2000 : 8000,
         skipOfflineFallback: true,
       });
       if (res.data?.ok === true) return true;
