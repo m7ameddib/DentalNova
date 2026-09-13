@@ -57,8 +57,12 @@ export function installOfflineFallback(api: AxiosInstance): void {
   if (installed) return;
   installed = true;
   api.interceptors.request.use((config) => {
-    if (useOfflineStatusStore.getState().enabled) {
+    const state = useOfflineStatusStore.getState();
+    if (state.enabled) {
       config.headers = config.headers ?? {};
+      if (state.connection === 'offline' && !config.skipOfflineFallback) {
+        config.timeout = Math.min(config.timeout ?? 8000, 2000);
+      }
     }
     return config;
   });
