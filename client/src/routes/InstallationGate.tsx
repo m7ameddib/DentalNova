@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { installationApi, checkServerHealth, InstallationStatus } from '@/api/installation.api';
 import { isClientMode } from '@/api/api-config';
 import { BrandLogo } from '@/components/common/BrandLogo';
-import { isPublicEntryPath } from '@/routes/public-entry-routes';
+import { isGuestHomePath, isPublicEntryPath } from '@/routes/public-entry-routes';
 import { useAuthStore } from '@/store/auth.store';
 import { getCachedInstallation, getCachedSubscription } from '@/offline/storage';
 import { rememberOnlineScope } from '@/offline/scope';
@@ -16,7 +16,8 @@ export function InstallationGate({ children }: { children: ReactNode }) {
   const { t } = useTranslation();
   const location = useLocation();
   const path = location.pathname;
-  const isPublic = isPublicEntryPath(path);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isPublic = isPublicEntryPath(path) || isGuestHomePath(path, isAuthenticated);
   const [serverUp, setServerUp] = useState<boolean | null>(null);
   const [healthCheckKey, setHealthCheckKey] = useState(0);
 
@@ -160,7 +161,7 @@ export function InstallationGate({ children }: { children: ReactNode }) {
 
   if (status.phase === 'setup') {
     if (isOnline) {
-      const allowedDuringSetup = ['/login', '/setup', '/subscription-status', '/dibnova-admin'];
+      const allowedDuringSetup = ['/', '/login', '/setup', '/subscription-status', '/dibnova-admin'];
       if (allowedDuringSetup.includes(path) || path.startsWith('/dibnova-admin')) {
         return <>{children}</>;
       }

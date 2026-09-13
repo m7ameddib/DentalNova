@@ -3,6 +3,117 @@
     "name": "DentalNova",
     "poweredBy": "Powered by DibNova"
   },
+  "landing": {
+    "nav": {
+      "product": "Product",
+      "mobile": "Mobile",
+      "editions": "Online & Offline"
+    },
+    "cta": {
+      "trial": "Start Your Clinic Free for 7 Days",
+      "login": "Login"
+    },
+    "hero": {
+      "kicker": "Dental clinic software",
+      "title": "Run the whole clinic from one calm screen.",
+      "lead": "Dental Nova is built for dentists who want the patient file, the chart, the chair, and the calendar in one place — not five apps.",
+      "caption": "A complete clinic system. Desktop and phone."
+    },
+    "value": {
+      "title": "Everything the doctor touches, in one product.",
+      "text": "Open a patient and the chart, treatments, account, files, and next visit are already there. The software stays out of the way so the clinic can move."
+    },
+    "cap": {
+      "label": "What Dental Nova includes",
+      "patients": "Patients",
+      "treatments": "Treatments",
+      "chart": "Teeth Chart",
+      "appointments": "Appointments",
+      "emergency": "Emergency",
+      "accounts": "Patient accounts",
+      "prescriptions": "Prescriptions",
+      "followups": "Follow-ups",
+      "lab": "Lab cases",
+      "notes": "Visit notes",
+      "files": "Files & X-rays",
+      "reports": "Reports",
+      "whatsapp": "WhatsApp",
+      "ai": "AI Assistant",
+      "staff": "Doctor & staff",
+      "modes": "Offline & Online",
+      "backup": "Backup"
+    },
+    "clinical": {
+      "kicker": "Patient · Treatment · Chart",
+      "title": "The patient file is the clinic.",
+      "text": "Treatments sit on the tooth. Notes, files, and the account stay with the same record. No jumping between screens to finish a visit.",
+      "window": "Patient file & teeth chart"
+    },
+    "agenda": {
+      "kicker": "Appointments · Emergency",
+      "title": "A calendar that knows the chair.",
+      "text": "Week and month views, 15 or 30 minute slots, and a dedicated Emergency list you can drag onto the day.",
+      "window": "Smart calendar",
+      "slot1": "Check-up",
+      "slot2": "Crown prep",
+      "slot3": "Emergency"
+    },
+    "ai": {
+      "kicker": "AI Assistant",
+      "title": "Ask the clinic. Get an answer.",
+      "text": "The assistant reads the clinic language — patients, plans, and daily work — in Arabic and English.",
+      "q": "Who is coming after 11?",
+      "a": "Two patients after 11:00. One crown, one follow-up."
+    },
+    "wa": {
+      "kicker": "WhatsApp",
+      "title": "Reminders that patients actually open.",
+      "text": "Send appointment and follow-up messages from the same record. Review the text, then send.",
+      "previewTitle": "Appointment reminder",
+      "previewText": "Your visit is tomorrow at 10:00. Reply if you need to move it."
+    },
+    "mobile": {
+      "kicker": "Dental Nova on the phone",
+      "title": "The clinic in your pocket. Not a slimmed-down copy.",
+      "text": "Open the same Dental Nova on your phone: the day, the patient, the chart, treatment, and the AI assistant.",
+      "p1": "Appointments",
+      "p2": "Patients",
+      "p3": "Patient file",
+      "p4": "Treatment",
+      "p5": "Teeth Chart",
+      "p6": "AI Assistant",
+      "p7": "Follow the clinic from anywhere",
+      "phoneAppts": "Appointments",
+      "phonePatient": "Patient & chart",
+      "phoneAi": "AI Assistant"
+    },
+    "editions": {
+      "kicker": "How you run it",
+      "title": "Offline on the clinic PC. Online when you need the clinic from anywhere.",
+      "offlineTitle": "Offline",
+      "offlineText": "Works on the clinic computer even without internet.",
+      "onlineTitle": "Online",
+      "onlineText": "Reach the clinic over the internet — desk and phone.",
+      "trialNote": "7-day free trial. Starts when DibNova activates the clinic."
+    },
+    "price": {
+      "offline": "$700 Lifetime",
+      "onlineWas": "$600 / Year",
+      "onlineNow": "$480 / Year",
+      "onlineMonth": "$40 / Month",
+      "trial": "7 Days Free"
+    },
+    "pricing": {
+      "title": "Simple pricing",
+      "offlineLabel": "Offline",
+      "onlineLabel": "Online",
+      "trialLabel": "Trial"
+    },
+    "final": {
+      "title": "Put the clinic on Dental Nova.",
+      "text": "Start a 7-day trial, or sign in if your clinic is already live."
+    }
+  },
   "nav": {
     "patientWorkspace": "Patient Workspace",
     "appointments": "Appointments",
@@ -169,6 +280,7 @@
     "newClinicPrompt": "New clinic?",
     "createNewClinic": "New Clinic",
     "backToLogin": "Back to sign in",
+    "backToHome": "Back to Dental Nova",
     "invalidCredentials": "Invalid username or password"
   },
   "installation": {

@@ -2,27 +2,7 @@ import { FormEvent, useEffect, useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import {
-  BarChart3,
-  Bot,
-  Building2,
-  CalendarDays,
-  Check,
-  CloudOff,
-  Eye,
-  EyeOff,
-  FlaskConical,
-  Globe,
-  Heart,
-  Lock,
-  LogIn,
-  MonitorSmartphone,
-  DollarSign,
-  ShieldCheck,
-  Smile,
-  UserRound,
-  Users,
-} from 'lucide-react';
+import { Building2, Eye, EyeOff, Globe, Lock, LogIn, UserRound } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { authApi } from '@/api/auth.api';
 import { installationApi } from '@/api/installation.api';
@@ -36,35 +16,6 @@ import { useUiStore } from '@/store/ui.store';
 import { apiClient } from '@/api/client';
 import { syncWhenOnline } from '@/offline/intercept';
 import { useOfflineStatusStore } from '@/offline/status.store';
-import { WhatsAppIcon } from '@/components/common/WhatsAppIcon';
-import { DIBNOVA_WHATSAPP_PHONE } from '@/constants/dibnova-contact';
-import { buildWhatsAppUrl } from '@/utils/whatsapp';
-
-const FEATURES = [
-  { icon: Users, titleKey: 'auth.featurePatientsTitle', textKey: 'auth.featurePatientsText' },
-  { icon: CalendarDays, titleKey: 'auth.featureAppointmentsTitle', textKey: 'auth.featureAppointmentsText' },
-  { icon: Smile, titleKey: 'auth.featureTreatmentsTitle', textKey: 'auth.featureTreatmentsText' },
-  { icon: DollarSign, titleKey: 'auth.featureBillingTitle', textKey: 'auth.featureBillingText' },
-  { icon: FlaskConical, titleKey: 'auth.featureLabTitle', textKey: 'auth.featureLabText' },
-  { icon: BarChart3, titleKey: 'auth.featureReportsTitle', textKey: 'auth.featureReportsText' },
-] as const;
-
-const AI_POINTS = [
-  'auth.aiPointChat',
-  'auth.aiPointAnalyze',
-  'auth.aiPointCreate',
-  'auth.aiPointInsights',
-  'auth.aiPointLanguages',
-] as const;
-
-const TRUST = [
-  { icon: ShieldCheck, titleKey: 'auth.trustSecureTitle', textKey: 'auth.trustSecureText' },
-  { icon: CloudOff, titleKey: 'auth.trustOfflineTitle', textKey: 'auth.trustOfflineText' },
-  { icon: MonitorSmartphone, titleKey: 'auth.trustDevicesTitle', textKey: 'auth.trustDevicesText' },
-  { icon: Heart, titleKey: 'auth.trustDentistsTitle', textKey: 'auth.trustDentistsText' },
-] as const;
-
-const SUPPORT_WHATSAPP_URL = buildWhatsAppUrl(DIBNOVA_WHATSAPP_PHONE) ?? 'https://wa.me/96170793486';
 
 export function LoginPage() {
   const { t } = useTranslation();
@@ -134,7 +85,7 @@ export function LoginPage() {
   }
 
   return (
-    <div className="login-page login-page--entry login-page--showcase">
+    <div className="login-page login-page--entry">
       <div className="login-page__lang">
         <Globe size={14} />
         <button
@@ -154,178 +105,90 @@ export function LoginPage() {
         </button>
       </div>
 
-      <div className="login-entry">
-        <aside className="login-entry__hero">
-          <div className="login-entry__copy">
-            <div className="login-offer">
-              <p className="login-offer__trial">{t('auth.tryFreeHeadline')}</p>
-              <div className="login-offer__prices">
-                <span className="login-offer__was">{t('auth.priceYearWas')}</span>
-                <strong className="login-offer__now">{t('auth.priceYearNow')}</strong>
-                <span className="login-offer__month">{t('auth.priceMonth')}</span>
-              </div>
-            </div>
-            <h2 className="login-entry__hero-title">{t('auth.heroHeadline')}</h2>
-            <p className="login-entry__hero-text">{t('auth.heroLead')}</p>
-
-            <ul className="login-entry__features">
-              {FEATURES.map(({ icon: Icon, titleKey, textKey }) => (
-                <li key={titleKey} className="login-entry__feature">
-                  <span className="login-entry__feature-icon">
-                    <Icon size={18} />
-                  </span>
-                  <strong>{t(titleKey)}</strong>
-                  <span>{t(textKey)}</span>
-                </li>
-              ))}
-            </ul>
-
-            <div className="login-entry__ai">
-              <div className="login-entry__ai-bot" aria-hidden="true">
-                <Bot size={36} />
-              </div>
-              <div className="login-entry__ai-copy">
-                <h3>{t('auth.aiTitle')}</h3>
-                <p>{t('auth.aiIntro')}</p>
-                <p className="login-entry__ai-quote">{t('auth.aiQuote')}</p>
-              </div>
-              <ul className="login-entry__ai-points">
-                {AI_POINTS.map((key) => (
-                  <li key={key}>
-                    <Check size={13} />
-                    {t(key)}
-                  </li>
-                ))}
-              </ul>
-              <p className="login-entry__ai-script">{t('auth.aiScript')}</p>
-            </div>
-
-            <ul className="login-entry__trust">
-              {TRUST.map(({ icon: Icon, titleKey, textKey }) => (
-                <li key={titleKey}>
-                  <Icon size={16} />
-                  <strong>{t(titleKey)}</strong>
-                  <span>{t(textKey)}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-
-          <figure className="login-entry__clinic">
-            <img src="/assets/login-clinic.jpg" alt="" />
-          </figure>
-        </aside>
-
-        <div className="login-entry__main login-entry__main--form">
-          <form className="login-form-panel" onSubmit={handleSubmit}>
-            <div className="login-form-panel__brand">
-              <BrandLogo variant="auth-lg" />
-              <p className="login-entry__tagline">{t('auth.tagline')}</p>
-              <div className="login-offer login-offer--form">
-                <p className="login-offer__trial">{t('auth.tryFreeHeadline')}</p>
-                <div className="login-offer__prices">
-                  <span className="login-offer__was">{t('auth.priceYearWas')}</span>
-                  <strong className="login-offer__now">{t('auth.priceYearNow')}</strong>
-                  <span className="login-offer__month">{t('auth.priceMonth')}</span>
-                </div>
-              </div>
-              <h1>{t('auth.welcomeBack')}</h1>
-              <p className="login-form-panel__subtitle">{t('auth.welcomeBackSubtitle')}</p>
-            </div>
-
-            <label className="form-field login-form-panel__field">
-              <span className="form-field__label">{t('auth.username')}</span>
-              <span className="login-form-panel__control">
-                <UserRound size={16} />
-                <input
-                  autoFocus
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  autoComplete="username"
-                  placeholder={t('auth.usernamePlaceholder')}
-                  required
-                />
-              </span>
-            </label>
-
-            <label className="form-field login-form-panel__field">
-              <span className="form-field__label">{t('auth.password')}</span>
-              <span className="login-form-panel__control">
-                <Lock size={16} />
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
-                  placeholder={t('auth.passwordPlaceholder')}
-                  required
-                />
-                <button
-                  type="button"
-                  className="login-form-panel__toggle"
-                  onClick={() => setShowPassword((v) => !v)}
-                  aria-label={t('auth.password')}
-                >
-                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
-                </button>
-              </span>
-            </label>
-
-            <div className="login-card__options">
-              <label className="login-card__remember">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                />
-                <span>{t('auth.rememberMe')}</span>
-              </label>
-              <Link to="/forgot-password" className="login-card__forgot-link">
-                {t('auth.forgotPassword')}
-              </Link>
-            </div>
-
-            {success && <div className="form-info-banner">{success}</div>}
-
-            {error && <div className="form-error-banner">{error}</div>}
-
-            <button className="btn btn--primary btn--block login-card__submit" type="submit" disabled={loading}>
-              <LogIn size={16} />
-              {loading ? t('auth.signingIn') : t('auth.signIn')}
-            </button>
-
-            <div className="login-card__divider">
-              <span>{t('auth.or')}</span>
-            </div>
-
-            <a
-              className="btn btn--ghost btn--block login-card__support"
-              href={SUPPORT_WHATSAPP_URL}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <WhatsAppIcon />
-              {t('auth.contactWhatsApp')}
-            </a>
-            <p className="login-card__support-hint">{t('auth.contactWhatsAppHint')}</p>
-
-            {canCreateClinic && (
-              <div className="login-form-panel__secondary login-form-panel__secondary--trial">
-                <p className="login-card__secondary-label">{t('auth.tryFreeShort')}</p>
-                <Link to="/setup" className="btn btn--ghost btn--block login-card__create-clinic">
-                  <Building2 size={16} />
-                  {t('auth.createNewClinic')}
-                </Link>
-              </div>
-            )}
-
-            <blockquote className="login-form-panel__testimonial">
-              <p>{t('auth.loginQuote')}</p>
-              <cite>{t('auth.loginQuoteBy')}</cite>
-            </blockquote>
-          </form>
+      <form className="login-card" onSubmit={handleSubmit}>
+        {isOnline && (
+          <Link to="/" className="setup-back-link">
+            {t('auth.backToHome')}
+          </Link>
+        )}
+        <div className="login-card__brand">
+          <BrandLogo variant="auth" />
+          <h1>{t('auth.welcomeBack')}</h1>
+          <p className="login-card__subtitle">{t('auth.welcomeBackSubtitle')}</p>
         </div>
-      </div>
+
+        <label className="form-field">
+          <span className="form-field__label">{t('auth.username')}</span>
+          <span className="login-form-panel__control">
+            <UserRound size={16} />
+            <input
+              autoFocus
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              autoComplete="username"
+              placeholder={t('auth.usernamePlaceholder')}
+              required
+            />
+          </span>
+        </label>
+
+        <label className="form-field">
+          <span className="form-field__label">{t('auth.password')}</span>
+          <span className="login-form-panel__control">
+            <Lock size={16} />
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              autoComplete="current-password"
+              placeholder={t('auth.passwordPlaceholder')}
+              required
+            />
+            <button
+              type="button"
+              className="login-form-panel__toggle"
+              onClick={() => setShowPassword((v) => !v)}
+              aria-label={t('auth.password')}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </span>
+        </label>
+
+        <div className="login-card__options">
+          <label className="login-card__remember">
+            <input
+              type="checkbox"
+              checked={rememberMe}
+              onChange={(e) => setRememberMe(e.target.checked)}
+            />
+            <span>{t('auth.rememberMe')}</span>
+          </label>
+          <Link to="/forgot-password" className="login-card__forgot-link">
+            {t('auth.forgotPassword')}
+          </Link>
+        </div>
+
+        {success && <div className="form-info-banner">{success}</div>}
+        {error && <div className="form-error-banner">{error}</div>}
+
+        <button className="btn btn--primary btn--block login-card__submit" type="submit" disabled={loading}>
+          <LogIn size={16} />
+          {loading ? t('auth.signingIn') : t('auth.signIn')}
+        </button>
+
+        {canCreateClinic && (
+          <div className="login-form-panel__secondary">
+            <p className="login-card__secondary-label">{t('auth.tryFreeShort')}</p>
+            <Link to="/setup" className="btn btn--ghost btn--block login-card__create-clinic">
+              <Building2 size={16} />
+              {t('auth.createNewClinic')}
+            </Link>
+          </div>
+        )}
+      </form>
+
+      <p className="login-page__branding">{t('app.poweredBy')}</p>
     </div>
   );
 }

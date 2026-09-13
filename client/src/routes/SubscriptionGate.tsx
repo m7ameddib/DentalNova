@@ -3,13 +3,16 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { subscriptionApi } from '@/api/subscription.api';
 import { installationApi } from '@/api/installation.api';
-import { isPublicEntryPath } from '@/routes/public-entry-routes';
+import { isGuestHomePath, isPublicEntryPath } from '@/routes/public-entry-routes';
 import { queryClient } from '@/queryClient';
 import { useOfflineStatusStore } from '@/offline/status.store';
+import { useAuthStore } from '@/store/auth.store';
 
 export function SubscriptionGate({ children }: { children: ReactNode }) {
   const location = useLocation();
-  const isPublic = isPublicEntryPath(location.pathname);
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const isPublic =
+    isPublicEntryPath(location.pathname) || isGuestHomePath(location.pathname, isAuthenticated);
 
   const { data: installStatus } = useQuery({
     queryKey: ['installation-status'],
