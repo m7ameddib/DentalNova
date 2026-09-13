@@ -8,6 +8,7 @@ import {
   isQueueableWrite,
   isReadMethod,
   isWriteMethod,
+  resolveFallbackTimeout,
   parseAppointmentIdFromUrl,
   parsePatientIdFromUrl,
   parsePatientsQuery,
@@ -60,11 +61,14 @@ export function installOfflineFallback(api: AxiosInstance): void {
     const state = useOfflineStatusStore.getState();
     if (state.enabled) {
       config.headers = config.headers ?? {};
-      const alreadyOffline =
-        state.connection === 'offline' || state.pending > 0;
-      if (alreadyOffline && !config.skipOfflineFallback) {
-        config.timeout = Math.min(config.timeout ?? 8000, 2000);
-      }
+      const timeout = resolveFallbackTimeout({
+        enabled: true,
+        skipOfflineFallback: config.skipOfflineFallback,
+        offlineOrPending: state.connection === 'offline' || state.pending > 0,
+        isFormData: typeof FormData !== 'undefined' && config.data instanceof FormData,
+        configured: config.timeout,
+      });
+      if (timeout != null) config.timeout = timeout;
     }
     return config;
   });

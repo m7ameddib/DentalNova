@@ -15,6 +15,7 @@ import {
   pendingCount,
   remapIds,
   requeueStuckItems,
+  resolveFallbackTimeout,
   searchCachedPatients,
   seedPatientDetailCaches,
 } from './core';
@@ -33,6 +34,31 @@ test('only essential clinic writes are queued', () => {
   assert.equal(isQueueableWrite('POST', '/auth/login', { username: 'a' }), false);
   assert.equal(isQueueableWrite('POST', '/ai-assistant/chat', {}), false);
   assert.equal(isQueueableWrite('GET', '/patients', null), false);
+});
+
+test('fallback detection uses a short timeout except for live file uploads', () => {
+  assert.equal(
+    resolveFallbackTimeout({ enabled: true, offlineOrPending: false, configured: 8000 }),
+    2000,
+  );
+  assert.equal(
+    resolveFallbackTimeout({ enabled: true, offlineOrPending: true, configured: 8000 }),
+    2000,
+  );
+  assert.equal(
+    resolveFallbackTimeout({
+      enabled: true,
+      offlineOrPending: false,
+      isFormData: true,
+      configured: 8000,
+    }),
+    8000,
+  );
+  assert.equal(
+    resolveFallbackTimeout({ enabled: true, skipOfflineFallback: true, offlineOrPending: false, configured: 4000 }),
+    4000,
+  );
+  assert.equal(resolveFallbackTimeout({ enabled: false, offlineOrPending: false, configured: 8000 }), 8000);
 });
 
 test('network errors are distinguished from HTTP errors', () => {

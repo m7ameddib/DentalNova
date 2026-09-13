@@ -59,6 +59,22 @@ export function isWriteMethod(method?: string): boolean {
   return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
 }
 
+export const DEFAULT_API_TIMEOUT_MS = 8000;
+export const FALLBACK_DETECT_TIMEOUT_MS = 2000;
+
+/** Cap clinic requests so a dead upstream fails into local fallback quickly. File uploads keep the long timeout while still online. */
+export function resolveFallbackTimeout(args: {
+  enabled: boolean;
+  skipOfflineFallback?: boolean;
+  offlineOrPending: boolean;
+  isFormData?: boolean;
+  configured?: number;
+}): number | undefined {
+  if (!args.enabled || args.skipOfflineFallback) return args.configured;
+  if (args.isFormData && !args.offlineOrPending) return args.configured;
+  return Math.min(args.configured ?? DEFAULT_API_TIMEOUT_MS, FALLBACK_DETECT_TIMEOUT_MS);
+}
+
 function unreachableStatus(response: unknown): boolean {
   const rec = asRecord(response);
   const status = Number(rec?.status);
