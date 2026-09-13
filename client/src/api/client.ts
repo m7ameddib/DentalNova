@@ -3,7 +3,7 @@ import { useAuthStore } from '@/store/auth.store';
 import { getApiBaseUrl } from '@/api/api-config';
 import { installOfflineFallback } from '@/offline/intercept';
 
-export const apiClient = axios.create();
+export const apiClient = axios.create({ timeout: 8000 });
 
 apiClient.interceptors.request.use((config) => {
   config.baseURL = getApiBaseUrl();

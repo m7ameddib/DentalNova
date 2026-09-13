@@ -4,6 +4,8 @@ import {
   applyMutationToCaches,
   buildOptimisticRecord,
   cacheKey,
+  cachedAppointmentById,
+  cachedPatientDetail,
   classifyReplayError,
   isNetworkError,
   isQueueableWrite,
@@ -34,7 +36,11 @@ test('only essential clinic writes are queued', () => {
 
 test('network errors are distinguished from HTTP errors', () => {
   assert.equal(isNetworkError({ code: 'ERR_NETWORK' }), true);
-  assert.equal(isNetworkError({ response: { status: 500 } }), false);
+  assert.equal(isNetworkError({ code: 'ECONNREFUSED' }), true);
+  assert.equal(isNetworkError({ response: { status: 422 } }), false);
+  assert.equal(isNetworkError({ response: { status: 502 } }), true);
+  assert.equal(isNetworkError({ response: { status: 500, data: 'Error occurred while trying to proxy' } }), true);
+  assert.equal(isNetworkError({ response: { status: 500, data: { message: 'validation failed' } } }), false);
   assert.equal(classifyReplayError(409), 'conflict');
   assert.equal(classifyReplayError(401), 'auth');
   assert.equal(classifyReplayError(422), 'failed');
@@ -144,6 +150,59 @@ test('stuck syncing and failed items are requeued without dropping later work', 
   assert.equal(next[2].status, 'failed');
 });
 
+test('patient detail can be rebuilt from the cached clinic list', () => {
+  const caches = {
+    'GET /patients': {
+      key: 'GET /patients',
+      status: 200,
+      data: [{ id: 7, fullName: 'Lina', phone: '050', fileNumber: 'P-7' }],
+      cachedAt: '',
+    },
+  };
+  const detail = cachedPatientDetail(caches, 7);
+  assert.equal(detail?.fullName, 'Lina');
+  assert.ok(Array.isArray(detail?.familyMembers));
+});
+
+test('appointment by id is found inside a cached day schedule', () => {
+  const caches = {
+    'GET /appointments?date=2026-09-13': {
+      key: 'GET /appointments?date=2026-09-13',
+      status: 200,
+      data: { date: '2026-09-13', appointments: [{ id: 3, time: '10:00', date: '2026-09-13' }] },
+      cachedAt: '',
+    },
+  };
+  assert.equal(cachedAppointmentById(caches, 3)?.time, '10:00');
+  assert.equal(cachedAppointmentById(caches, 99), null);
+});
+
+test('offline payment updates the cached account remaining without going negative', () => {
+  const result = buildOptimisticRecord(
+    'POST',
+    '/payments',
+    { patientId: 4, amount: 20, method: 'CASH' },
+    -9,
+  );
+  const next = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: { totalCostCents: 1000, totalPaidCents: 500, remainingCents: 500 },
+        cachedAt: '',
+      },
+    },
+    { method: 'POST', url: '/payments', body: { patientId: 4, amount: 20 }, result, tempId: -9 },
+  );
+  const summary = next['GET /patients/4/account-summary'].data as {
+    totalPaidCents: number;
+    remainingCents: number;
+  };
+  assert.equal(summary.totalPaidCents, 2500);
+  assert.equal(summary.remainingCents, 0);
+});
+
 test('pending count ignores finished conflicts', () => {
   assert.equal(
     pendingCount([
@@ -154,3 +213,4 @@ test('pending count ignores finished conflicts', () => {
     2,
   );
 });
+

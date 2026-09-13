@@ -1,27 +1,25 @@
 import { apiClient } from '@/api/client';
+import { localTodayIso } from '@/utils/date';
 import { hydrateOnlineScope } from './scope';
 import { listOutbox } from './outbox';
 import { syncWhenOnline } from './intercept';
 import { useOfflineStatusStore } from './status.store';
+import { probeApiHealth } from './health';
 
 let started = false;
 
 async function prefetchLocalClinic(): Promise<void> {
   if (!useOfflineStatusStore.getState().enabled) return;
-  try {
-    await apiClient.get('/patients');
-  } catch {
-    /* keep existing local cache */
-  }
-}
-
-async function probeHealth(): Promise<boolean> {
-  try {
-    const res = await apiClient.get('/health', { timeout: 4000, skipOfflineFallback: true });
-    return res.data?.ok === true;
-  } catch {
-    return false;
-  }
+  const today = localTodayIso();
+  await Promise.allSettled([
+    apiClient.get('/patients'),
+    apiClient.get('/appointments', { params: { date: today } }),
+    apiClient.get('/treatment-types'),
+    apiClient.get('/payment-methods'),
+    apiClient.get('/settings/clinic'),
+    apiClient.get('/subscription/status'),
+    apiClient.get('/installation/status'),
+  ]);
 }
 
 export async function startOfflineFallback(): Promise<void> {
@@ -36,7 +34,7 @@ export async function startOfflineFallback(): Promise<void> {
   mark.setConnection(online ? 'online' : 'offline');
 
   if (online) {
-    const up = await probeHealth();
+    const up = await probeApiHealth(apiClient);
     if (up) {
       await syncWhenOnline(apiClient);
       await prefetchLocalClinic();
@@ -46,9 +44,8 @@ export async function startOfflineFallback(): Promise<void> {
   }
 
   window.addEventListener('online', () => {
-    useOfflineStatusStore.getState().setConnection('online');
     void (async () => {
-      const up = await probeHealth();
+      const up = await probeApiHealth(apiClient);
       if (up) {
         await syncWhenOnline(apiClient);
         await prefetchLocalClinic();
@@ -61,10 +58,11 @@ export async function startOfflineFallback(): Promise<void> {
 
   window.setInterval(() => {
     if (!useOfflineStatusStore.getState().enabled) return;
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     void (async () => {
       await syncWhenOnline(apiClient);
-      await prefetchLocalClinic();
+      if (useOfflineStatusStore.getState().connection === 'online') {
+        await prefetchLocalClinic();
+      }
     })();
   }, 30_000);
 }

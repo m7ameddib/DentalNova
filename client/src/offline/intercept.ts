@@ -2,19 +2,24 @@ import { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios'
 import { useAuthStore } from '@/store/auth.store';
 import {
   buildOptimisticRecord,
+  cachedAppointmentById,
+  cachedPatientDetail,
   isNetworkError,
   isQueueableWrite,
   isReadMethod,
   isWriteMethod,
+  parseAppointmentIdFromUrl,
+  parsePatientIdFromUrl,
   parsePatientsQuery,
 } from './core';
 import { applyLocalMutation, readCachedPatientSearch, readGetCache, saveGetCache } from './cache';
 import { allocateTempId, enqueueOutbox, newOutboxId } from './outbox';
 import { rememberOnlineScope } from './scope';
-import { setCachedSubscription } from './storage';
+import { getCachedInstallation, getCachedSubscription, getCaches, setCachedSubscription } from './storage';
 import { useOfflineStatusStore } from './status.store';
 import { axiosRequestUrl } from './requestUrl';
 import { flushOutbox } from './sync';
+import { probeApiHealth } from './health';
 
 function asAxiosResponse<T>(data: T, config: InternalAxiosRequestConfig, status = 200): AxiosResponse<T> {
   return {
@@ -130,6 +135,24 @@ export function installOfflineFallback(api: AxiosInstance): void {
             return asAxiosResponse(localPatients, config);
           }
         }
+        const patientId = parsePatientIdFromUrl(url);
+        if (patientId != null) {
+          const detail = cachedPatientDetail(await getCaches(), patientId);
+          if (detail) return asAxiosResponse(detail, config);
+        }
+        const appointmentId = parseAppointmentIdFromUrl(url);
+        if (appointmentId != null) {
+          const appt = cachedAppointmentById(await getCaches(), appointmentId);
+          if (appt) return asAxiosResponse(appt, config);
+        }
+        if (url.includes('/subscription/status')) {
+          const subscription = await getCachedSubscription();
+          if (subscription) return asAxiosResponse(subscription, config);
+        }
+        if (url.includes('/installation/status')) {
+          const installation = await getCachedInstallation();
+          if (installation) return asAxiosResponse(installation, config);
+        }
         if (url.includes('/auth/me')) {
           const user = useAuthStore.getState().user;
           if (user) return asAxiosResponse(user, config);
@@ -176,6 +199,19 @@ export function installOfflineFallback(api: AxiosInstance): void {
 
 export async function syncWhenOnline(api: AxiosInstance): Promise<void> {
   if (!useOfflineStatusStore.getState().enabled) return;
-  if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    useOfflineStatusStore.getState().setConnection('offline');
+    return;
+  }
+  const up = await probeApiHealth(api);
+  if (!up) {
+    useOfflineStatusStore.getState().setConnection('offline');
+    return;
+  }
   await flushOutbox(api);
+  const stillUp = await probeApiHealth(api);
+  const { pending, needsReauth } = useOfflineStatusStore.getState();
+  useOfflineStatusStore.getState().setConnection(
+    stillUp && !(pending > 0 && needsReauth) ? 'online' : 'offline',
+  );
 }

@@ -39,7 +39,6 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
   if (!token) return;
 
   flushing = true;
-  useOfflineStatusStore.getState().setConnection('syncing');
   useOfflineStatusStore.getState().setLastError(null);
 
   try {
@@ -52,6 +51,8 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
     if (items.length === 0) {
       return;
     }
+
+    useOfflineStatusStore.getState().setConnection('syncing');
 
     let synced = 0;
     for (const item of items) {
@@ -160,11 +161,9 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
   } finally {
     flushing = false;
     await listOutbox();
-    const pending = useOfflineStatusStore.getState().pending;
-    const online = typeof navigator === 'undefined' || navigator.onLine;
-    useOfflineStatusStore.getState().setConnection(
-      !online ? 'offline' : pending > 0 && useOfflineStatusStore.getState().needsReauth ? 'offline' : 'online',
-    );
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+      useOfflineStatusStore.getState().setConnection('offline');
+    }
   }
 }
 

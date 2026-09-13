@@ -82,6 +82,14 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:4000',
         changeOrigin: true,
+        configure: (proxy) => {
+          proxy.on('error', (_err, _req, res) => {
+            const outgoing = res as { headersSent?: boolean; writeHead?: (code: number, headers: Record<string, string>) => void; end?: (body: string) => void };
+            if (!outgoing?.writeHead || outgoing.headersSent) return;
+            outgoing.writeHead(502, { 'Content-Type': 'application/json' });
+            outgoing.end?.(JSON.stringify({ message: 'upstream-unreachable' }));
+          });
+        },
       },
     },
   },

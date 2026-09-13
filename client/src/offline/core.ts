@@ -59,20 +59,33 @@ export function isWriteMethod(method?: string): boolean {
   return m === 'POST' || m === 'PUT' || m === 'PATCH' || m === 'DELETE';
 }
 
+function unreachableStatus(response: unknown): boolean {
+  const rec = asRecord(response);
+  const status = Number(rec?.status);
+  if (status === 502 || status === 503 || status === 504) return true;
+  if (status !== 500) return false;
+  const data = rec?.data;
+  const text = typeof data === 'string' ? data : JSON.stringify(data ?? '');
+  return /proxy|ECONNREFUSED|ECONNRESET|upstream-unreachable/i.test(text);
+}
+
+/** True when the API never produced an application response (lost internet, dead upstream, timeout). */
 export function isNetworkError(error: {
   response?: unknown;
   code?: string;
   message?: string;
 } | null | undefined): boolean {
   if (!error) return false;
-  if (error.response) return false;
+  if (error.response && !unreachableStatus(error.response)) return false;
+  if (error.response && unreachableStatus(error.response)) return true;
   const code = error.code ?? '';
   return (
     code === 'ERR_NETWORK' ||
     code === 'ECONNABORTED' ||
     code === 'ETIMEDOUT' ||
     code === 'ERR_CANCELED' ||
-    /network|timeout|offline/i.test(error.message ?? '')
+    code === 'ECONNREFUSED' ||
+    /network|timeout|offline|ECONNREFUSED/i.test(error.message ?? '')
   );
 }
 
@@ -325,12 +338,70 @@ export function searchCachedPatients(
   return collectCachedPatients(caches).filter((patient) => patientMatchesQuery(patient, query));
 }
 
+export function cachedPatientDetail(
+  caches: Record<string, CachedGet>,
+  id: number,
+): Record<string, unknown> | null {
+  const exact = asRecord(caches[`GET /patients/${id}`]?.data);
+  if (exact) return exact;
+  const found = collectCachedPatients(caches).find((patient) => patient.id === id);
+  if (!found) return null;
+  return { ...found, familyMembers: found.familyMembers ?? [] };
+}
+
+export function cachedAppointmentById(
+  caches: Record<string, CachedGet>,
+  id: number,
+): Record<string, unknown> | null {
+  for (const entry of Object.values(caches)) {
+    const rec = asRecord(entry.data);
+    const appointments = rec?.appointments;
+    if (!Array.isArray(appointments)) continue;
+    for (const item of appointments) {
+      const appt = asRecord(item);
+      if (appt && appt.id === id) return appt;
+    }
+  }
+  return null;
+}
+
+export function parsePatientIdFromUrl(url: string): number | null {
+  const path = normalizePath(url.split('?')[0] ?? url);
+  const match = path.match(/^\/patients\/(-?\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
+export function parseAppointmentIdFromUrl(url: string): number | null {
+  const path = normalizePath(url.split('?')[0] ?? url);
+  const match = path.match(/^\/appointments\/(-?\d+)$/);
+  return match ? Number(match[1]) : null;
+}
+
 export function parsePatientsQuery(url: string): string | null {
   const path = normalizePath(url.split('?')[0] ?? url);
   if (path !== '/patients') return null;
   const query = url.includes('?') ? url.slice(url.indexOf('?') + 1) : '';
   const params = new URLSearchParams(query);
   return params.get('q');
+}
+
+function patchAccountSummaryCache(
+  caches: Record<string, CachedGet>,
+  writeCache: (key: string, data: unknown) => void,
+  patientId: number,
+  delta: { paidCents?: number; costCents?: number },
+): void {
+  const key = `GET /patients/${patientId}/account-summary`;
+  const rec = asRecord(caches[key]?.data);
+  if (!rec) return;
+  const totalPaidCents = Number(rec.totalPaidCents ?? 0) + (delta.paidCents ?? 0);
+  const totalCostCents = Number(rec.totalCostCents ?? 0) + (delta.costCents ?? 0);
+  writeCache(key, {
+    ...rec,
+    totalPaidCents,
+    totalCostCents,
+    remainingCents: Math.max(0, totalCostCents - totalPaidCents),
+  });
 }
 
 /** Keep locally created (temp-id) rows when a server list arrives so reconnect does not drop unsynced work. */
@@ -423,19 +494,35 @@ export function applyMutationToCaches(
     }
 
     if (path === '/treatments' && result.patientId != null) {
+      const treatmentsKey = `GET /patients/${result.patientId}/treatments`;
+      if (!next[treatmentsKey] || !Array.isArray(next[treatmentsKey].data)) {
+        writeCache(treatmentsKey, [result]);
+      }
       for (const [key, entry] of Object.entries(next)) {
         if (key.includes(`/patients/${result.patientId}/treatments`) && Array.isArray(entry.data)) {
           writeCache(key, upsertArrayItem(entry.data, result));
         }
       }
+      if (String(result.status ?? '') === 'COMPLETED') {
+        patchAccountSummaryCache(next, writeCache, Number(result.patientId), {
+          costCents: Number(result.finalAmountCents ?? 0),
+        });
+      }
     }
 
     if (path === '/payments' && result.patientId != null) {
+      const paymentsKey = `GET /patients/${result.patientId}/payments`;
+      if (!next[paymentsKey] || !Array.isArray(next[paymentsKey].data)) {
+        writeCache(paymentsKey, [result]);
+      }
       for (const [key, entry] of Object.entries(next)) {
         if (key.includes(`/patients/${result.patientId}/payments`) && Array.isArray(entry.data)) {
           writeCache(key, upsertArrayItem(entry.data, result));
         }
       }
+      patchAccountSummaryCache(next, writeCache, Number(result.patientId), {
+        paidCents: Number(result.amountCents ?? 0),
+      });
     }
   }
 
