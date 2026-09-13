@@ -489,24 +489,28 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
                           : treatmentLabel;
                       return (
                       <tr key={row.key} className={tr.status === 'VOID' ? 'treatment-row--void' : undefined}>
-                        <td>{treatmentDisplayDate(tr)}</td>
-                        <td>
+                        <td data-label={t('patientRecord.treatment.columns.date')}>{treatmentDisplayDate(tr)}</td>
+                        <td data-label={t('patientRecord.treatment.columns.treatment')}>
                           <span className="treatment-history__badge" style={{ backgroundColor: tr.treatmentColor }}>
                             {tr.treatmentAbbreviation}
                           </span>
                           {treatmentCell}
                         </td>
-                        <td>
+                        <td data-label={t('patientRecord.treatment.columns.teeth')}>
                           {row.tooth != null
                             ? t('patientRecord.treatment.toothLine', { tooth: row.tooth })
                             : tr.teeth.length > 0
                               ? tr.teeth.join(', ')
                               : '—'}
                         </td>
-                        <td>{formatMoney(row.baseAmountCents)}</td>
-                        <td>{row.discountCents > 0 ? `-${centsToAmount(row.discountCents).toFixed(2)}` : '—'}</td>
-                        <td className="treatment-history-table__final">{formatMoney(row.finalAmountCents)}</td>
-                        <td>
+                        <td data-label={t('patientRecord.treatment.columns.base')}>{formatMoney(row.baseAmountCents)}</td>
+                        <td data-label={t('patientRecord.treatment.columns.discount')}>
+                          {row.discountCents > 0 ? `-${centsToAmount(row.discountCents).toFixed(2)}` : '—'}
+                        </td>
+                        <td className="treatment-history-table__final" data-label={t('patientRecord.treatment.columns.final')}>
+                          {formatMoney(row.finalAmountCents)}
+                        </td>
+                        <td data-label={t('patientRecord.treatment.columns.status')}>
                           {canCreate ? (
                             <select
                               className={`status-chip-select status-chip-select--${tr.status.toLowerCase()}`}
@@ -537,7 +541,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
                           )}
                         </td>
                         {canCreate && (
-                          <td className="treatment-history-table__actions-col">
+                          <td className="treatment-history-table__actions-col" data-label={t('common.actions')}>
                             <button
                               type="button"
                               className="icon-btn"

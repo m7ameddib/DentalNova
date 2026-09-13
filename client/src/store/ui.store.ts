@@ -9,6 +9,8 @@ import i18n, {
 interface UiState {
   language: SupportedLanguage;
   setLanguage: (lang: SupportedLanguage) => void;
+  mobileNavOpen: boolean;
+  setMobileNavOpen: (open: boolean) => void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -19,4 +21,6 @@ export const useUiStore = create<UiState>((set) => ({
     i18n.changeLanguage(lang);
     set({ language: lang });
   },
+  mobileNavOpen: false,
+  setMobileNavOpen: (open) => set({ mobileNavOpen: open }),
 }));

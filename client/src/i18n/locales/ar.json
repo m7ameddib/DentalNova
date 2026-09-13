@@ -3,6 +3,14 @@
     "name": "DentalNova",
     "poweredBy": "بدعم من ديبنوفا"
   },
+  "workspaceToday": {
+    "appointments": "مواعيد اليوم",
+    "followUps": "متابعات مستحقة",
+    "noAppointments": "لا مواعيد اليوم",
+    "noFollowUps": "لا متابعات مستحقة اليوم",
+    "viewCalendar": "فتح التقويم",
+    "viewFollowUps": "فتح المتابعات"
+  },
   "landing": {
     "nav": {
       "product": "المنتج",
@@ -125,7 +133,8 @@
     "settings": "الإعدادات",
     "aiAssistant": "المساعد الذكي",
     "openMenu": "فتح القائمة",
-    "closeMenu": "إغلاق القائمة"
+    "closeMenu": "إغلاق القائمة",
+    "more": "المزيد"
   },
   "pwa": {
     "offlineMessage": "لا يوجد اتصال بالإنترنت. يتطلب DentalNova اتصالاً نشطاً بخادم العيادة.",
@@ -346,6 +355,7 @@
     "renewWhatsApp": "تواصل مع DibNova للتجديد",
     "trialActiveTitle": "تجربة مجانية",
     "trialDaysLeft": "متبقٍ {{days}} يوم في تجربتك المجانية",
+    "trialDaysShort": "{{days}}ي",
     "contactWhatsAppHint": "لخدمة أسرع"
   },
   "dibnovaAdmin": {
@@ -484,6 +494,9 @@
       "prescription": "الوصفة الطبية",
       "followUps": "المتابعة",
       "labCases": "حالات المختبر"
+    },
+    "more": {
+      "title": "المزيد سريرياً"
     },
     "patient": {
       "fileNumber": "رقم الملف",
@@ -634,6 +647,7 @@
       "deactivate": "أرشفة التنبيه",
       "inactive": "مؤرشف",
       "empty": "لا توجد تنبيهات طبية",
+      "emptyHint": "أضيفي الحساسية أو الحالات أو الأدوية التي يجب أن يراها الطبيب قبل العلاج.",
       "catalogHint": "من الإعدادات — اضغط لإضافة تنبيه:",
       "catalogEmpty": "لا توجد أمراض في الإعدادات. أضفها من الإعدادات ← الأمراض / التنبيهات الطبية.",
       "catalogLoadError": "تعذّر تحميل قائمة الأمراض من الإعدادات.",
@@ -964,6 +978,8 @@
     "previousWeek": "الأسبوع السابق",
     "nextWeek": "الأسبوع التالي",
     "weekView": "عرض الأسبوع",
+    "calendarOptions": "خيارات التقويم",
+    "noAppointmentsDay": "لا مواعيد في هذا اليوم",
     "newAppointment": "موعد جديد",
     "editAppointment": "تعديل الموعد",
     "remindedAt": "✓ تم التذكير – {{time}}",
@@ -1091,6 +1107,9 @@
       "title": "ملخص المواعيد",
       "total": "إجمالي المواعيد"
     },
+    "chart": {
+      "title": "المال في هذه الفترة"
+    },
     "patientsSummary": {
       "title": "ملخص المرضى",
       "totalPatients": "إجمالي المرضى",
@@ -1099,6 +1118,7 @@
     "expenses": {
       "title": "مصروفات العيادة",
       "add": "إضافة مصروف",
+      "emptyTitle": "لا مصروفات في هذه الفترة.",
       "edit": "تعديل مصروف",
       "amount": "المبلغ",
       "category": "الفئة",
@@ -1147,7 +1167,7 @@
     "voiceComingSoon": "إدخال صوتي — قريباً",
     "statusReady": "متصل · {{model}}",
     "statusNotConfigured": "غير مُعدّ",
-    "configureHint": "أضيفي GEMINI_API_KEY في server/.env لتفعيل المساعد. بيانات العيادة تبقى محلية — يُرسل فقط رسالتك إلى مزود الذكاء الاصطناعي.",
+    "configureHint": "المساعد متوقف — اطلبي من المسؤول تفعيله.",
     "medicalDisclaimer": "هذا المساعد ليس طبيباً. لا يشخّص ولا يقرر العلاج. ارجعي دائماً للطبيب للقرارات السريرية.",
     "examplesTitle": "جرّبي أن تسألي",
     "example1": "ضيفي مريض جديد اسمه Ahmad Khalil ورقم تلفونه 03xxxxxx",
@@ -1366,6 +1386,12 @@
     "save": "حفظ",
     "aboutTitle": "حول",
     "aboutText": "نظام Dental Nova لإدارة العيادة",
+    "generalHint": "هوية العيادة والإصدار واختصارات الإعدادات. غيّري اللغة من الشريط العلوي.",
+    "languageInHeader": "تُغيَّر اللغة من EN / AR في الشريط العلوي.",
+    "version": "الإصدار",
+    "deploymentMode": "وضع التشغيل",
+    "deploymentOnline": "متصل",
+    "deploymentOffline": "دون اتصال",
     "archive": {
       "title": "الأرشيف",
       "hint": "ينتقل المريض إلى الأرشيف عند حذفه من ملفه. يمكنك استعادته أو حذفه نهائياً من هنا.",
@@ -1654,6 +1680,8 @@
       "title": "حسابات المختبرات",
       "accountTitle": "حساب المختبر — {{name}}",
       "selectLab": "اختر المختبر",
+      "emptyTitle": "لا حسابات مختبر بعد.",
+      "emptyCta": "إلى حالات المختبر",
       "total": "الإجمالي",
       "paid": "المدفوع",
       "remaining": "المتبقي",

@@ -3,6 +3,14 @@
     "name": "DentalNova",
     "poweredBy": "Powered by DibNova"
   },
+  "workspaceToday": {
+    "appointments": "Today's appointments",
+    "followUps": "Due follow-ups",
+    "noAppointments": "No appointments today",
+    "noFollowUps": "No follow-ups due today",
+    "viewCalendar": "Open calendar",
+    "viewFollowUps": "Open follow-ups"
+  },
   "landing": {
     "nav": {
       "product": "Product",
@@ -125,7 +133,8 @@
     "settings": "Settings",
     "aiAssistant": "AI Assistant",
     "openMenu": "Open menu",
-    "closeMenu": "Close menu"
+    "closeMenu": "Close menu",
+    "more": "More"
   },
   "pwa": {
     "offlineMessage": "No internet connection. DentalNova requires an active connection to your clinic server.",
@@ -347,6 +356,7 @@
     "renewWhatsApp": "Contact DibNova to Renew",
     "trialActiveTitle": "Free trial",
     "trialDaysLeft": "{{days}} day(s) left in your free trial",
+    "trialDaysShort": "{{days}}d",
     "contactWhatsAppHint": "For faster service"
   },
   "dibnovaAdmin": {
@@ -485,6 +495,9 @@
       "prescription": "Prescription",
       "followUps": "Follow-ups",
       "labCases": "Lab Cases"
+    },
+    "more": {
+      "title": "More clinical"
     },
     "patient": {
       "fileNumber": "File #",
@@ -639,6 +652,7 @@
       "deactivate": "Archive alert",
       "inactive": "archived",
       "empty": "No medical alerts recorded",
+      "emptyHint": "Add allergies, conditions, or medications that the dentist must see before treatment.",
       "catalogHint": "From Settings — click to add:",
       "catalogEmpty": "No diseases in Settings. Add them under Settings → Diseases / Medical Alerts.",
       "catalogLoadError": "Could not load the disease list from Settings.",
@@ -969,6 +983,8 @@
     "previousWeek": "Previous week",
     "nextWeek": "Next week",
     "weekView": "Week view",
+    "calendarOptions": "Calendar options",
+    "noAppointmentsDay": "No appointments on this day",
     "newAppointment": "New Appointment",
     "editAppointment": "Edit Appointment",
     "remindedAt": "✓ Reminded – {{time}}",
@@ -1096,6 +1112,9 @@
       "title": "Appointments Summary",
       "total": "Total appointments"
     },
+    "chart": {
+      "title": "Money this period"
+    },
     "patientsSummary": {
       "title": "Patient Summary",
       "totalPatients": "Total patients",
@@ -1104,6 +1123,7 @@
     "expenses": {
       "title": "Clinic Expenses",
       "add": "Add expense",
+      "emptyTitle": "No expenses in this period.",
       "edit": "Edit expense",
       "amount": "Amount",
       "category": "Category",
@@ -1152,7 +1172,7 @@
     "voiceComingSoon": "Voice input — coming soon",
     "statusReady": "Connected · {{model}}",
     "statusNotConfigured": "Not configured",
-    "configureHint": "Add GEMINI_API_KEY to server/.env to enable the AI Assistant. Clinic data stays local — only your message is sent to the AI provider.",
+    "configureHint": "AI is off — ask your administrator.",
     "medicalDisclaimer": "This assistant is not a doctor. It does not diagnose or decide treatment. Always consult the dentist for clinical decisions.",
     "examplesTitle": "Try asking",
     "example1": "Add a new patient named Ahmad Khalil, phone 03xxxxxx",
@@ -1371,6 +1391,12 @@
     "save": "Save",
     "aboutTitle": "About",
     "aboutText": "Dental Nova Clinic Management System",
+    "generalHint": "Clinic identity, version, and shortcuts. Change language from the header.",
+    "languageInHeader": "Language is switched from EN / AR in the header.",
+    "version": "Version",
+    "deploymentMode": "Deployment",
+    "deploymentOnline": "Online",
+    "deploymentOffline": "Offline",
     "archive": {
       "title": "Archive",
       "hint": "Patients moved to archive when deleted from their file. Restore or permanently delete them here.",
@@ -1659,6 +1685,8 @@
       "title": "Laboratory Accounts",
       "accountTitle": "Lab Account — {{name}}",
       "selectLab": "Select laboratory",
+      "emptyTitle": "No laboratory accounts yet.",
+      "emptyCta": "Go to lab cases",
       "total": "Total",
       "paid": "Paid",
       "remaining": "Remaining",

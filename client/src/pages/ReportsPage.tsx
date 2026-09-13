@@ -10,6 +10,7 @@ import { localMonthStartIso, todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { formatMoney } from '@/utils/money';
 import { ReportDetailModal, ReportDetailSpec } from '@/components/reports/ReportDetailModal';
+import { SimpleMoneyChart } from '@/components/reports/SimpleMoneyChart';
 import { AppointmentStatus } from '@/types/domain';
 
 type PeriodOption = 'today' | 'month' | 'custom';
@@ -131,6 +132,15 @@ export function ReportsPage() {
             />
           </div>
           <p className="muted reports-financial-hint">{t('reports.financial.outstandingBalanceHint')}</p>
+          <SimpleMoneyChart
+            title={t('reports.chart.title')}
+            bars={[
+              { label: t('reports.financial.totalCollected'), valueCents: summary?.financial?.totalCollectedCents ?? 0 },
+              { label: t('reports.financial.outstandingBalance'), valueCents: summary?.financial?.outstandingBalanceCents ?? 0 },
+              { label: t('reports.financial.totalExpenses'), valueCents: summary?.financial?.totalExpensesCents ?? 0 },
+              { label: t('reports.financial.netCash'), valueCents: summary?.financial?.netCashCents ?? 0 },
+            ]}
+          />
         </section>
       )}
 

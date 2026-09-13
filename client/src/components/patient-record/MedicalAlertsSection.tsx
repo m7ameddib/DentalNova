@@ -160,11 +160,19 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
   const editingDisease = editing?.alertType === 'DISEASE' || !!editing?.diseaseCatalogId;
   const isSaving = createMutation.isPending || updateMutation.isPending;
 
+  const hasActive = alerts.some((a) => a.isActive);
+
   return (
-    <div className="medical-alerts-section">
+    <div
+      className={
+        hasActive
+          ? 'medical-alerts-section medical-alerts-section--alert'
+          : 'medical-alerts-section medical-alerts-section--empty'
+      }
+    >
       <div className="medical-alerts-section__header">
         <span className="medical-alerts-section__title">
-          <AlertTriangle size={14} /> {t('patientRecord.medicalAlerts.title')}
+          <AlertTriangle size={16} /> {t('patientRecord.medicalAlerts.title')}
         </span>
         {canManage && !showForm && (
           <button type="button" className="link-btn" onClick={openAddForm}>
@@ -264,7 +272,10 @@ export function MedicalAlertsSection({ patientId }: { patientId: number }) {
       {!showForm && (
         <ul className="medical-alerts-list">
           {alerts.length === 0 ? (
-            <li className="muted">{t('patientRecord.medicalAlerts.empty')}</li>
+            <li className="medical-alerts-section__empty-copy">
+              <strong>{t('patientRecord.medicalAlerts.empty')}</strong>
+              <span className="muted">{t('patientRecord.medicalAlerts.emptyHint')}</span>
+            </li>
           ) : (
             alerts.map((a) => (
               <li

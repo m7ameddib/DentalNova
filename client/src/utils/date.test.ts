@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDaysIso, calculateAge, localAddDaysIso, localMonthStartIso } from './date';
+import { addDaysIso, calculateAge, formatDateTimeDisplay, localAddDaysIso, localMonthStartIso } from './date';
 
 test('addDaysIso stays on the local calendar and matches localAddDaysIso', () => {
   assert.equal(addDaysIso('2026-03-08', 1), '2026-03-09');

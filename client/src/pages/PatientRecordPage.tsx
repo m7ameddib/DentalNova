@@ -13,7 +13,8 @@ import { FollowUpsSection } from '@/components/patient-record/FollowUpsSection';
 import { MedicalAlertsBanner } from '@/components/patient-record/MedicalAlertsBanner';
 import { ClinicalVisitNotesSection } from '@/components/patient-record/ClinicalVisitNotesSection';
 import { LabCasesSection } from '@/components/patient-record/LabCasesSection';
-import { BrandLogo } from '@/components/common/BrandLogo';
+import { MoreClinicalSections } from '@/components/patient-record/MoreClinicalSections';
+import { WorkspaceTodayPanel } from '@/components/patient-record/WorkspaceTodayPanel';
 
 export function PatientRecordPage() {
   const { id } = useParams<{ id: string }>();
@@ -65,18 +66,16 @@ export function PatientRecordPage() {
             </div>
           </div>
 
-          <div className="patient-record__secondary-row">
-            <FilesSection patientId={patient.id} />
-            <PrescriptionSection patientId={patient.id} patient={patient} />
-            <FollowUpsSection patientId={patient.id} />
-            <LabCasesSection patientId={patient.id} />
-            <ClinicalVisitNotesSection patientId={patient.id} />
-          </div>
+          <MoreClinicalSections
+            files={<FilesSection patientId={patient.id} />}
+            prescriptions={<PrescriptionSection patientId={patient.id} patient={patient} />}
+            followUps={<FollowUpsSection patientId={patient.id} />}
+            lab={<LabCasesSection patientId={patient.id} />}
+            notes={<ClinicalVisitNotesSection patientId={patient.id} />}
+          />
         </>
       ) : (
-        <div className="patient-record__empty-state" aria-hidden="true">
-          <BrandLogo variant="workspace" />
-        </div>
+        <WorkspaceTodayPanel />
       )}
     </div>
   );

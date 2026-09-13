@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Receipt, Search, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Search, Trash2 } from 'lucide-react';
 import { expensesApi, UpdateExpensePayload } from '@/api/expenses.api';
 import { expenseCategoriesApi } from '@/api/expense-categories.api';
 import { paymentMethodsApi } from '@/api/settings.api';
@@ -266,9 +266,6 @@ export function ClinicExpensesPage() {
 
       <section className="settings-section reports-expenses-section">
         <div className="report-detail-header">
-          <h2>
-            <Receipt size={16} className="reports-section-icon" /> {t('reports.expenses.title')}
-          </h2>
           <div className="report-detail-header__actions">
             <label className="expenses-search">
               <Search size={14} />
@@ -325,7 +322,21 @@ export function ClinicExpensesPage() {
         {isLoading ? (
           <p className="muted">{t('common.loading')}</p>
         ) : expenses.length === 0 ? (
-          <p className="muted">{t('reports.print.noData')}</p>
+          <div className="empty-state-compact">
+            <p>{t('reports.expenses.emptyTitle')}</p>
+            {canManageExpenses && (
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                onClick={() => {
+                  resetForm();
+                  setAddingExpense(true);
+                }}
+              >
+                {t('reports.expenses.add')}
+              </button>
+            )}
+          </div>
         ) : (
           <div className="treatment-history-table-wrap">
             <table className="patients-table">

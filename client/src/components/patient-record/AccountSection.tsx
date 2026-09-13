@@ -262,15 +262,21 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
                 : formatMoney(0)}
             </span>
           </div>
-          <div className="account-summary__row account-summary__row--total">
+          <div className="account-summary__row account-summary__row--total account-summary__row--planned">
             <span>{t('patientRecord.account.totalCost')}</span>
             <span>{formatMoney(summary.totalCostCents)}</span>
           </div>
-          <div className="account-summary__row">
-            <span className="muted">{t('patientRecord.account.totalPaid')}</span>
+          <div className="account-summary__row account-summary__row--paid">
+            <span>{t('patientRecord.account.totalPaid')}</span>
             <span>{formatMoney(summary.totalPaidCents)}</span>
           </div>
-          <div className="account-summary__row account-summary__row--balance">
+          <div
+            className={
+              summary.remainingCents > 0
+                ? 'account-summary__row account-summary__row--balance'
+                : 'account-summary__row account-summary__row--balance-quiet'
+            }
+          >
             <span>{t('patientRecord.account.remaining')}</span>
             <span>{formatMoney(summary.remainingCents)}</span>
           </div>

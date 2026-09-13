@@ -52,8 +52,8 @@
 }
 .follow-up-summary {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
 }
 .follow-up-summary__card {
   background: var(--color-surface);
@@ -235,6 +235,16 @@
 
 @media (max-width: 800px) {
   .follow-up-summary {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+    gap: 6px;
+  }
+  .follow-up-summary__card {
+    padding: 8px 6px;
+  }
+  .follow-up-summary__value {
+    font-size: 1.15rem;
+  }
+  .follow-up-summary__label {
+    font-size: 10px;
   }
 }

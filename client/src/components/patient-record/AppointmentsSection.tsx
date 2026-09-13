@@ -34,7 +34,7 @@ export function AppointmentsSection({ patientId }: { patientId: number }) {
       icon={<CalendarClock size={16} />}
       onAdd={canCreate ? () => navigate(`/appointments?patientId=${patientId}`) : undefined}
       addTitle={t('patientRecord.appointments.openCalendar') ?? ''}
-      className="section-card--appointments"
+      className={appointments.length === 0 ? 'section-card--appointments section-card--appointments-empty' : 'section-card--appointments'}
     >
       {activeLabCases.length > 0 && appointments.length > 0 && (
         <div className="appointment-lab-hints">

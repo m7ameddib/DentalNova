@@ -833,3 +833,154 @@ body.top-nav-menu-open {
     }
   }
 }
+
+@media (max-width: 1024px) {
+  .top-nav__overflow {
+    display: none;
+  }
+  .top-nav__link--drawer-only {
+    display: flex;
+  }
+
+  .bottom-nav {
+    display: flex;
+    position: sticky;
+    bottom: 0;
+    z-index: 12;
+    background: var(--color-surface);
+    border-top: 1px solid var(--color-border);
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    justify-content: space-around;
+    gap: 4px;
+  }
+  .bottom-nav__link {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 4px;
+    min-height: 48px;
+    border: none;
+    background: none;
+    color: var(--color-text-muted);
+    text-decoration: none;
+    font-size: 10px;
+    font-weight: 700;
+    text-align: center;
+  }
+  .bottom-nav__link span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+  }
+  .bottom-nav__link.active {
+    color: var(--color-primary);
+  }
+
+  .app-shell__content {
+    padding-bottom: 12px;
+  }
+
+  .section-card--patient .section-card__header {
+    gap: 10px;
+  }
+  .section-card--patient .patient-search-box {
+    max-width: none;
+    min-width: 0;
+    flex: 1 1 auto;
+    padding: 8px 10px;
+  }
+  .section-card--patient .patient-search-box input {
+    font-size: 15px;
+  }
+  .section-card--patient .section-card__add-btn {
+    width: 44px;
+    height: 44px;
+  }
+
+  .treatment-history-table-wrap {
+    overflow: visible;
+  }
+  .treatment-history-table,
+  .treatment-history-table tbody {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
+  .treatment-history-table thead {
+    display: none;
+  }
+  .treatment-history-table tr {
+    display: block;
+    width: 100%;
+    margin-bottom: 10px;
+    padding: 10px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: var(--color-surface);
+  }
+  .treatment-history-table td {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    width: 100%;
+    border: none;
+    padding: 4px 0;
+  }
+  .treatment-history-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--color-text-muted);
+    flex-shrink: 0;
+  }
+
+  .week-agenda--mobile-week .appointment-card {
+    min-height: 28px;
+    padding: 4px 6px;
+  }
+  .week-agenda--mobile-week .appointment-card__time {
+    font-size: 11px;
+  }
+  .week-agenda--mobile-week .appointment-card__patient {
+    font-size: 13px;
+    white-space: normal;
+  }
+
+  .agenda-options-panel {
+    display: none;
+    position: fixed;
+    inset-inline-end: 0;
+    top: 0;
+    bottom: 0;
+    width: min(320px, 92vw);
+    z-index: 30;
+    background: var(--color-surface);
+    border-inline-start: 1px solid var(--color-border);
+    overflow: auto;
+    padding: 12px;
+  }
+  .agenda-options-panel--open {
+    display: block;
+  }
+  .agenda-options-backdrop {
+    position: fixed;
+    inset: 0;
+    border: 0;
+    background: rgba(15, 23, 42, 0.35);
+    z-index: 29;
+  }
+
+  .week-agenda__mobile-strip {
+    display: grid;
+    grid-template-columns: repeat(7, minmax(0, 1fr));
+    gap: 4px;
+  }
+  .week-agenda__mobile-day-name,
+  .week-agenda__mobile-day-number {
+    font-size: 11px;
+  }
+}

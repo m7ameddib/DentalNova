@@ -81,15 +81,16 @@ export function formatDateDisplay(dateIso: string, locale: string): string {
 
 /** Formats a full ISO timestamp (e.g. a treatment's createdAt) for display. */
 export function formatDateTimeDisplay(isoTimestamp: string, locale: string): string {
-  try {
-    return new Date(isoTimestamp.replace(' ', 'T') + 'Z').toLocaleString(locale, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-    });
-  } catch {
-    return isoTimestamp;
-  }
+  if (!isoTimestamp) return '';
+  const normalized = isoTimestamp.includes('T') ? isoTimestamp : isoTimestamp.replace(' ', 'T');
+  const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+  const parsed = new Date(hasZone ? normalized : `${normalized}Z`);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return parsed.toLocaleString(locale, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 }

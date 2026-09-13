@@ -5,9 +5,9 @@ import { Download, X } from 'lucide-react';
 const DISMISS_KEY = 'dnt-pwa-install-dismissed';
 
 export function PwaInstallBanner() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
-  const [dismissed, setDismissed] = useState(() => sessionStorage.getItem(DISMISS_KEY) === '1');
+  const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1');
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function PwaInstallBanner() {
   }
 
   const dismiss = () => {
-    sessionStorage.setItem(DISMISS_KEY, '1');
+    localStorage.setItem(DISMISS_KEY, '1');
     setDismissed(true);
   };
 
@@ -41,9 +41,9 @@ export function PwaInstallBanner() {
   };
 
   return (
-    <div className="pwa-install-banner">
+    <div className="pwa-install-banner" dir={i18n.dir()}>
       <div className="pwa-install-banner__content">
-        <Download size={18} aria-hidden />
+        <Download size={14} aria-hidden />
         <span>{t('pwa.installHint')}</span>
       </div>
       <div className="pwa-install-banner__actions">

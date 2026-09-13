@@ -475,7 +475,7 @@ export function PatientSection({
             </div>
           </div>
         ) : (
-          <div className="inline-form">
+          <div className="inline-form patient-identity-form">
             <FormField label={t('patients.fullName')} required error={errors.fullName}>
               <input
                 autoFocus
@@ -725,38 +725,38 @@ export function PatientSection({
             {canEdit && (
               <button
                 type="button"
-                className="icon-btn icon-btn--small"
+                className="icon-btn"
                 title={t('patientRecord.patient.editTitle') ?? ''}
                 onClick={startEdit}
               >
-                <Pencil size={13} />
+                <Pencil size={16} />
               </button>
             )}
             {canDelete && (
               <button
                 type="button"
-                className="icon-btn icon-btn--small icon-btn--danger"
+                className="icon-btn icon-btn--danger"
                 title={t('patientRecord.patient.deleteTitle') ?? ''}
                 onClick={openDeleteConfirm}
               >
-                <Trash2 size={13} />
+                <Trash2 size={16} />
               </button>
             )}
             <button
               type="button"
-              className="icon-btn icon-btn--small"
+              className="icon-btn"
               title={t('patientRecordPrint.printAction') ?? ''}
               onClick={handlePrintPatientFile}
             >
-              <Printer size={13} />
+              <Printer size={16} />
             </button>
             <button
               type="button"
-              className="icon-btn icon-btn--small"
+              className="icon-btn"
               title={t('patientRecordPrint.printCompactAction') ?? ''}
               onClick={handlePrintPatientRecordCompact}
             >
-              <Printer size={13} />
+              <Printer size={16} />
             </button>
           </div>
         </div>

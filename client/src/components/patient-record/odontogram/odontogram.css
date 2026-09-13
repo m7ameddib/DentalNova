@@ -174,7 +174,7 @@
   display: block;
   width: 100%;
   max-width: 100%;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 700;
   line-height: 1.3;
   text-align: center;
@@ -196,32 +196,36 @@
     font-size: 12px;
   }
   .do-cell__tx {
-    font-size: 10px;
+    font-size: 12px;
   }
 }
 
 @media (max-width: 768px) {
   .do-chart {
-    overflow-x: hidden;
+    overflow-x: auto;
     overflow-y: hidden;
     max-width: 100%;
+    -webkit-overflow-scrolling: touch;
+  }
+  .do-chart__pan {
+    min-width: 720px;
   }
   .do-arch {
     width: 100%;
-    min-width: 0;
-    max-width: 100%;
+    min-width: 720px;
+    max-width: none;
     justify-content: space-between;
   }
   .do-quadrant {
-    flex: 1 1 0;
+    flex: 0 0 auto;
     min-width: 0;
-    gap: 1px;
+    gap: 4px;
   }
   .do-cell {
-    flex: 1 1 0 !important;
-    width: auto !important;
-    min-width: 0 !important;
-    max-width: none !important;
+    flex: 0 0 44px !important;
+    width: 44px !important;
+    min-width: 44px !important;
+    max-width: 48px !important;
     margin-inline: 0 !important;
   }
   .do-cell__graphic-slot {
@@ -246,10 +250,10 @@
     margin: 2px 3px;
   }
   .do-cell__num {
-    font-size: 9px;
+    font-size: 12px;
   }
   .do-cell__tx {
-    font-size: 8px;
+    font-size: 12px;
   }
 }
 
