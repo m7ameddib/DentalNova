@@ -16,6 +16,7 @@ import {
   remapIds,
   requeueStuckItems,
   searchCachedPatients,
+  seedPatientDetailCaches,
 } from './core';
 
 test('cache keys and temp ids stay stable', () => {
@@ -148,6 +149,18 @@ test('stuck syncing and failed items are requeued without dropping later work', 
   assert.equal(next[0].status, 'pending');
   assert.equal(next[1].status, 'pending');
   assert.equal(next[2].status, 'failed');
+});
+
+test('prefetching the patient list seeds missing per-id detail caches', () => {
+  const caches: Record<string, { key: string; status: number; data: unknown; cachedAt: string }> = {};
+  seedPatientDetailCaches(
+    caches,
+    [{ id: 4, fullName: 'Cached Patient', phone: '07000004', fileNumber: 'P-4' }],
+    '2026-09-13T00:00:00.000Z',
+  );
+  assert.equal((caches['GET /patients/4']?.data as { fullName: string }).fullName, 'Cached Patient');
+  seedPatientDetailCaches(caches, [{ id: 4, fullName: 'Stale' }], 'later');
+  assert.equal((caches['GET /patients/4']?.data as { fullName: string }).fullName, 'Cached Patient');
 });
 
 test('patient detail can be rebuilt from the cached clinic list', () => {

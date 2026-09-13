@@ -349,6 +349,27 @@ export function cachedPatientDetail(
   return { ...found, familyMembers: found.familyMembers ?? [] };
 }
 
+/** Prefetch of GET /patients only has list rows — seed per-id detail keys so remounts can open a chart. */
+export function seedPatientDetailCaches(
+  caches: Record<string, CachedGet>,
+  listData: unknown,
+  cachedAt: string,
+): void {
+  if (!Array.isArray(listData)) return;
+  for (const row of listData) {
+    const rec = asRecord(row);
+    if (typeof rec?.id !== 'number') continue;
+    const detailKey = `GET /patients/${rec.id}`;
+    if (caches[detailKey]) continue;
+    caches[detailKey] = {
+      key: detailKey,
+      status: 200,
+      data: { ...rec, familyMembers: rec.familyMembers ?? [] },
+      cachedAt,
+    };
+  }
+}
+
 export function cachedAppointmentById(
   caches: Record<string, CachedGet>,
   id: number,

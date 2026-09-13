@@ -5,6 +5,7 @@ import {
   mergeServerListWithLocal,
   remapIds,
   searchCachedPatients,
+  seedPatientDetailCaches,
 } from './core';
 import { getCaches, getIdMap, setCaches } from './storage';
 
@@ -21,6 +22,9 @@ export async function saveGetCache(method: string, url: string, status: number, 
       ? mergeServerListWithLocal(data, existing.data)
       : data;
   caches[key] = { key, status, data: merged, cachedAt: new Date().toISOString() };
+  if (key === 'GET /patients' || key.startsWith('GET /patients?')) {
+    seedPatientDetailCaches(caches, merged, caches[key].cachedAt);
+  }
   await setCaches(caches);
 }
 

@@ -22,40 +22,41 @@ async function prefetchLocalClinic(): Promise<void> {
   ]);
 }
 
-export async function startOfflineFallback(): Promise<void> {
-  if (started) return;
-  started = true;
-  const enabled = await hydrateOnlineScope();
-  await listOutbox();
-  if (!enabled) return;
+let lifecycleBound = false;
 
+async function connectOrStayOffline(): Promise<void> {
+  if (!useOfflineStatusStore.getState().enabled) return;
   const mark = useOfflineStatusStore.getState();
   const online = typeof navigator === 'undefined' || navigator.onLine;
   mark.setConnection(online ? 'online' : 'offline');
-
-  if (online) {
-    const up = await probeApiHealth(apiClient);
-    if (up) {
-      await syncWhenOnline(apiClient);
-      await prefetchLocalClinic();
-    } else {
-      mark.setConnection('offline');
-    }
+  if (!online) return;
+  const up = await probeApiHealth(apiClient);
+  if (up) {
+    await syncWhenOnline(apiClient);
+    await prefetchLocalClinic();
+    return;
   }
+  mark.setConnection('offline');
+}
 
+function bindFallbackLifecycle(): void {
+  if (lifecycleBound) return;
+  lifecycleBound = true;
   window.addEventListener('online', () => {
     void (async () => {
+      if (!useOfflineStatusStore.getState().enabled) return;
       const up = await probeApiHealth(apiClient);
       if (up) {
         await syncWhenOnline(apiClient);
         await prefetchLocalClinic();
-      } else useOfflineStatusStore.getState().setConnection('offline');
+      } else {
+        useOfflineStatusStore.getState().setConnection('offline');
+      }
     })();
   });
   window.addEventListener('offline', () => {
     useOfflineStatusStore.getState().setConnection('offline');
   });
-
   window.setInterval(() => {
     if (!useOfflineStatusStore.getState().enabled) return;
     void (async () => {
@@ -65,4 +66,21 @@ export async function startOfflineFallback(): Promise<void> {
       }
     })();
   }, 30_000);
+}
+
+export async function startOfflineFallback(): Promise<void> {
+  if (started) return;
+  started = true;
+  const enabled = await hydrateOnlineScope();
+  await listOutbox();
+  bindFallbackLifecycle();
+  if (enabled) {
+    await connectOrStayOffline();
+    return;
+  }
+  const unsub = useOfflineStatusStore.subscribe((state) => {
+    if (!state.enabled) return;
+    unsub();
+    void connectOrStayOffline();
+  });
 }

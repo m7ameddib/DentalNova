@@ -14,7 +14,7 @@ import {
 } from './core';
 import { applyLocalMutation, readCachedPatientSearch, readGetCache, saveGetCache } from './cache';
 import { allocateTempId, enqueueOutbox, newOutboxId } from './outbox';
-import { rememberOnlineScope } from './scope';
+import { hydrateOnlineScope, rememberOnlineScope } from './scope';
 import { getCachedInstallation, getCachedSubscription, getCaches, setCachedSubscription } from './storage';
 import { useOfflineStatusStore } from './status.store';
 import { axiosRequestUrl } from './requestUrl';
@@ -79,7 +79,9 @@ export function installOfflineFallback(api: AxiosInstance): void {
         await setCachedSubscription(response.data);
       }
 
-      if (useOfflineStatusStore.getState().enabled && !response.config.skipOfflineFallback) {
+      const canCache =
+        useOfflineStatusStore.getState().enabled || Boolean(useAuthStore.getState().token);
+      if (canCache && !response.config.skipOfflineFallback) {
         if (isReadMethod(method)) {
           await saveGetCache(method, url, response.status, response.data);
         } else if (isWriteMethod(method) && isQueueableWrite(method, url, response.config.data)) {
@@ -113,7 +115,15 @@ export function installOfflineFallback(api: AxiosInstance): void {
         return Promise.reject(error);
       }
 
-      if (!config || config.skipOfflineFallback || !enabled) {
+      if (!config || config.skipOfflineFallback) {
+        return Promise.reject(error);
+      }
+
+      if (!enabled) {
+        await hydrateOnlineScope();
+      }
+
+      if (!useOfflineStatusStore.getState().enabled) {
         return Promise.reject(error);
       }
 
