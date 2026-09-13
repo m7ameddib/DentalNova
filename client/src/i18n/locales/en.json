@@ -138,7 +138,7 @@
     "offlinePending": "Working offline. {{count}} change(s) waiting to sync.",
     "onlinePending": "{{count}} change(s) waiting to sync.",
     "syncing": "Back online. Syncing {{count}} change(s)…",
-    "conflicts": "{{count}} change(s) need review and were not overwritten.",
+    "conflicts": "{{count}} change(s) could not sync.",
     "reauth": "Sign in again to finish syncing saved changes.",
     "retrySync": "Retry sync",
     "chipOnline": "Online",

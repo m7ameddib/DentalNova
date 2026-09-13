@@ -106,7 +106,7 @@ export function LoginPage() {
       </div>
 
       <form className="login-card" onSubmit={handleSubmit}>
-        {isOnline && (
+        {installStatus?.deploymentMode !== 'offline' && (
           <Link to="/" className="setup-back-link">
             {t('auth.backToHome')}
           </Link>

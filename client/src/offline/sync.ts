@@ -3,6 +3,7 @@ import {
   classifyReplayError,
   collectTempIds,
   isAlreadyAppliedReplay,
+  isUnreplayableClientError,
   MAX_SYNC_ATTEMPTS,
   remapIds,
   requeueStuckItems,
@@ -10,7 +11,7 @@ import {
 } from './core';
 import { applyLocalMutation, remapCachedIds } from './cache';
 import { getIdMap, getOutbox, setOutbox } from './storage';
-import { listOutbox, rememberIdMapping, removeOutboxItem, updateOutboxItem } from './outbox';
+import { listOutbox, pruneSettledOutbox, rememberIdMapping, removeOutboxItem, updateOutboxItem } from './outbox';
 import { useOfflineStatusStore } from './status.store';
 import { useAuthStore } from '@/store/auth.store';
 import { queryClient } from '@/queryClient';
@@ -91,12 +92,7 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
           await updateOutboxItem(item.id, { status: 'pending', url, data });
           continue;
         }
-        await updateOutboxItem(item.id, {
-          status: 'failed',
-          lastError: 'unmapped-temp-id',
-          attempts: (item.attempts ?? 0) + 1,
-          lastAttemptAt: new Date().toISOString(),
-        });
+        await removeOutboxItem(item.id);
         continue;
       }
 
@@ -172,14 +168,10 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
           }
         }
 
-        if (isAlreadyAppliedReplay(status)) {
-          const unresolvedPatientCreate =
-            item.method === 'POST' && requestUrl(item).includes('/patients');
-          if (!unresolvedPatientCreate) {
-            await removeOutboxItem(item.id);
-            synced += 1;
-            continue;
-          }
+        if (isAlreadyAppliedReplay(status) || isUnreplayableClientError(status)) {
+          await removeOutboxItem(item.id);
+          synced += 1;
+          continue;
         }
 
         if (kind === 'retry') {
@@ -194,8 +186,8 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
         }
 
         await updateOutboxItem(item.id, {
-          status: kind === 'conflict' ? 'conflict' : 'failed',
-          lastError: error.message,
+          status: 'failed',
+          lastError: status ? `http-${status}` : error.message,
           attempts,
           lastAttemptAt: new Date().toISOString(),
         });
@@ -220,10 +212,10 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
 }
 
 export async function retryFailedOutbox(): Promise<void> {
-  const items = await getOutbox();
+  const items = await pruneSettledOutbox();
   await setOutbox(
     items.map((item) =>
-      item.status === 'failed' || item.status === 'conflict'
+      item.status === 'failed'
         ? { ...item, status: 'pending', attempts: 0, lastError: item.lastError }
         : item,
     ),
