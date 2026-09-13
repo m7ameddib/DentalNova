@@ -60,7 +60,9 @@ export function installOfflineFallback(api: AxiosInstance): void {
     const state = useOfflineStatusStore.getState();
     if (state.enabled) {
       config.headers = config.headers ?? {};
-      if (state.connection === 'offline' && !config.skipOfflineFallback) {
+      const alreadyOffline =
+        state.connection === 'offline' || state.pending > 0;
+      if (alreadyOffline && !config.skipOfflineFallback) {
         config.timeout = Math.min(config.timeout ?? 8000, 2000);
       }
     }

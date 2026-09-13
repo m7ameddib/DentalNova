@@ -27,9 +27,11 @@ let lifecycleBound = false;
 async function connectOrStayOffline(): Promise<void> {
   if (!useOfflineStatusStore.getState().enabled) return;
   const mark = useOfflineStatusStore.getState();
-  const online = typeof navigator === 'undefined' || navigator.onLine;
-  mark.setConnection(online ? 'online' : 'offline');
-  if (!online) return;
+  const browserOnline = typeof navigator === 'undefined' || navigator.onLine;
+  if (!browserOnline || mark.pending > 0) {
+    mark.setConnection('offline');
+  }
+  if (!browserOnline) return;
   const up = await probeApiHealth(apiClient);
   if (up) {
     await syncWhenOnline(apiClient);

@@ -23,6 +23,11 @@ export async function enqueueOutbox(item: OutboxItem): Promise<void> {
 export async function listOutbox(): Promise<OutboxItem[]> {
   const items = await getOutbox();
   refreshQueueCounts(items);
+  const pending = pendingCount(items);
+  const connection = useOfflineStatusStore.getState().connection;
+  if (pending > 0 && connection !== 'syncing') {
+    useOfflineStatusStore.getState().setConnection('offline');
+  }
   return items;
 }
 
