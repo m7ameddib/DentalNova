@@ -15,15 +15,6 @@ async function prefetchLocalClinic(): Promise<void> {
   }
 }
 
-async function probeHealth(): Promise<boolean> {
-  try {
-    const res = await apiClient.get('/health', { timeout: 4000, skipOfflineFallback: true });
-    return res.data?.ok === true;
-  } catch {
-    return false;
-  }
-}
-
 export async function startOfflineFallback(): Promise<void> {
   if (started) return;
   started = true;
@@ -36,23 +27,15 @@ export async function startOfflineFallback(): Promise<void> {
   mark.setConnection(online ? 'online' : 'offline');
 
   if (online) {
-    const up = await probeHealth();
-    if (up) {
-      await syncWhenOnline(apiClient);
-      await prefetchLocalClinic();
-    } else {
-      mark.setConnection('offline');
-    }
+    await syncWhenOnline(apiClient);
+    await prefetchLocalClinic();
   }
 
   window.addEventListener('online', () => {
     useOfflineStatusStore.getState().setConnection('online');
     void (async () => {
-      const up = await probeHealth();
-      if (up) {
-        await syncWhenOnline(apiClient);
-        await prefetchLocalClinic();
-      } else useOfflineStatusStore.getState().setConnection('offline');
+      await syncWhenOnline(apiClient);
+      await prefetchLocalClinic();
     })();
   });
   window.addEventListener('offline', () => {

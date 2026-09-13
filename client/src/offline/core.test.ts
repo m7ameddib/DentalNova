@@ -5,7 +5,9 @@ import {
   buildOptimisticRecord,
   cacheKey,
   classifyReplayError,
+  isAlreadyAppliedReplay,
   isNetworkError,
+  stillHasUnmappedTempId,
   isQueueableWrite,
   isTempId,
   mergeServerListWithLocal,
@@ -37,8 +39,14 @@ test('network errors are distinguished from HTTP errors', () => {
   assert.equal(isNetworkError({ response: { status: 500 } }), false);
   assert.equal(classifyReplayError(409), 'conflict');
   assert.equal(classifyReplayError(401), 'auth');
+  assert.equal(classifyReplayError(403), 'failed');
   assert.equal(classifyReplayError(422), 'failed');
   assert.equal(classifyReplayError(503), 'retry');
+  assert.equal(isAlreadyAppliedReplay(404), true);
+  assert.equal(isAlreadyAppliedReplay(409), true);
+  assert.equal(isAlreadyAppliedReplay(403), false);
+  assert.equal(stillHasUnmappedTempId('/patients/-2/treatments'), true);
+  assert.equal(stillHasUnmappedTempId('/patients/88/treatments'), false);
 });
 
 test('id remapping updates nested objects and urls without touching other numbers', () => {

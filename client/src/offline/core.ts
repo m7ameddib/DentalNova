@@ -122,10 +122,50 @@ export function remapIds<T>(value: T, idMap: Record<string, number>): T {
 
 export function classifyReplayError(status?: number): 'conflict' | 'failed' | 'auth' | 'retry' {
   if (!status) return 'retry';
-  if (status === 401 || status === 403) return 'auth';
+  if (status === 401) return 'auth';
   if (status === 404 || status === 409) return 'conflict';
   if (status >= 400 && status < 500) return 'failed';
   return 'retry';
+}
+
+/** 404/409 on replay usually means the write already landed or the row is gone. */
+export function isAlreadyAppliedReplay(status?: number): boolean {
+  return status === 404 || status === 409;
+}
+
+export function stillHasUnmappedTempId(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'number') return isTempId(value);
+  if (typeof value === 'string') return /(^|\/)-\d+(?=\/|$|\?)/.test(value);
+  if (Array.isArray(value)) return value.some((item) => stillHasUnmappedTempId(item));
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((item) => stillHasUnmappedTempId(item));
+  }
+  return false;
+}
+
+export function collectTempIds(value: unknown, into = new Set<number>()): Set<number> {
+  if (value == null) return into;
+  if (typeof value === 'number') {
+    if (isTempId(value)) into.add(value);
+    return into;
+  }
+  if (typeof value === 'string') {
+    const re = /(^|\/)(-\d+)(?=\/|$|\?)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(value))) {
+      into.add(Number(match[2]));
+    }
+    return into;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTempIds(item, into));
+    return into;
+  }
+  if (typeof value === 'object') {
+    Object.values(value as Record<string, unknown>).forEach((item) => collectTempIds(item, into));
+  }
+  return into;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {

@@ -136,6 +136,7 @@
     "online": "Online",
     "offline": "Working offline. Changes are saved on this device.",
     "offlinePending": "Working offline. {{count}} change(s) waiting to sync.",
+    "onlinePending": "{{count}} change(s) waiting to sync.",
     "syncing": "Back online. Syncing {{count}} change(s)…",
     "conflicts": "{{count}} change(s) need review and were not overwritten.",
     "reauth": "Sign in again to finish syncing saved changes.",
