@@ -406,22 +406,36 @@ export function parsePatientsQuery(url: string): string | null {
   return params.get('q');
 }
 
+function emptyAccountSummary(): Record<string, unknown> {
+  return {
+    subtotalCents: 0,
+    accountDiscountCents: 0,
+    totalCostCents: 0,
+    totalPaidCents: 0,
+    remainingCents: 0,
+    lastPayments: [],
+    lastDiscounts: [],
+  };
+}
+
 function patchAccountSummaryCache(
   caches: Record<string, CachedGet>,
   writeCache: (key: string, data: unknown) => void,
   patientId: number,
-  delta: { paidCents?: number; costCents?: number },
+  delta: { paidCents?: number; costCents?: number; payment?: Record<string, unknown> },
 ): void {
   const key = `GET /patients/${patientId}/account-summary`;
-  const rec = asRecord(caches[key]?.data);
-  if (!rec) return;
+  const rec = asRecord(caches[key]?.data) ?? emptyAccountSummary();
   const totalPaidCents = Number(rec.totalPaidCents ?? 0) + (delta.paidCents ?? 0);
   const totalCostCents = Number(rec.totalCostCents ?? 0) + (delta.costCents ?? 0);
+  const lastPayments = Array.isArray(rec.lastPayments) ? rec.lastPayments : [];
   writeCache(key, {
     ...rec,
+    subtotalCents: Number(rec.subtotalCents ?? totalCostCents),
     totalPaidCents,
     totalCostCents,
     remainingCents: Math.max(0, totalCostCents - totalPaidCents),
+    lastPayments: delta.payment ? [delta.payment, ...lastPayments].slice(0, 10) : lastPayments,
   });
 }
 
@@ -543,6 +557,7 @@ export function applyMutationToCaches(
       }
       patchAccountSummaryCache(next, writeCache, Number(result.patientId), {
         paidCents: Number(result.amountCents ?? 0),
+        payment: result,
       });
     }
   }

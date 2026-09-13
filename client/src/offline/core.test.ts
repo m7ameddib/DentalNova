@@ -216,6 +216,22 @@ test('offline payment updates the cached account remaining without going negativ
   assert.equal(summary.remainingCents, 0);
 });
 
+test('offline payment seeds a missing account-summary so the chart is not blank', () => {
+  const result = buildOptimisticRecord('POST', '/payments', { patientId: 4, amount: 5, method: 'CASH' }, -11);
+  const next = applyMutationToCaches(
+    {},
+    { method: 'POST', url: '/payments', body: { patientId: 4, amount: 5 }, result, tempId: -11 },
+  );
+  const summary = next['GET /patients/4/account-summary'].data as {
+    totalPaidCents: number;
+    remainingCents: number;
+    lastPayments: { id: number }[];
+  };
+  assert.equal(summary.totalPaidCents, 500);
+  assert.equal(summary.remainingCents, 0);
+  assert.equal(summary.lastPayments[0]?.id, -11);
+});
+
 test('pending count ignores finished conflicts', () => {
   assert.equal(
     pendingCount([

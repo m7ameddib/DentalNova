@@ -226,6 +226,28 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
       }
       className="section-card--account"
     >
+      {justPaid && (
+        <div className="payment-confirm-banner">
+          <span className="muted">{t('patientRecord.account.paymentSaved')}</span>
+          <div className="payment-confirm-banner__actions">
+            <button type="button" className="link-btn" onClick={() => handlePrintReceipt(justPaid)}>
+              <Printer size={12} /> {t('patientRecord.account.printReceipt')}
+            </button>
+            <button
+              type="button"
+              className="link-btn"
+              disabled={whatsappDisabled}
+              onClick={() => handleWhatsAppReceipt(justPaid)}
+            >
+              <MessageCircle size={12} /> {t('whatsapp.sendReceipt')}
+            </button>
+            <button type="button" className="link-btn" onClick={() => setJustPaid(null)}>
+              {t('common.close')}
+            </button>
+          </div>
+        </div>
+      )}
+
       {!addMode && summary && (
         <div className="account-summary">
           <div className="account-summary__row">
@@ -252,28 +274,6 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
             <span>{t('patientRecord.account.remaining')}</span>
             <span>{formatMoney(summary.remainingCents)}</span>
           </div>
-
-          {justPaid && (
-            <div className="payment-confirm-banner">
-              <span className="muted">{t('patientRecord.account.paymentSaved')}</span>
-              <div className="payment-confirm-banner__actions">
-                <button type="button" className="link-btn" onClick={() => handlePrintReceipt(justPaid)}>
-                  <Printer size={12} /> {t('patientRecord.account.printReceipt')}
-                </button>
-                <button
-                  type="button"
-                  className="link-btn"
-                  disabled={whatsappDisabled}
-                  onClick={() => handleWhatsAppReceipt(justPaid)}
-                >
-                  <MessageCircle size={12} /> {t('whatsapp.sendReceipt')}
-                </button>
-                <button type="button" className="link-btn" onClick={() => setJustPaid(null)}>
-                  {t('common.close')}
-                </button>
-              </div>
-            </div>
-          )}
 
           <div className="account-summary__payments">
             <span className="muted">{t('patientRecord.account.lastPayments')}</span>
