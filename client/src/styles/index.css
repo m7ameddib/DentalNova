@@ -7003,7 +7003,7 @@ textarea {
 }
 
 .patient-record__main-row:has(.section-card--appointments-empty) {
-  grid-template-columns: minmax(0, 74fr) minmax(240px, 20fr) minmax(132px, 8fr);
+  grid-template-columns: minmax(0, 72fr) minmax(240px, 20fr) minmax(168px, 10fr);
 }
 
 .patient-identity-form {

@@ -74,7 +74,7 @@ export function PatientRecordPage() {
             notes={<ClinicalVisitNotesSection patientId={patient.id} />}
           />
         </>
-      ) : (
+      ) : isNew ? null : (
         <WorkspaceTodayPanel />
       )}
     </div>

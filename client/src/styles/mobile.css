@@ -844,7 +844,8 @@ body.top-nav-menu-open {
 
   .bottom-nav {
     display: flex;
-    position: sticky;
+    position: fixed;
+    inset-inline: 0;
     bottom: 0;
     z-index: 12;
     background: var(--color-surface);
@@ -882,11 +883,17 @@ body.top-nav-menu-open {
   }
 
   .app-shell__content {
-    padding-bottom: 12px;
+    padding-bottom: 72px;
+  }
+  .agenda-fab {
+    bottom: 76px;
   }
 
   .section-card--patient .section-card__header {
     gap: 10px;
+  }
+  .section-card--patient .section-card__title {
+    display: none;
   }
   .section-card--patient .patient-search-box {
     max-width: none;
