@@ -928,24 +928,33 @@
   .ops-row-actions { justify-content: flex-start; }
 
   .ops-shell.ai-page {
-    min-height: calc(100dvh - 168px);
-    padding-bottom: 8px;
+    min-height: 0;
+    padding-bottom: 12px;
   }
   .ops-shell.ai-page .ops-page-head {
-    padding-bottom: 10px;
-    margin-bottom: 10px;
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+  }
+  .ops-shell.ai-page .ops-page-head-copy p {
+    display: none;
   }
   .ops-shell.ai-page .ops-ai-thread {
     min-height: 0;
-    max-height: calc(100dvh - 250px);
+    max-height: none;
+  }
+  .ops-shell.ai-page .ops-ai-msgs {
+    min-height: 180px;
+    max-height: 42dvh;
   }
   .ops-shell.ai-page .ops-ai-composer {
-    position: sticky;
-    bottom: 0;
-    z-index: 2;
+    position: static;
+    padding-bottom: 4px;
   }
   .ops-shell.ai-page .ops-ai-composer textarea {
-    min-height: 56px;
+    min-height: 52px;
+  }
+  .ops-shell.ai-page .ops-ai-tools {
+    margin-top: 6px;
   }
   .ops-shell.ai-page .ops-ai-tools .btn {
     font-size: 0;
@@ -955,6 +964,9 @@
   .ops-shell.ai-page .ops-ai-tools .btn svg {
     width: 18px;
     height: 18px;
+  }
+  .ops-shell.ai-page .ops-disclaimer {
+    margin-bottom: 8px;
   }
   .ops-shell.ai-page .ops-msg { max-width: 92%; }
 }
