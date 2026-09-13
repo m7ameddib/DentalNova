@@ -77,6 +77,7 @@ export class PatientsService {
     if (payload.dateOfBirth) {
       payload.approxAge = undefined;
     }
+    delete payload.accountDiscount;
     const repoInput: UpdatePatientInput = {
       ...payload,
       approxAge: payload.dateOfBirth ? null : payload.approxAge,

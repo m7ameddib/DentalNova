@@ -36,7 +36,7 @@ export function openFollowUpWhatsApp(fu: FollowUpWithPatient, settings: ClinicSe
   return openWhatsAppPreferred(fu.patientPhone, message);
 }
 
-const BULK_OPEN_DELAY_MS = 800;
+const BULK_OPEN_DELAY_MS = 1600;
 
 /** Opens WhatsApp Desktop for each follow-up using that row's type-specific message. */
 export function openFollowUpsWhatsAppBulk(

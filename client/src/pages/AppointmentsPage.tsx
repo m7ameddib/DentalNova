@@ -644,21 +644,27 @@ export function AppointmentsPage() {
     const id = Number(manageAppointmentId);
     if (!id) return;
     let cancelled = false;
+
+    const openFromId = () =>
+      appointmentsApi.getById(id).then((appt) => {
+        if (cancelled || !appt) return;
+        setFocusDate(appt.date);
+        setWeekStart(startOfWeekIso(appt.date, language));
+        handleAppointmentOpen(appt);
+      });
+
     appointmentsApi
       .daySchedule(initialDate)
-      .then(async (day) => {
+      .then((day) => {
         if (cancelled) return;
         const found = day.appointments.find((a) => a.id === id);
         if (found) {
           handleAppointmentOpen(found);
           return;
         }
-        const appt = await appointmentsApi.getById(id);
-        if (cancelled || !appt) return;
-        setFocusDate(appt.date);
-        setWeekStart(startOfWeekIso(appt.date, language));
-        handleAppointmentOpen(appt);
+        return openFromId();
       })
+      .catch(() => openFromId())
       .catch(() => undefined);
     return () => {
       cancelled = true;

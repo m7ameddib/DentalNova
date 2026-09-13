@@ -498,6 +498,7 @@ export interface FollowUpWithPatient extends FollowUp {
   remainingCents?: number;
   totalCostCents?: number;
   totalPaidCents?: number;
+  accountDiscountCents?: number;
   lastPaymentDate?: string | null;
   lastPaymentAmountCents?: number | null;
 }
