@@ -306,6 +306,240 @@ export class PlatformService implements OnModuleInit {
          WHERE id = ?`,
       )
       .run(reason?.trim() || null, clinicId);
+    this.logEvent(clinicId, 'SUSPEND', reason ?? '');
+  }
+
+  setSubscriptionExpiresAt(
+    clinicId: string,
+    expiresAt: string,
+    adminNotes?: string | null,
+    activate = true,
+  ): void {
+    this.assertEnabled();
+    const now = new Date().toISOString();
+    this.db
+      .prepare(
+        `UPDATE clinics SET
+          subscription_status = CASE WHEN ? THEN 'ACTIVE' ELSE subscription_status END,
+          subscription_started_at = COALESCE(subscription_started_at, ?),
+          subscription_expires_at = ?,
+          subscription_suspended_at = NULL,
+          subscription_suspended_reason = NULL,
+          admin_notes = COALESCE(?, admin_notes)
+         WHERE id = ?`,
+      )
+      .run(activate ? 1 : 0, now, expiresAt, adminNotes ?? null, clinicId);
+    this.logEvent(clinicId, activate ? 'RENEW' : 'SET_EXPIRY', expiresAt);
+  }
+
+  setSubscriptionCancelled(clinicId: string, reason?: string | null): void {
+    this.assertEnabled();
+    this.db
+      .prepare(
+        `UPDATE clinics SET
+          subscription_status = 'CANCELLED',
+          subscription_suspended_at = datetime('now'),
+          subscription_suspended_reason = ?,
+          admin_notes = COALESCE(?, admin_notes)
+         WHERE id = ?`,
+      )
+      .run(reason?.trim() || null, reason ?? null, clinicId);
+    this.logEvent(clinicId, 'CANCEL', reason ?? '');
+  }
+
+  /** Remove clinic from the admin directory only. Never deletes clinic.db. */
+  removeClinicRecord(clinicId: string): void {
+    this.assertEnabled();
+    this.requireClinic(clinicId);
+    this.logEvent(clinicId, 'DELETE_DIRECTORY', 'Clinic directory record removed; clinic.db kept');
+    this.db.prepare('DELETE FROM clinic_user_directory WHERE clinic_id = ?').run(clinicId);
+    this.db.prepare('DELETE FROM clinic_recovery WHERE clinic_id = ?').run(clinicId);
+    this.db.prepare('DELETE FROM clinics WHERE id = ?').run(clinicId);
+  }
+
+  logEvent(clinicId: string | null, eventType: string, details?: string | null): void {
+    if (!this.isEnabled()) return;
+    this.db
+      .prepare('INSERT INTO license_events (clinic_id, event_type, details) VALUES (?, ?, ?)')
+      .run(clinicId, eventType, details ?? null);
+  }
+
+  listEvents(clinicId?: string) {
+    this.assertEnabled();
+    const rows = clinicId
+      ? this.db
+          .prepare('SELECT * FROM license_events WHERE clinic_id = ? ORDER BY id DESC LIMIT 100')
+          .all(clinicId)
+      : this.db.prepare('SELECT * FROM license_events ORDER BY id DESC LIMIT 100').all();
+    return rows as Record<string, unknown>[];
+  }
+
+  listPayments(clinicId?: string) {
+    this.assertEnabled();
+    const rows = clinicId
+      ? this.db
+          .prepare('SELECT * FROM license_payments WHERE clinic_id = ? ORDER BY id DESC')
+          .all(clinicId)
+      : this.db.prepare('SELECT * FROM license_payments ORDER BY id DESC').all();
+    return (rows as Record<string, unknown>[]).map((row) => this.mapPayment(row));
+  }
+
+  addPayment(input: {
+    clinicId: string;
+    amountCents: number;
+    paymentDate: string;
+    method: string;
+    note?: string | null;
+  }) {
+    this.assertEnabled();
+    const result = this.db
+      .prepare(
+        `INSERT INTO license_payments (clinic_id, amount_cents, payment_date, method, note)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(input.clinicId, input.amountCents, input.paymentDate, input.method, input.note ?? null);
+    this.logEvent(input.clinicId, 'PAYMENT', `${input.amountCents} ${input.method}`);
+    return this.getPayment(Number(result.lastInsertRowid));
+  }
+
+  updatePayment(
+    id: number,
+    input: { amountCents?: number; paymentDate?: string; method?: string; note?: string | null },
+  ) {
+    this.assertEnabled();
+    const existing = this.getPayment(id);
+    if (!existing || existing.status === 'VOID') {
+      throw new Error('Payment not found or already voided.');
+    }
+    this.db
+      .prepare(
+        `UPDATE license_payments SET
+          amount_cents = ?, payment_date = ?, method = ?, note = ?, updated_at = datetime('now')
+         WHERE id = ?`,
+      )
+      .run(
+        input.amountCents ?? existing.amountCents,
+        input.paymentDate ?? existing.paymentDate,
+        input.method ?? existing.method,
+        input.note ?? existing.note,
+        id,
+      );
+    this.logEvent(existing.clinicId, 'PAYMENT_EDIT', String(id));
+    return this.getPayment(id);
+  }
+
+  voidPayment(id: number, reason?: string | null) {
+    this.assertEnabled();
+    const existing = this.getPayment(id);
+    if (!existing || existing.status === 'VOID') {
+      throw new Error('Payment not found or already voided.');
+    }
+    this.db
+      .prepare(
+        `UPDATE license_payments SET status = 'VOID', void_reason = ?, updated_at = datetime('now') WHERE id = ?`,
+      )
+      .run(reason?.trim() || null, id);
+    this.logEvent(existing.clinicId, 'PAYMENT_VOID', reason ?? '');
+    return this.getPayment(id);
+  }
+
+  getPayment(id: number) {
+    const row = this.db.prepare('SELECT * FROM license_payments WHERE id = ?').get(id) as
+      | Record<string, unknown>
+      | undefined;
+    return row ? this.mapPayment(row) : null;
+  }
+
+  paymentBalanceCents(clinicId: string): number {
+    const row = this.db
+      .prepare(
+        `SELECT COALESCE(SUM(CASE WHEN status = 'ACTIVE' THEN amount_cents ELSE 0 END), 0) AS c
+         FROM license_payments WHERE clinic_id = ?`,
+      )
+      .get(clinicId) as { c: number };
+    return Number(row?.c ?? 0);
+  }
+
+  getRecoveryHash(clinicId: string): string | null {
+    const row = this.db
+      .prepare('SELECT recovery_code_hash FROM clinic_recovery WHERE clinic_id = ?')
+      .get(clinicId) as { recovery_code_hash?: string } | undefined;
+    return row?.recovery_code_hash ?? null;
+  }
+
+  setRecoveryHash(clinicId: string, hash: string): void {
+    this.db
+      .prepare(
+        `INSERT INTO clinic_recovery (clinic_id, recovery_code_hash, updated_at)
+         VALUES (?, ?, datetime('now'))
+         ON CONFLICT(clinic_id) DO UPDATE SET recovery_code_hash = excluded.recovery_code_hash, updated_at = datetime('now')`,
+      )
+      .run(clinicId, hash);
+    this.logEvent(clinicId, 'RECOVERY_CODE', 'Recovery code rotated');
+  }
+
+  listClinicUsers(clinicId: string) {
+    const clinic = this.requireClinic(clinicId);
+    if (!fs.existsSync(clinic.dbPath)) return [];
+    const clinicDb = new Database(clinic.dbPath, { readonly: true, fileMustExist: true });
+    try {
+      const rows = clinicDb
+        .prepare(
+          `SELECT u.id, u.full_name, u.username, u.is_active, u.phone, r.name AS role_name, r.label AS role_label
+           FROM users u LEFT JOIN roles r ON r.id = u.role_id
+           ORDER BY u.full_name`,
+        )
+        .all() as Record<string, unknown>[];
+      return rows.map((row) => ({
+        id: Number(row.id),
+        fullName: String(row.full_name ?? ''),
+        username: String(row.username ?? ''),
+        isActive: Boolean(row.is_active),
+        phone: (row.phone as string | null) ?? null,
+        roleName: (row.role_name as string | null) ?? null,
+        roleLabel: (row.role_label as string | null) ?? null,
+      }));
+    } finally {
+      clinicDb.close();
+    }
+  }
+
+  updateClinicUserPassword(clinicId: string, userId: number, passwordHash: string): void {
+    const clinic = this.requireClinic(clinicId);
+    const clinicDb = new Database(clinic.dbPath, { fileMustExist: true });
+    try {
+      const result = clinicDb
+        .prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(passwordHash, userId);
+      if (result.changes === 0) throw new Error('User not found');
+    } finally {
+      clinicDb.close();
+    }
+    this.logEvent(clinicId, 'PASSWORD_RESET', `user ${userId}`);
+  }
+
+  findUsersByPhone(phoneNormalized: string): { clinicId: string; username: string }[] {
+    return (
+      this.db
+        .prepare(
+          `SELECT clinic_id AS clinicId, username FROM clinic_user_directory WHERE phone_normalized = ?`,
+        )
+        .all(phoneNormalized) as { clinicId: string; username: string }[]
+    );
+  }
+
+  private mapPayment(row: Record<string, unknown>) {
+    return {
+      id: Number(row.id),
+      clinicId: String(row.clinic_id ?? ''),
+      amountCents: Number(row.amount_cents ?? 0),
+      paymentDate: String(row.payment_date ?? ''),
+      method: String(row.method ?? ''),
+      note: (row.note as string | null) ?? null,
+      status: String(row.status ?? 'ACTIVE'),
+      voidReason: (row.void_reason as string | null) ?? null,
+      createdAt: String(row.created_at ?? ''),
+    };
   }
 
   private dataRoot(): string {
@@ -346,6 +580,30 @@ export class PlatformService implements OnModuleInit {
         user_id INTEGER NOT NULL,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (clinic_id) REFERENCES clinics(id)
+      );
+      CREATE TABLE IF NOT EXISTS license_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id TEXT,
+        event_type TEXT NOT NULL,
+        details TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS license_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id TEXT,
+        amount_cents INTEGER NOT NULL,
+        payment_date TEXT NOT NULL,
+        method TEXT NOT NULL,
+        note TEXT,
+        status TEXT NOT NULL DEFAULT 'ACTIVE',
+        void_reason TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT
+      );
+      CREATE TABLE IF NOT EXISTS clinic_recovery (
+        clinic_id TEXT PRIMARY KEY,
+        recovery_code_hash TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `);
   }

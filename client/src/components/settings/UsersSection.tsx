@@ -63,6 +63,7 @@ export function UsersSection() {
       roleName: editRoleName,
     };
     if (editPassword.trim()) {
+      if (!window.confirm(t('settings.resetPasswordConfirm', { name: editFullName }))) return;
       payload.password = editPassword;
     }
     updateUserMutation.mutate({ id, payload });

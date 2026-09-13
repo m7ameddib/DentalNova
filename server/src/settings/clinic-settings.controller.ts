@@ -50,6 +50,12 @@ export class ClinicSettingsController {
     return this.service.saveLogo(file);
   }
 
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @Post('recovery-code')
+  issueRecoveryCode() {
+    return this.service.issueRecoveryCode();
+  }
+
   @Get('logo')
   getLogo(@Res() res: Response) {
     const absolutePath = this.service.getLogoAbsolutePath();

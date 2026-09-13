@@ -332,6 +332,39 @@ h4 {
   padding: 8px 0 14px;
 }
 
+.startup-splash {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  background: #f4f7f6;
+  color: #1f3b34;
+  padding: 32px 20px;
+  text-align: center;
+}
+.startup-splash__title {
+  margin: 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+.startup-splash__text {
+  margin: 0;
+  color: #5b6d67;
+  font-size: 0.95rem;
+}
+.startup-splash__spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #d5e3dd;
+  border-top-color: #1f6b57;
+  border-radius: 50%;
+  animation: startup-spin 0.8s linear infinite;
+}
+@keyframes startup-spin {
+  to { transform: rotate(360deg); }
+}
 .page-loading {
   padding: 40px;
   text-align: center;
@@ -3574,6 +3607,10 @@ textarea {
   font-size: 12px;
   font-weight: 600;
   white-space: nowrap;
+}
+.agenda-sidebar__section--emergency {
+  max-height: min(42vh, 420px);
+  overflow: auto;
 }
 .emergency-panel__date-nav {
   display: flex;

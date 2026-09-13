@@ -4,6 +4,7 @@ import { PasswordResetService } from './password-reset.service';
 import { LoginDto } from './dto/login.dto';
 import {
   ForgotPasswordDto,
+  RecoverUsernameDto,
   ResetPasswordDto,
   VerifyResetOtpDto,
 } from './dto/password-reset.dto';
@@ -28,7 +29,16 @@ export class AuthController {
   @SkipSubscriptionGuard()
   @Post('forgot-password')
   requestPasswordReset(@Body() dto: ForgotPasswordDto) {
-    return this.passwordResetService.requestOtp(dto.username, dto.phone);
+    if (dto.recoveryCode?.trim()) {
+      return this.passwordResetService.recoverWithCode(dto.username, dto.recoveryCode);
+    }
+    return this.passwordResetService.requestOtp(dto.username, dto.phone ?? '');
+  }
+
+  @SkipSubscriptionGuard()
+  @Post('recover-username')
+  recoverUsername(@Body() dto: RecoverUsernameDto) {
+    return this.passwordResetService.recoverUsername(dto.phone, dto.recoveryCode);
   }
 
   @SkipSubscriptionGuard()

@@ -24,6 +24,7 @@ export function ClinicInfoSection() {
   const [doctorLicenseNo, setDoctorLicenseNo] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [savedMessage, setSavedMessage] = useState(false);
+  const [recoveryCode, setRecoveryCode] = useState<string | null>(null);
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -164,6 +165,30 @@ export function ClinicInfoSection() {
           </label>
 
           {error && <div className="form-error-banner">{error}</div>}
+
+          <div className="form-actions form-actions--start">
+            <button
+              type="button"
+              className="btn btn--ghost btn--small"
+              onClick={async () => {
+                if (!window.confirm(t('auth.recoveryCodeConfirm'))) return;
+                try {
+                  const result = await settingsApi.issueRecoveryCode();
+                  setRecoveryCode(result.recoveryCode);
+                  setError(null);
+                } catch (err) {
+                  setError(getErrorMessage(err, t('common.error')));
+                }
+              }}
+            >
+              {t('auth.issueRecoveryCode')}
+            </button>
+          </div>
+          {recoveryCode && (
+            <p className="form-success-banner">
+              {t('auth.recoveryCodeOnce')}: <strong>{recoveryCode}</strong>
+            </p>
+          )}
 
           <div className="form-actions form-actions--start">
             {savedMessage && <span className="muted settings-saved-hint">{t('settings.clinicInfo.saved')}</span>}

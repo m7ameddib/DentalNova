@@ -10,9 +10,16 @@ export const authApi = {
   login: (username: string, password: string) =>
     apiClient.post<LoginResponse>('/auth/login', { username, password }).then((r) => r.data),
   me: () => apiClient.get<AuthenticatedUser>('/auth/me').then((r) => r.data),
-  forgotPassword: (username: string, phone: string) =>
+  forgotPassword: (username: string, recoveryCode: string) =>
     apiClient
-      .post<{ message: string }>('/auth/forgot-password', { username, phone })
+      .post<{ resetToken?: string; message?: string }>('/auth/forgot-password', {
+        username,
+        recoveryCode,
+      })
+      .then((r) => r.data),
+  recoverUsername: (phone: string, recoveryCode: string) =>
+    apiClient
+      .post<{ usernames: string[] }>('/auth/recover-username', { phone, recoveryCode })
       .then((r) => r.data),
   verifyResetOtp: (username: string, phone: string, code: string) =>
     apiClient

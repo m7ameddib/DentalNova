@@ -10,7 +10,18 @@ import {
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 
-const SUBSCRIPTION_TERM_MS = 365 * 24 * 60 * 60 * 1000;
+function resolveExpiryDate(days?: number, expiresAt?: string, from?: Date | null): Date {
+  if (expiresAt) {
+    const date = new Date(expiresAt);
+    if (Number.isNaN(date.getTime())) {
+      throw new BadRequestException('Invalid expiry date.');
+    }
+    return date;
+  }
+  const termDays = days && days > 0 ? days : 365;
+  const base = from && from.getTime() > Date.now() ? from : new Date();
+  return new Date(base.getTime() + termDays * 24 * 60 * 60 * 1000);
+}
 
 @Injectable()
 export class SubscriptionService {
@@ -80,37 +91,74 @@ export class SubscriptionService {
     };
   }
 
-  activate(adminNotes?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+  activate(
+    adminNotes?: string,
+    clinicId?: string,
+    days?: number,
+    expiresAt?: string,
+  ): OnlineSubscriptionStatusResponse {
     const id = this.requireManagedClinicId(clinicId);
+    const expires = resolveExpiryDate(days, expiresAt);
     if (this.platform.isEnabled()) {
-      this.platform.setSubscriptionActive(id, adminNotes);
-      this.logger.log(`Online subscription activated for clinic ${id}`);
+      this.platform.setSubscriptionExpiresAt(id, expires.toISOString(), adminNotes, true);
+      this.logger.log(`Online subscription activated for clinic ${id} until ${expires.toISOString()}`);
       return this.statusForClinic(id);
     }
     this.assertOnlineReady();
     const now = new Date();
-    const expires = new Date(now.getTime() + SUBSCRIPTION_TERM_MS);
     this.repo.setActive(now.toISOString(), expires.toISOString(), adminNotes ?? null);
     this.logger.log(`Online subscription activated until ${expires.toISOString()}`);
     return this.getStatusResponse();
   }
 
-  extend(adminNotes?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+  extend(
+    adminNotes?: string,
+    clinicId?: string,
+    days?: number,
+    expiresAt?: string,
+  ): OnlineSubscriptionStatusResponse {
     const id = this.requireManagedClinicId(clinicId);
     if (this.platform.isEnabled()) {
-      this.platform.extendSubscription(id, adminNotes);
+      const row = this.platform.getSubscription(id);
+      const expires = resolveExpiryDate(days, expiresAt, row.expiresAt ? new Date(row.expiresAt) : null);
+      this.platform.setSubscriptionExpiresAt(id, expires.toISOString(), adminNotes, true);
       this.logger.log(`Online subscription extended for clinic ${id}`);
       return this.statusForClinic(id);
     }
     this.assertOnlineReady();
     const row = this.repo.get();
-    const base = row.expiresAt ? new Date(row.expiresAt) : new Date();
-    const startFrom =
-      !Number.isNaN(base.getTime()) && base.getTime() > Date.now() ? base : new Date();
-    const expires = new Date(startFrom.getTime() + SUBSCRIPTION_TERM_MS);
+    const expires = resolveExpiryDate(days, expiresAt, row.expiresAt ? new Date(row.expiresAt) : null);
     this.repo.extendExpiry(expires.toISOString(), adminNotes ?? null);
     this.logger.log(`Online subscription extended until ${expires.toISOString()}`);
     return this.getStatusResponse();
+  }
+
+  cancel(reason?: string, clinicId?: string): OnlineSubscriptionStatusResponse {
+    const id = this.requireManagedClinicId(clinicId);
+    if (this.platform.isEnabled()) {
+      this.platform.setSubscriptionCancelled(id, reason);
+      return this.statusForClinic(id);
+    }
+    throw new BadRequestException('Cancel is available on the online platform.');
+  }
+
+  deleteClinic(clinicId?: string): { removed: boolean } {
+    const id = this.requireManagedClinicId(clinicId);
+    if (!this.platform.isEnabled()) {
+      throw new BadRequestException('Clinic delete is available on the online platform.');
+    }
+    this.platform.removeClinicRecord(id);
+    return { removed: true };
+  }
+
+  dashboard() {
+    const clinics = this.listAdminClinics();
+    const counts = { ACTIVE: 0, EXPIRED: 0, SUSPENDED: 0, CANCELLED: 0, PENDING: 0 };
+    for (const clinic of clinics) {
+      const status = clinic.subscription.status ?? 'PENDING';
+      if (status in counts) counts[status as keyof typeof counts] += 1;
+    }
+    return { total: clinics.length, counts, clinics };
   }
 
   suspend(reason?: string, clinicId?: string): OnlineSubscriptionStatusResponse {

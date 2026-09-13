@@ -156,7 +156,12 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     db.pragma('busy_timeout = 5000');
     this.runMigrationsOn(db);
     this.ensureReferenceDataOn(db);
-    seedComprehensiveTreatmentCatalog(db);
+    const catalogCount = (
+      db.prepare(`SELECT COUNT(*) AS c FROM treatment_types`).get() as { c: number } | undefined
+    )?.c ?? 0;
+    if (catalogCount < 20) {
+      seedComprehensiveTreatmentCatalog(db);
+    }
     this.logger.log(`SQLite database ready at ${dbFile}`);
     return db;
   }

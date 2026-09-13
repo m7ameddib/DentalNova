@@ -1,5 +1,5 @@
 import axios, { AxiosInstance } from 'axios';
-import { classifyReplayError, remapIds } from './core';
+import { classifyReplayError, MAX_SYNC_ATTEMPTS, remapIds, requeueStuckItems } from './core';
 import { applyLocalMutation, remapCachedIds } from './cache';
 import { getIdMap, getOutbox, setOutbox } from './storage';
 import { listOutbox, rememberIdMapping, removeOutboxItem, updateOutboxItem } from './outbox';
@@ -43,7 +43,9 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
   useOfflineStatusStore.getState().setLastError(null);
 
   try {
-    const items = (await listOutbox())
+    const released = requeueStuckItems(await getOutbox());
+    await setOutbox(released);
+    const items = released
       .filter((item) => item.status === 'pending' || item.status === 'syncing')
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 
@@ -56,7 +58,14 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
       const idMap = await getIdMap();
       const url = remapIds(item.url, idMap);
       const data = remapIds(item.data, idMap);
-      await updateOutboxItem(item.id, { status: 'syncing', url, data });
+      const attempts = (item.attempts ?? 0) + 1;
+      await updateOutboxItem(item.id, {
+        status: 'syncing',
+        url,
+        data,
+        attempts,
+        lastAttemptAt: new Date().toISOString(),
+      });
 
       try {
         const res = await api.request({
@@ -82,9 +91,14 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
         synced += 1;
       } catch (error) {
         if (!axios.isAxiosError(error)) {
-          await updateOutboxItem(item.id, { status: 'pending', lastError: 'sync-failed' });
+          await updateOutboxItem(item.id, {
+            status: attempts >= MAX_SYNC_ATTEMPTS ? 'failed' : 'pending',
+            lastError: 'sync-failed',
+            attempts,
+            lastAttemptAt: new Date().toISOString(),
+          });
           useOfflineStatusStore.getState().setLastError('sync-failed');
-          break;
+          continue;
         }
 
         const status = error.response?.status;
@@ -92,7 +106,7 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
 
         if (kind === 'auth') {
           useOfflineStatusStore.getState().setNeedsReauth(true);
-          await updateOutboxItem(item.id, { status: 'pending', lastError: 'auth' });
+          await updateOutboxItem(item.id, { status: 'pending', lastError: 'auth', attempts, lastAttemptAt: new Date().toISOString() });
           break;
         }
 
@@ -115,14 +129,21 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
         }
 
         if (kind === 'retry') {
-          await updateOutboxItem(item.id, { status: 'pending', lastError: error.message });
+          await updateOutboxItem(item.id, {
+            status: attempts >= MAX_SYNC_ATTEMPTS ? 'failed' : 'pending',
+            lastError: error.message,
+            attempts,
+            lastAttemptAt: new Date().toISOString(),
+          });
           useOfflineStatusStore.getState().setLastError(error.message);
-          break;
+          continue;
         }
 
         await updateOutboxItem(item.id, {
           status: kind === 'conflict' ? 'conflict' : 'failed',
           lastError: error.message,
+          attempts,
+          lastAttemptAt: new Date().toISOString(),
         });
       }
     }
@@ -138,11 +159,24 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
     }
   } finally {
     flushing = false;
+    await listOutbox();
     const pending = useOfflineStatusStore.getState().pending;
     const online = typeof navigator === 'undefined' || navigator.onLine;
     useOfflineStatusStore.getState().setConnection(
       !online ? 'offline' : pending > 0 && useOfflineStatusStore.getState().needsReauth ? 'offline' : 'online',
     );
   }
+}
+
+export async function retryFailedOutbox(): Promise<void> {
+  const items = await getOutbox();
+  await setOutbox(
+    items.map((item) =>
+      item.status === 'failed' || item.status === 'conflict'
+        ? { ...item, status: 'pending', attempts: 0, lastError: item.lastError }
+        : item,
+    ),
+  );
+  await listOutbox();
 }
 

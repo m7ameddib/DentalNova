@@ -113,19 +113,23 @@ export const dibnovaAdminApi = {
   listClinics: () =>
     adminClient().get<AdminManagedClinic[]>('/dibnova-admin/clinics').then((r) => r.data),
 
-  activate: (notes?: string, clinicId?: string) =>
+  activate: (notes?: string, clinicId?: string, days?: number, expiresAt?: string) =>
     adminClient()
       .post<SubscriptionStatus>('/dibnova-admin/subscription/activate', {
         notes: notes || undefined,
         clinicId,
+        days,
+        expiresAt,
       })
       .then((r) => r.data),
 
-  extend: (notes?: string, clinicId?: string) =>
+  extend: (notes?: string, clinicId?: string, days?: number, expiresAt?: string) =>
     adminClient()
       .post<SubscriptionStatus>('/dibnova-admin/subscription/extend', {
         notes: notes || undefined,
         clinicId,
+        days,
+        expiresAt,
       })
       .then((r) => r.data),
 
@@ -161,4 +165,94 @@ export const dibnovaAdminApi = {
     adminClient()
       .get<OfflineLicenseSlotSummary[]>('/dibnova-admin/offline-license/slots')
       .then((r) => r.data),
+
+  dashboard: () =>
+    adminClient()
+      .get<{ total: number; counts: Record<string, number>; clinics: AdminManagedClinic[] }>(
+        '/dibnova-admin/dashboard',
+      )
+      .then((r) => r.data),
+
+  history: (clinicId?: string) =>
+    adminClient()
+      .get<Record<string, unknown>[]>('/dibnova-admin/history', { params: { clinicId } })
+      .then((r) => r.data),
+
+  cancel: (reason?: string, clinicId?: string) =>
+    adminClient()
+      .post<SubscriptionStatus>('/dibnova-admin/subscription/cancel', { reason, clinicId })
+      .then((r) => r.data),
+
+  deleteClinic: (clinicId: string, notes?: string) =>
+    adminClient()
+      .post<{ removed: boolean }>('/dibnova-admin/subscription/delete', { clinicId, notes })
+      .then((r) => r.data),
+
+  listPayments: (clinicId?: string) =>
+    adminClient()
+      .get<AdminLicensePayment[]>('/dibnova-admin/payments', { params: { clinicId } })
+      .then((r) => r.data),
+
+  paymentBalance: (clinicId: string) =>
+    adminClient()
+      .get<{ balanceCents: number }>('/dibnova-admin/payments/balance', { params: { clinicId } })
+      .then((r) => r.data),
+
+  addPayment: (payload: {
+    clinicId: string;
+    amount: number;
+    paymentDate: string;
+    method: string;
+    note?: string;
+  }) => adminClient().post<AdminLicensePayment>('/dibnova-admin/payments', payload).then((r) => r.data),
+
+  updatePayment: (
+    id: number,
+    payload: { amount: number; paymentDate: string; method: string; note?: string },
+  ) =>
+    adminClient()
+      .post<AdminLicensePayment>(`/dibnova-admin/payments/${id}/update`, payload)
+      .then((r) => r.data),
+
+  voidPayment: (id: number, reason?: string) =>
+    adminClient()
+      .post<AdminLicensePayment>(`/dibnova-admin/payments/${id}/void`, { reason })
+      .then((r) => r.data),
+
+  listClinicUsers: (clinicId: string) =>
+    adminClient()
+      .get<AdminClinicUser[]>(`/dibnova-admin/clinics/${clinicId}/users`)
+      .then((r) => r.data),
+
+  resetUserPassword: (clinicId: string, userId: number, newPassword: string) =>
+    adminClient()
+      .post<{ reset: boolean }>('/dibnova-admin/users/reset-password', { clinicId, userId, newPassword })
+      .then((r) => r.data),
+
+  issueRecoveryCode: (clinicId: string) =>
+    adminClient()
+      .post<{ recoveryCode: string }>('/dibnova-admin/recovery-code', { clinicId })
+      .then((r) => r.data),
 };
+
+export interface AdminLicensePayment {
+  id: number;
+  clinicId: string;
+  amountCents: number;
+  paymentDate: string;
+  method: string;
+  note: string | null;
+  status: string;
+  voidReason: string | null;
+  createdAt: string;
+}
+
+export interface AdminClinicUser {
+  id: number;
+  fullName: string;
+  username: string;
+  isActive: boolean;
+  phone: string | null;
+  roleName: string | null;
+  roleLabel: string | null;
+}

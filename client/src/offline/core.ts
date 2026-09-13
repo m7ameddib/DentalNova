@@ -14,6 +14,8 @@ export interface OutboxItem {
   createdAt: string;
   status: OutboxStatus;
   lastError?: string;
+  attempts?: number;
+  lastAttemptAt?: string;
   userId: number | null;
   clinicId: string;
 }
@@ -463,6 +465,31 @@ export function applyMutationToCaches(
   }
 
   return next;
+}
+
+export const MAX_SYNC_ATTEMPTS = 8;
+export const STUCK_SYNC_MS = 2 * 60 * 1000;
+
+export function isStuckSyncing(item: OutboxItem, now = Date.now()): boolean {
+  if (item.status !== 'syncing') return false;
+  const at = item.lastAttemptAt ? Date.parse(item.lastAttemptAt) : 0;
+  return !at || now - at > STUCK_SYNC_MS;
+}
+
+export function canAutoRetryFailed(item: OutboxItem, now = Date.now()): boolean {
+  if (item.status !== 'failed' && item.status !== 'conflict') return false;
+  if ((item.attempts ?? 0) >= MAX_SYNC_ATTEMPTS) return false;
+  const at = item.lastAttemptAt ? Date.parse(item.lastAttemptAt) : 0;
+  return !at || now - at > STUCK_SYNC_MS;
+}
+
+export function requeueStuckItems(items: OutboxItem[], now = Date.now()): OutboxItem[] {
+  return items.map((item) => {
+    if (isStuckSyncing(item, now) || canAutoRetryFailed(item, now)) {
+      return { ...item, status: 'pending' as const, lastError: item.lastError };
+    }
+    return item;
+  });
 }
 
 export function pendingCount(items: OutboxItem[]): number {

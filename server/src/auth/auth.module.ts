@@ -11,6 +11,7 @@ import { PermissionsGuard } from './guards/permissions.guard';
 import { UsersRepository } from '../database/repositories/users.repository';
 import { RolesRepository } from '../database/repositories/roles.repository';
 import { PasswordResetRepository } from '../database/repositories/password-reset.repository';
+import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
 import { OnlineClinicAccountsRepository } from '../database/repositories/online-clinic-accounts.repository';
 import { JwtSecretService } from './jwt-secret.service';
 import { PathsService } from '../common/paths.service';
@@ -36,6 +37,7 @@ import { InstallationModule } from '../installation/installation.module';
     UsersRepository,
     RolesRepository,
     PasswordResetRepository,
+    ClinicSettingsRepository,
     OnlineClinicAccountsRepository,
   ],
   controllers: [AuthController],

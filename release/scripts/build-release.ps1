@@ -312,6 +312,7 @@ if (Test-Path $nodePortable) {
 Copy-Item -Force (Join-Path $Root 'release\branding\dnt-dental.ico') $MainDir
 Copy-Item -Force (Join-Path $Root 'release\launchers\Start-DNT-Dental-Main.ps1') $MainDir
 Copy-Item -Force (Join-Path $Root 'release\launchers\DNT-Dental.vbs') $MainDir
+Copy-Item -Force (Join-Path $Root 'release\launchers\startup-splash.html') $MainDir
 Copy-Item -Force (Join-Path $Root 'release\launchers\Start-DNT-Dental-Main.bat') $MainDir
 Copy-Item -Force (Join-Path $Root 'release\launchers\Start-DNT-Dental-Client.ps1') $ClientDir
 Copy-Item -Force (Join-Path $Root 'release\launchers\DNT-Dental-Client.vbs') $ClientDir

@@ -25,6 +25,8 @@ export interface UpdateClinicSettingsPayload {
 
 export const settingsApi = {
   getClinic: () => apiClient.get<ClinicSettings>('/settings/clinic').then((r) => r.data),
+  issueRecoveryCode: () =>
+    apiClient.post<{ recoveryCode: string }>('/settings/clinic/recovery-code').then((r) => r.data),
   updateClinic: (payload: UpdateClinicSettingsPayload) =>
     apiClient.patch<ClinicSettings>('/settings/clinic', payload).then((r) => r.data),
   uploadLogo: (file: File) => {

@@ -78,7 +78,14 @@ export function InstallationGate({ children }: { children: ReactNode }) {
 
   if (serverUp === false && !fallbackChecked) {
     if (isPublic) return <>{children}</>;
-    return <div className="page-loading">{t('common.loading')}</div>;
+    return (
+      <div className="startup-splash" role="status">
+        <BrandLogo variant="auth" />
+        <h1 className="startup-splash__title">DentalNova</h1>
+        <p className="startup-splash__text">{t('installation.opening')}</p>
+        <div className="startup-splash__spinner" aria-hidden />
+      </div>
+    );
   }
 
   if (serverUp === false && !cachedOnlineReady) {
@@ -109,12 +116,26 @@ export function InstallationGate({ children }: { children: ReactNode }) {
 
   if (serverUp === null) {
     if (isPublic) return <>{children}</>;
-    return <div className="page-loading">{t('common.loading')}</div>;
+    return (
+      <div className="startup-splash" role="status">
+        <BrandLogo variant="auth" />
+        <h1 className="startup-splash__title">DentalNova</h1>
+        <p className="startup-splash__text">{t('installation.opening')}</p>
+        <div className="startup-splash__spinner" aria-hidden />
+      </div>
+    );
   }
 
   if ((isLoading || !isFetched) && !status) {
     if (isPublic) return <>{children}</>;
-    return <div className="page-loading">{t('common.loading')}</div>;
+    return (
+      <div className="startup-splash" role="status">
+        <BrandLogo variant="auth" />
+        <h1 className="startup-splash__title">DentalNova</h1>
+        <p className="startup-splash__text">{t('installation.opening')}</p>
+        <div className="startup-splash__spinner" aria-hidden />
+      </div>
+    );
   }
 
   if ((isError || !status) && !isPublic) {

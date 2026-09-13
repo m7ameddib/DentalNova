@@ -8,6 +8,7 @@ import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
 import { UsersRepository } from '../database/repositories/users.repository';
 import { PasswordResetRepository } from '../database/repositories/password-reset.repository';
+import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
 import { DeploymentService } from '../common/deployment.service';
 import { isValidPhone, maskPhone, normalizePhone } from '../common/phone.util';
 import { JwtSecretService } from './jwt-secret.service';
@@ -33,6 +34,7 @@ export class PasswordResetService {
     private readonly jwtSecret: JwtSecretService,
     private readonly deployment: DeploymentService,
     private readonly platform: PlatformService,
+    private readonly clinicSettings: ClinicSettingsRepository,
   ) {}
 
   private inUserClinic<T>(username: string, fn: () => T): T {
@@ -48,8 +50,62 @@ export class PasswordResetService {
     }
   }
 
+  async recoverWithCode(username: string, recoveryCode: string): Promise<{ resetToken: string }> {
+    const directory = this.platform.isEnabled() ? this.platform.findUserByUsername(username.trim()) : undefined;
+    const user = this.inUserClinic(username.trim(), () => this.usersRepo.findByUsername(username.trim()));
+    if (!user || !user.isActive) {
+      throw new UnauthorizedException('Invalid recovery details.');
+    }
+    const hash = directory
+      ? this.platform.getRecoveryHash(directory.clinicId)
+      : this.clinicSettings.getRecoveryHash();
+    if (!hash) {
+      throw new UnauthorizedException('Account recovery is not set up for this clinic.');
+    }
+    const valid = await bcrypt.compare(recoveryCode.trim(), hash);
+    if (!valid) {
+      throw new UnauthorizedException('Invalid recovery details.');
+    }
+    const resetToken = this.jwtService.sign(
+      {
+        sub: user.id,
+        username: user.username,
+        purpose: 'password_reset',
+        clinicId: directory?.clinicId,
+      } satisfies PasswordResetJwtPayload,
+      { secret: this.jwtSecret.getSecret(), expiresIn: RESET_TOKEN_TTL },
+    );
+    return { resetToken };
+  }
+
+  async recoverUsername(phone: string, recoveryCode: string): Promise<{ usernames: string[] }> {
+    if (!isValidPhone(phone)) {
+      throw new BadRequestException('Enter a valid phone number.');
+    }
+    const phoneNormalized = normalizePhone(phone);
+    if (this.platform.isEnabled()) {
+      const matches = this.platform.findUsersByPhone(phoneNormalized);
+      const usernames: string[] = [];
+      for (const match of matches) {
+        const hash = this.platform.getRecoveryHash(match.clinicId);
+        if (hash && (await bcrypt.compare(recoveryCode.trim(), hash))) {
+          usernames.push(match.username);
+        }
+      }
+      return { usernames };
+    }
+    const hash = this.clinicSettings.getRecoveryHash();
+    if (!hash || !(await bcrypt.compare(recoveryCode.trim(), hash))) {
+      return { usernames: [] };
+    }
+    const user = this.usersRepo.findByPhoneNormalized(phoneNormalized);
+    return { usernames: user ? [user.username] : [] };
+  }
+
   async requestOtp(username: string, phone: string): Promise<{ message: string }> {
-    this.ensureOnlineRecoveryEnabled();
+    if (!this.deployment.isOnline()) {
+      throw new BadRequestException('Use the clinic recovery code to reset a password on this installation.');
+    }
 
     if (!isValidPhone(phone)) {
       throw new BadRequestException('Enter a valid phone number.');
@@ -143,7 +199,6 @@ export class PasswordResetService {
   }
 
   async resetPassword(resetToken: string, newPassword: string): Promise<{ message: string }> {
-    this.ensureOnlineRecoveryEnabled();
 
     if (newPassword.length < 8) {
       throw new BadRequestException('Password must be at least 8 characters.');

@@ -1,4 +1,4 @@
-export type OnlineSubscriptionStatus = 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED';
+export type OnlineSubscriptionStatus = 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'CANCELLED';
 
 export interface OnlineSubscriptionRow {
   status: OnlineSubscriptionStatus | null;

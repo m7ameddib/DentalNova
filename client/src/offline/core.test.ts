@@ -12,6 +12,7 @@ import {
   nextTempId,
   pendingCount,
   remapIds,
+  requeueStuckItems,
   searchCachedPatients,
 } from './core';
 
@@ -129,6 +130,18 @@ test('reconnect merge keeps unsynced local patients', () => {
 test('lab case optimistic records keep Lab Cost', () => {
   const result = buildOptimisticRecord('POST', '/lab-cases', { patientId: 1, labCost: 75, workType: 'CROWN' }, -8);
   assert.equal(result.labCostCents, 7500);
+});
+
+test('stuck syncing and failed items are requeued without dropping later work', () => {
+  const stale = new Date(Date.now() - 3 * 60 * 1000).toISOString();
+  const next = requeueStuckItems([
+    { status: 'syncing', lastAttemptAt: stale } as never,
+    { status: 'failed', attempts: 2, lastAttemptAt: stale } as never,
+    { status: 'failed', attempts: 8, lastAttemptAt: stale } as never,
+  ]);
+  assert.equal(next[0].status, 'pending');
+  assert.equal(next[1].status, 'pending');
+  assert.equal(next[2].status, 'failed');
 });
 
 test('pending count ignores finished conflicts', () => {

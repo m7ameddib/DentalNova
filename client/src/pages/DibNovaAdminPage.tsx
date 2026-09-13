@@ -20,9 +20,17 @@ import {
   dibnovaAdminApi,
   isDibNovaAdminAuthenticated,
   setDibNovaAdminSession,
+  type AdminClinicUser,
+  type AdminLicensePayment,
 } from '@/api/dibnova-admin.api';
 import type { OnlineSubscriptionStatus } from '@/api/subscription.api';
 import { getErrorMessage } from '@/utils/errors';
+import { usePrintStore } from '@/store/print.store';
+import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
+import { useUiStore } from '@/store/ui.store';
+import { todayIso } from '@/utils/date';
+import { formatMoney } from '@/utils/money';
+import { AdminPaymentReceiptPrintable, OperatingContractPrintable } from '@/components/admin/AdminPrintables';
 
 function formatDate(iso: string | null): string {
   if (!iso) return '—';
@@ -46,6 +54,19 @@ export function DibNovaAdminPage() {
   const [success, setSuccess] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
   const [selectedClinicId, setSelectedClinicId] = useState<string>('');
+  const [clinicQuery, setClinicQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [modeFilter, setModeFilter] = useState<'BOTH' | 'ONLINE' | 'OFFLINE'>('BOTH');
+  const [renewDays, setRenewDays] = useState('365');
+  const [renewDate, setRenewDate] = useState('');
+  const [payAmount, setPayAmount] = useState('');
+  const [payDate, setPayDate] = useState(todayIso());
+  const [payMethod, setPayMethod] = useState('CASH');
+  const [payNote, setPayNote] = useState('');
+  const [resetUserId, setResetUserId] = useState<number | null>(null);
+  const [resetPassword, setResetPassword] = useState('');
+  const print = usePrintStore((s) => s.print);
+  const language = useUiStore((s) => s.language);
 
   const { data, isLoading, refetch, isError } = useQuery({
     queryKey: ['dibnova-admin-installation'],
@@ -72,9 +93,9 @@ export function DibNovaAdminPage() {
       const clinicId = selectedClinicId || undefined;
       switch (action) {
         case 'activate':
-          return dibnovaAdminApi.activate(notes, clinicId);
+          return dibnovaAdminApi.activate(notes, clinicId, Number(renewDays) || undefined, renewDate || undefined);
         case 'extend':
-          return dibnovaAdminApi.extend(notes, clinicId);
+          return dibnovaAdminApi.extend(notes, clinicId, Number(renewDays) || undefined, renewDate || undefined);
         case 'suspend':
           return dibnovaAdminApi.suspend(notes, clinicId);
         case 'reactivate':
@@ -177,6 +198,47 @@ export function DibNovaAdminPage() {
     enabled: authenticated && canIssueOfflineLicenses,
   });
 
+  const { data: dashboard } = useQuery({
+    queryKey: ['dibnova-admin-dashboard'],
+    queryFn: dibnovaAdminApi.dashboard,
+    enabled: authenticated && isOnline,
+  });
+
+  const { data: payments = [] } = useQuery({
+    queryKey: ['dibnova-admin-payments', selectedClinicId],
+    queryFn: () => dibnovaAdminApi.listPayments(selectedClinicId || undefined),
+    enabled: authenticated && isOnline && Boolean(selectedClinicId),
+  });
+
+  const { data: history = [] } = useQuery({
+    queryKey: ['dibnova-admin-history', selectedClinicId],
+    queryFn: () => dibnovaAdminApi.history(selectedClinicId || undefined),
+    enabled: authenticated && isOnline && Boolean(selectedClinicId),
+  });
+
+  const { data: clinicUsers = [] } = useQuery({
+    queryKey: ['dibnova-admin-users', selectedClinicId],
+    queryFn: () => dibnovaAdminApi.listClinicUsers(selectedClinicId),
+    enabled: authenticated && isOnline && Boolean(selectedClinicId),
+  });
+
+  const { data: payBalance } = useQuery({
+    queryKey: ['dibnova-admin-balance', selectedClinicId],
+    queryFn: () => dibnovaAdminApi.paymentBalance(selectedClinicId),
+    enabled: authenticated && isOnline && Boolean(selectedClinicId),
+  });
+
+  const filteredClinics = onlineClinics.filter((clinic) => {
+    const q = clinicQuery.trim().toLowerCase();
+    const matchesQuery =
+      !q ||
+      clinic.clinicName.toLowerCase().includes(q) ||
+      clinic.clinicId.toLowerCase().includes(q) ||
+      (clinic.clinicPhone ?? '').includes(q);
+    const matchesStatus = statusFilter === 'ALL' || clinic.subscription.status === statusFilter;
+    return matchesQuery && matchesStatus;
+  });
+
   return (
     <div className="login-page login-page--entry login-page--admin">
       <AuthLangSwitch />
@@ -259,22 +321,69 @@ export function DibNovaAdminPage() {
 
           {data && (
             <>
+              {isOnline && dashboard && (
+                <section className="admin-card">
+                  <h2 className="admin-card__title">{t('dibnovaAdmin.dashboard')}</h2>
+                  <div className="admin-info-table-wrap">
+                    <table className="admin-info-table">
+                      <tbody>
+                        <tr>
+                          <th>{t('dibnovaAdmin.totalClinics')}</th>
+                          <td>{dashboard.total}</td>
+                        </tr>
+                        {(['ACTIVE', 'EXPIRED', 'SUSPENDED', 'CANCELLED'] as const).map((key) => (
+                          <tr key={key}>
+                            <th>{t(`dibnovaAdmin.status.${key}`)}</th>
+                            <td>{dashboard.counts[key] ?? 0}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
               <section className="admin-card">
                 <h2 className="admin-card__title">{t('dibnovaAdmin.clinicInfo')}</h2>
                 {onlineClinics.length > 0 && (
-                  <label className="form-field">
-                    <span className="form-field__label">{t('dibnovaAdmin.clinicName')}</span>
-                    <select
-                      value={selectedClinic?.clinicId ?? ''}
-                      onChange={(e) => setSelectedClinicId(e.target.value)}
-                    >
-                      {onlineClinics.map((clinic) => (
-                        <option key={clinic.clinicId} value={clinic.clinicId}>
-                          {clinic.clinicName} ({clinic.subscription.status})
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  <>
+                    <div className="setup-grid">
+                      <label className="form-field">
+                        <span className="form-field__label">{t('common.search')}</span>
+                        <input value={clinicQuery} onChange={(e) => setClinicQuery(e.target.value)} />
+                      </label>
+                      <label className="form-field">
+                        <span className="form-field__label">{t('common.status')}</span>
+                        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+                          <option value="ALL">{t('common.all')}</option>
+                          {['PENDING', 'ACTIVE', 'EXPIRED', 'SUSPENDED', 'CANCELLED'].map((s) => (
+                            <option key={s} value={s}>{t(`dibnovaAdmin.status.${s}`)}</option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="form-field">
+                        <span className="form-field__label">{t('dibnovaAdmin.manageMode')}</span>
+                        <select value={modeFilter} onChange={(e) => setModeFilter(e.target.value as typeof modeFilter)}>
+                          <option value="BOTH">{t('dibnovaAdmin.modeBoth')}</option>
+                          <option value="ONLINE">{t('dibnovaAdmin.modeOnline')}</option>
+                          <option value="OFFLINE">{t('dibnovaAdmin.modeOffline')}</option>
+                        </select>
+                      </label>
+                    </div>
+                    <label className="form-field">
+                      <span className="form-field__label">{t('dibnovaAdmin.clinicName')}</span>
+                      <select
+                        value={selectedClinic?.clinicId ?? ''}
+                        onChange={(e) => setSelectedClinicId(e.target.value)}
+                      >
+                        {filteredClinics.map((clinic) => (
+                          <option key={clinic.clinicId} value={clinic.clinicId}>
+                            {clinic.clinicName} ({clinic.subscription.status})
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  </>
                 )}
                 <div className="admin-info-table-wrap">
                   <table className="admin-info-table">
@@ -344,6 +453,16 @@ export function DibNovaAdminPage() {
                 <section className="admin-card">
                   <h2 className="admin-card__title">{t('dibnovaAdmin.subscriptionManagement')}</h2>
 
+                  <div className="setup-grid">
+                    <label className="form-field">
+                      <span className="form-field__label">{t('dibnovaAdmin.renewDays')}</span>
+                      <input type="number" min={1} value={renewDays} onChange={(e) => setRenewDays(e.target.value)} />
+                    </label>
+                    <label className="form-field">
+                      <span className="form-field__label">{t('dibnovaAdmin.renewDate')}</span>
+                      <input type="date" value={renewDate} onChange={(e) => setRenewDate(e.target.value)} />
+                    </label>
+                  </div>
                   <label className="form-field">
                     <span className="form-field__label">{t('dibnovaAdmin.notes')}</span>
                     <textarea
@@ -393,6 +512,61 @@ export function DibNovaAdminPage() {
                     >
                       {t('dibnovaAdmin.reactivate')}
                     </button>
+                    <button
+                      type="button"
+                      className="btn btn--danger"
+                      disabled={actionMutation.isPending || !selectedClinic}
+                      onClick={() => {
+                        if (window.confirm(t('dibnovaAdmin.cancelConfirm'))) {
+                          void dibnovaAdminApi.cancel(notes, selectedClinicId).then(() => {
+                            setSuccess(t('dibnovaAdmin.success.cancel'));
+                            invalidate();
+                          }).catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                        }
+                      }}
+                    >
+                      {t('dibnovaAdmin.cancelLicense')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--danger"
+                      disabled={!selectedClinic}
+                      onClick={() => {
+                        if (window.confirm(t('dibnovaAdmin.deleteConfirm'))) {
+                          void dibnovaAdminApi.deleteClinic(selectedClinicId, notes).then(() => {
+                            setSuccess(t('dibnovaAdmin.success.delete'));
+                            setSelectedClinicId('');
+                            invalidate();
+                          }).catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                        }
+                      }}
+                    >
+                      {t('dibnovaAdmin.deleteClinic')}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn--ghost"
+                      onClick={async () => {
+                        const clinic = await loadClinicPrintInfo();
+                        print(
+                          <OperatingContractPrintable
+                            clinicName={selectedClinic?.clinicName || data.clinicName}
+                            clinicPhone={selectedClinic?.clinicPhone || data.clinicPhone}
+                            clinicId={selectedClinic?.clinicId || data.installationId}
+                            mode={data.deploymentMode}
+                            status={effectiveStatus ?? '—'}
+                            startedAt={selectedClinic?.subscription.startedAt ?? data.subscription.startedAt}
+                            expiresAt={selectedClinic?.subscription.expiresAt ?? data.subscription.expiresAt}
+                            priceCents={payBalance?.balanceCents ?? 0}
+                            version={data.installationId ? '1.1.17' : '1.1.17'}
+                            clinic={clinic}
+                            language={language}
+                          />,
+                        );
+                      }}
+                    >
+                      {t('dibnovaAdmin.printContract')}
+                    </button>
                   </div>
 
                   {(selectedClinic?.subscription.canUseSystem ?? data.subscription.canUseSystem) && (
@@ -403,7 +577,208 @@ export function DibNovaAdminPage() {
                 </section>
               )}
 
-              {canIssueOfflineLicenses && (
+              {isOnline && clinicReady && selectedClinic && (modeFilter !== 'OFFLINE') && (
+                <>
+                  <section className="admin-card">
+                    <h2 className="admin-card__title">{t('dibnovaAdmin.paymentsTitle')}</h2>
+                    <p className="muted">{t('dibnovaAdmin.paymentsBalance')}: {formatMoney(payBalance?.balanceCents ?? 0)}</p>
+                    <div className="setup-grid">
+                      <label className="form-field">
+                        <span className="form-field__label">{t('patientRecord.account.amount')}</span>
+                        <input type="number" min="0" step="0.01" value={payAmount} onChange={(e) => setPayAmount(e.target.value)} />
+                      </label>
+                      <label className="form-field">
+                        <span className="form-field__label">{t('common.date')}</span>
+                        <input type="date" value={payDate} onChange={(e) => setPayDate(e.target.value)} />
+                      </label>
+                      <label className="form-field">
+                        <span className="form-field__label">{t('patientRecord.account.method')}</span>
+                        <input value={payMethod} onChange={(e) => setPayMethod(e.target.value)} />
+                      </label>
+                      <label className="form-field setup-grid__full">
+                        <span className="form-field__label">{t('common.note')}</span>
+                        <input value={payNote} onChange={(e) => setPayNote(e.target.value)} />
+                      </label>
+                    </div>
+                    <button
+                      type="button"
+                      className="btn btn--primary btn--small"
+                      onClick={() => {
+                        void dibnovaAdminApi
+                          .addPayment({
+                            clinicId: selectedClinicId,
+                            amount: Number(payAmount),
+                            paymentDate: payDate,
+                            method: payMethod,
+                            note: payNote || undefined,
+                          })
+                          .then(() => {
+                            setPayAmount('');
+                            setSuccess(t('dibnovaAdmin.success.payment'));
+                            invalidate();
+                            queryClient.invalidateQueries({ queryKey: ['dibnova-admin-payments'] });
+                            queryClient.invalidateQueries({ queryKey: ['dibnova-admin-balance'] });
+                          })
+                          .catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                      }}
+                    >
+                      {t('dibnovaAdmin.recordPayment')}
+                    </button>
+                    {payments.length > 0 && (
+                      <div className="admin-table-wrap">
+                        <table className="admin-table">
+                          <thead>
+                            <tr>
+                              <th>{t('common.date')}</th>
+                              <th>{t('patientRecord.account.amount')}</th>
+                              <th>{t('patientRecord.account.method')}</th>
+                              <th>{t('common.status')}</th>
+                              <th>{t('common.actions')}</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {payments.map((p: AdminLicensePayment) => (
+                              <tr key={p.id}>
+                                <td>{p.paymentDate}</td>
+                                <td>{formatMoney(p.amountCents)}</td>
+                                <td>{p.method}</td>
+                                <td>{p.status}</td>
+                                <td className="table-row-actions">
+                                  <button
+                                    type="button"
+                                    className="btn btn--ghost btn--small"
+                                    onClick={async () => {
+                                      const clinic = await loadClinicPrintInfo();
+                                      print(
+                                        <AdminPaymentReceiptPrintable
+                                          payment={p}
+                                          clinicName={selectedClinic.clinicName}
+                                          clinic={clinic}
+                                          language={language}
+                                        />,
+                                      );
+                                    }}
+                                  >
+                                    {t('common.print')}
+                                  </button>
+                                  {p.status !== 'VOID' && (
+                                    <button
+                                      type="button"
+                                      className="btn btn--ghost btn--small btn--danger"
+                                      onClick={() => {
+                                        if (window.confirm(t('dibnovaAdmin.voidPaymentConfirm'))) {
+                                          void dibnovaAdminApi.voidPayment(p.id, notes).then(() => {
+                                            invalidate();
+                                            queryClient.invalidateQueries({ queryKey: ['dibnova-admin-payments'] });
+                                          });
+                                        }
+                                      }}
+                                    >
+                                      {t('common.cancel')}
+                                    </button>
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </section>
+
+                  <section className="admin-card">
+                    <h2 className="admin-card__title">{t('dibnovaAdmin.usersTitle')}</h2>
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>{t('settings.fullName')}</th>
+                          <th>{t('settings.username')}</th>
+                          <th>{t('settings.role')}</th>
+                          <th>{t('common.actions')}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {clinicUsers.map((user: AdminClinicUser) => (
+                          <tr key={user.id}>
+                            <td>{user.fullName}</td>
+                            <td>{user.username}</td>
+                            <td>{user.roleLabel || user.roleName}</td>
+                            <td>
+                              {resetUserId === user.id ? (
+                                <div className="table-row-actions">
+                                  <input
+                                    type="password"
+                                    value={resetPassword}
+                                    onChange={(e) => setResetPassword(e.target.value)}
+                                    placeholder={t('auth.newPassword')}
+                                    autoComplete="new-password"
+                                  />
+                                  <button
+                                    type="button"
+                                    className="btn btn--primary btn--small"
+                                    onClick={() => {
+                                      if (!window.confirm(t('dibnovaAdmin.resetPasswordConfirm', { name: user.fullName }))) return;
+                                      void dibnovaAdminApi.resetUserPassword(selectedClinicId, user.id, resetPassword).then(() => {
+                                        setResetUserId(null);
+                                        setResetPassword('');
+                                        setSuccess(t('dibnovaAdmin.success.resetPassword'));
+                                      }).catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                                    }}
+                                  >
+                                    {t('common.save')}
+                                  </button>
+                                </div>
+                              ) : (
+                                <button type="button" className="btn btn--ghost btn--small" onClick={() => { setResetUserId(user.id); setResetPassword(''); }}>
+                                  {t('dibnovaAdmin.resetPassword')}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--small"
+                      onClick={() => {
+                        if (!window.confirm(t('auth.recoveryCodeConfirm'))) return;
+                        void dibnovaAdminApi.issueRecoveryCode(selectedClinicId).then((r) => {
+                          setSuccess(`${t('auth.recoveryCodeOnce')}: ${r.recoveryCode}`);
+                        });
+                      }}
+                    >
+                      {t('auth.issueRecoveryCode')}
+                    </button>
+                  </section>
+
+                  {history.length > 0 && (
+                    <section className="admin-card">
+                      <h2 className="admin-card__title">{t('dibnovaAdmin.historyTitle')}</h2>
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>{t('common.date')}</th>
+                            <th>{t('dibnovaAdmin.eventType')}</th>
+                            <th>{t('common.note')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {history.map((event) => (
+                            <tr key={String(event.id)}>
+                              <td>{String(event.created_at ?? '')}</td>
+                              <td>{String(event.event_type ?? '')}</td>
+                              <td>{String(event.details ?? '')}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </section>
+                  )}
+                </>
+              )}
+
+              {canIssueOfflineLicenses && (modeFilter !== 'ONLINE') && (
                 <section className="admin-card">
                   <h2 className="admin-card__title">{t('dibnovaAdmin.offlineLicensingTitle')}</h2>
                   <p className="muted admin-card__note">{t('dibnovaAdmin.offlineLicensingHint')}</p>

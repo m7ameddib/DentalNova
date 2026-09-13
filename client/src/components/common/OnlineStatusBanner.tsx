@@ -1,5 +1,8 @@
 import { WifiOff, RefreshCw } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { apiClient } from '@/api/client';
+import { retryFailedOutbox } from '@/offline/sync';
+import { syncWhenOnline } from '@/offline/intercept';
 import { useOfflineStatusStore } from '@/offline/status.store';
 
 export function OnlineStatusBanner() {
@@ -38,6 +41,17 @@ export function OnlineStatusBanner() {
       {connection === 'syncing' ? <RefreshCw size={14} aria-hidden /> : <WifiOff size={14} aria-hidden />}
       <span>{message}</span>
       {conflicts > 0 && <span>{t('offlineFallback.conflicts', { count: conflicts })}</span>}
+      {(pending > 0 || conflicts > 0) && connection !== 'syncing' && !needsReauth && (
+        <button
+          type="button"
+          className="link-btn"
+          onClick={() => {
+            void retryFailedOutbox().then(() => syncWhenOnline(apiClient));
+          }}
+        >
+          {t('offlineFallback.retrySync')}
+        </button>
+      )}
     </div>
   );
 }

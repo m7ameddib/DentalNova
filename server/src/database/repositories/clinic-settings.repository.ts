@@ -49,6 +49,23 @@ export class ClinicSettingsRepository {
     return toCamel<ClinicSettings>(row);
   }
 
+  getRecoveryHash(): string | null {
+    try {
+      const row = this.db.connection
+        .prepare('SELECT account_recovery_code_hash FROM clinic_settings WHERE id = ?')
+        .get(SETTINGS_ID) as { account_recovery_code_hash?: string | null } | undefined;
+      return row?.account_recovery_code_hash ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  setRecoveryHash(hash: string): void {
+    this.db.connection
+      .prepare('UPDATE clinic_settings SET account_recovery_code_hash = ?, updated_at = datetime(\'now\') WHERE id = ?')
+      .run(hash, SETTINGS_ID);
+  }
+
   update(input: UpdateClinicSettingsInput): ClinicSettings {
     const existing = this.get();
     const merged = { ...existing, ...input };

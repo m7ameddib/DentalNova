@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useMutation, useQuery } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, RefreshCw, Rocket } from 'lucide-react';
 import { updatesApi } from '@/api/updates.api';
 import { getErrorMessage } from '@/utils/errors';
@@ -13,8 +13,10 @@ function formatBytes(bytes: number | null): string {
 
 export function UpdatesSection() {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [downloadStarted, setDownloadStarted] = useState(false);
 
   const { data, refetch, isFetching } = useQuery({
     queryKey: ['updates-status'],
@@ -23,8 +25,8 @@ export function UpdatesSection() {
 
   const checkMutation = useMutation({
     mutationFn: updatesApi.check,
-    onSuccess: () => {
-      refetch();
+    onSuccess: (status) => {
+      queryClient.setQueryData(['updates-status'], status);
       setError(null);
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
@@ -32,12 +34,22 @@ export function UpdatesSection() {
 
   const downloadMutation = useMutation({
     mutationFn: updatesApi.download,
-    onSuccess: () => {
-      refetch();
-      setSuccess(t('settings.updates.downloadSuccess'));
+    onMutate: () => {
+      setDownloadStarted(true);
+      setSuccess(null);
       setError(null);
     },
-    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+    onSuccess: (status) => {
+      queryClient.setQueryData(['updates-status'], status);
+      setDownloadStarted(false);
+      setSuccess(t('settings.updates.downloadSuccess'));
+      setError(null);
+      void refetch();
+    },
+    onError: (err) => {
+      setDownloadStarted(false);
+      setError(getErrorMessage(err, t('common.error')));
+    },
   });
 
   const launchMutation = useMutation({
@@ -54,6 +66,9 @@ export function UpdatesSection() {
     checkMutation.isPending ||
     downloadMutation.isPending ||
     launchMutation.isPending;
+
+  const downloaded = Boolean(data?.downloaded);
+  const downloading = downloadStarted || downloadMutation.isPending;
 
   return (
     <section className="settings-section">
@@ -96,11 +111,17 @@ export function UpdatesSection() {
         </div>
       )}
 
-      {data?.downloaded && (
-        <p className="muted">
+      {downloading && (
+        <p className="updates-banner updates-banner--available" role="status">
+          {t('settings.updates.downloading')}
+        </p>
+      )}
+
+      {downloaded && !downloading && (
+        <p className="form-success-banner">
           {t('settings.updates.downloaded', {
-            name: data.installerFileName ?? '',
-            size: formatBytes(data.downloadedSizeBytes),
+            name: data?.installerFileName ?? '',
+            size: formatBytes(data?.downloadedSizeBytes ?? null),
           })}
         </p>
       )}
@@ -115,22 +136,22 @@ export function UpdatesSection() {
           <RefreshCw size={15} /> {t('settings.updates.check')}
         </button>
 
-        {data?.updateAvailable && (
+        {data?.updateAvailable && !downloaded && (
           <button
             type="button"
             className="btn btn--secondary"
             disabled={busy || !data.downloadUrl}
             onClick={() => downloadMutation.mutate()}
           >
-            <Download size={15} /> {t('settings.updates.download')}
+            <Download size={15} /> {downloading ? t('settings.updates.downloading') : t('settings.updates.download')}
           </button>
         )}
 
-        {data?.downloaded && (
+        {downloaded && !downloading && (
           <button
             type="button"
             className="btn btn--primary"
-            disabled={busy}
+            disabled={launchMutation.isPending}
             onClick={() => {
               if (window.confirm(t('settings.updates.launchConfirm'))) {
                 launchMutation.mutate();

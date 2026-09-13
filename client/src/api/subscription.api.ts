@@ -1,6 +1,6 @@
 import { apiClient } from '@/api/client';
 
-export type OnlineSubscriptionStatus = 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED';
+export type OnlineSubscriptionStatus = 'PENDING' | 'ACTIVE' | 'EXPIRED' | 'SUSPENDED' | 'CANCELLED';
 
 export interface SubscriptionStatus {
   deploymentMode: 'offline' | 'online';

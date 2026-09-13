@@ -51,15 +51,26 @@ function Test-DntHealth {
   }
 }
 
-function Wait-DntHealth {
-  param([int]$TimeoutSec = 60)
-  $deadline = (Get-Date).AddSeconds($TimeoutSec)
-  while ((Get-Date) -lt $deadline) {
-    if (Test-DntHealth) { return $true }
-    Start-Sleep -Seconds 2
+function Show-DntSplash {
+  $splash = Join-Path $AppRoot 'startup-splash.html'
+  if (Test-Path $splash) {
+    Start-Process $splash
+    return $true
   }
   return $false
 }
+
+function Wait-DntHealth {
+  param([int]$TimeoutSec = 45)
+  $deadline = (Get-Date).AddSeconds($TimeoutSec)
+  while ((Get-Date) -lt $deadline) {
+    if (Test-DntHealth) { return $true }
+    Start-Sleep -Milliseconds 400
+  }
+  return $false
+}
+
+$openedSplash = Show-DntSplash
 
 if (-not (Test-DntHealth)) {
   if (Test-DntPortListening) {
@@ -111,9 +122,9 @@ if (-not (Test-DntHealth)) {
   $proc.BeginErrorReadLine() | Out-Null
   Add-Content -Path $logFile -Value "Started server PID $($proc.Id) at $(Get-Date -Format o)"
 
-  $deadline = (Get-Date).AddSeconds(60)
+  $deadline = (Get-Date).AddSeconds(45)
   while ((Get-Date) -lt $deadline) {
-    Start-Sleep -Seconds 2
+    Start-Sleep -Milliseconds 400
     if (Test-DntHealth) { break }
   }
 

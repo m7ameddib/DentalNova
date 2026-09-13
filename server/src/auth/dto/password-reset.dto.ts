@@ -1,13 +1,27 @@
-import { IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class ForgotPasswordDto {
   @IsString()
   @IsNotEmpty()
   username!: string;
 
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  recoveryCode?: string;
+}
+
+export class RecoverUsernameDto {
   @IsString()
   @IsNotEmpty()
   phone!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  recoveryCode!: string;
 }
 
 export class VerifyResetOtpDto {

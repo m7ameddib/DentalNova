@@ -1,4 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import * as bcrypt from 'bcryptjs';
+import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
@@ -59,6 +61,17 @@ export class ClinicSettingsService {
     fs.writeFileSync(path.join(dir, fileName), file.buffer);
     const relativePath = path.join('clinic', fileName);
     return this.repo.update({ logoPath: relativePath, logoOriginalName: file.originalname });
+  }
+
+  async issueRecoveryCode(): Promise<{ recoveryCode: string }> {
+    const code = `DN-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const hash = await bcrypt.hash(code, 10);
+    this.repo.setRecoveryHash(hash);
+    const clinicId = getTenantClinicId();
+    if (clinicId && this.platform.isEnabled()) {
+      this.platform.setRecoveryHash(clinicId, hash);
+    }
+    return { recoveryCode: code };
   }
 
   getLogoAbsolutePath(): string {

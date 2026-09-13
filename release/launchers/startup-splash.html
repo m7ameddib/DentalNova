@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>DentalNova</title>
+  <meta http-equiv="refresh" content="8;url=http://127.0.0.1:4000/" />
+  <style>
+    html, body { height: 100%; margin: 0; font-family: Segoe UI, Tahoma, sans-serif; background: #f4f7f6; color: #1f3b34; }
+    .wrap { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; }
+    h1 { margin: 0; font-size: 28px; }
+    p { margin: 0; color: #5b6d67; }
+    .spin { width: 28px; height: 28px; border: 3px solid #d5e3dd; border-top-color: #1f6b57; border-radius: 50%; animation: spin .8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>DentalNova</h1>
+    <p>Opening the clinic application…</p>
+    <div class="spin"></div>
+  </div>
+  <script>
+    function go() { window.location.replace('http://127.0.0.1:4000/'); }
+    setTimeout(go, 2500);
+    fetch('http://127.0.0.1:4000/api/health').then(function (r) { if (r.ok) go(); }).catch(function () {});
+    setInterval(function () {
+      fetch('http://127.0.0.1:4000/api/health').then(function (r) { if (r.ok) go(); }).catch(function () {});
+    }, 600);
+  </script>
+</body>
+</html>
