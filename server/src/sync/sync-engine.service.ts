@@ -38,10 +38,10 @@ export class SyncEngineService {
 
   status() {
     const conn = this.db.connection;
-    const pending = pendingCount(conn);
     const conflicts = unresolvedConflictCount(conn);
     const peer = this.pairing.readPeerConfig();
     const lastError = this.readPeerValue('last_error');
+    const pending = this.deployment.isOnline() ? this.onlineDevicesBehind() : pendingCount(conn);
     let state: ClinicSyncState = 'OFFLINE';
     if (this.running) {
       state = 'SYNCING';
@@ -53,7 +53,7 @@ export class SyncEngineService {
     return {
       kind: this.deployment.isOnline() ? 'online-hub' : peer ? 'offline-peer' : 'none',
       state,
-      paired: this.deployment.isOnline() || Boolean(peer),
+      paired: this.deployment.isOnline() ? this.onlineDeviceCount() > 0 : Boolean(peer),
       pendingOutbound: pending,
       conflicts,
       lastSyncedAt: this.readPeerValue('last_synced_at'),
@@ -157,6 +157,7 @@ export class SyncEngineService {
         if (!data.hasMore) break;
       }
 
+      await this.reportCheckpoint(peer, token, since);
       await this.syncAttachmentBlobs(peer, token);
       this.writePeerValue('last_synced_at', new Date().toISOString());
       return { pushed, pulled, conflicts: unresolvedConflictCount(this.db.connection) };
@@ -204,6 +205,8 @@ export class SyncEngineService {
       if (!data.hasMore) break;
     }
     await this.syncAttachmentBlobs(peer, token);
+    const checkpoint = currentCheckpoint(this.db.connection);
+    await this.reportCheckpoint(peer, token, checkpoint);
     this.writePeerValue('last_synced_at', new Date().toISOString());
     return { pulled };
   }
@@ -282,6 +285,36 @@ export class SyncEngineService {
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
       .get(name);
     return Boolean(row);
+  }
+
+  private async reportCheckpoint(
+    peer: { onlineBaseUrl: string },
+    token: string,
+    seq: number,
+  ): Promise<void> {
+    const res = await this.onlineFetch(peer, token, '/api/sync/checkpoint', {
+      method: 'POST',
+      body: JSON.stringify({ seq }),
+    });
+    if (!res.ok) throw new Error(`checkpoint-failed-${res.status}`);
+  }
+
+  private onlineDeviceCount(): number {
+    if (!this.platform.isEnabled()) return 0;
+    const clinicId = getTenantClinicId();
+    if (!clinicId) return 0;
+    return this.platform.listSyncDevices(clinicId).filter((d: { revokedAt?: string | null }) => !d.revokedAt).length;
+  }
+
+  private onlineDevicesBehind(): number {
+    if (!this.platform.isEnabled()) return 0;
+    const clinicId = getTenantClinicId();
+    if (!clinicId) return 0;
+    const max = maxSeq(this.db.connection);
+    return this.platform
+      .listSyncDevices(clinicId)
+      .filter((d: { revokedAt?: string | null; pullCheckpoint?: number }) => !d.revokedAt && Number(d.pullCheckpoint ?? 0) < max)
+      .length;
   }
 
   private async deviceToken(peer: { onlineBaseUrl: string; deviceId: string; deviceSecret: string }): Promise<string> {

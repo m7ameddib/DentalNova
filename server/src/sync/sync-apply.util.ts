@@ -105,6 +105,12 @@ function entityOrder(name: string): number {
   return idx < 0 ? 999 : idx;
 }
 
+function nextPatientFileNumber(db: Database.Database): string {
+  const row = db.prepare(`SELECT file_number FROM patients ORDER BY id DESC LIMIT 1`).get() as { file_number?: string } | undefined;
+  const lastSeq = row?.file_number ? parseInt(String(row.file_number).replace(/\D/g, ''), 10) || 0 : 0;
+  return `P-${String(lastSeq + 1).padStart(6, '0')}`;
+}
+
 export function markAcked(db: Database.Database, changeIds: string[]): void {
   const stmt = db.prepare(`UPDATE sync_change_log SET acked_at = datetime('now') WHERE change_id = ?`);
   for (const id of changeIds) stmt.run(id);
@@ -205,15 +211,29 @@ export function applyChanges(
   withRemoteApply(db, () => {
     const txn = db.transaction(() => {
       for (const change of ordered) {
-        const result = applyOne(db, change, deviceId);
-        if (result === 'accepted') accepted.push(change.changeId);
-        else if (result === 'skipped') skipped.push(change.changeId);
-        else {
+        try {
+          const applyRow = db.transaction(() => applyOne(db, change, deviceId));
+          const result = applyRow();
+          if (result === 'accepted') accepted.push(change.changeId);
+          else if (result === 'skipped') skipped.push(change.changeId);
+          else {
+            conflicts.push({
+              changeId: change.changeId,
+              entity: change.entity,
+              recordUid: change.recordUid,
+              reason: result,
+            });
+          }
+        } catch (err) {
+          recordConflict(db, change.entity, change.recordUid, 'apply-error', null, {
+            message: (err as Error).message,
+            row: change.row ?? null,
+          });
           conflicts.push({
             changeId: change.changeId,
             entity: change.entity,
             recordUid: change.recordUid,
-            reason: result,
+            reason: 'apply-error',
           });
         }
       }
@@ -309,6 +329,10 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
     if (cols.includes(snake) && snake !== 'id' && !(def.skipColumns ?? []).includes(snake)) {
       values[snake] = value;
     }
+  }
+
+  if (change.entity === 'patients' && localId == null && cols.includes('file_number') && !values.file_number) {
+    values.file_number = nextPatientFileNumber(db);
   }
 
   let appliedId = localId;

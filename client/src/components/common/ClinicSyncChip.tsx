@@ -12,7 +12,7 @@ export function ClinicSyncChip() {
     staleTime: 10_000,
   });
 
-  if (!isAuthenticated || !data || data.kind === 'none') return null;
+  if (!isAuthenticated || !data || data.kind === 'none' || !data.paired) return null;
 
   const label = data.state;
   const tone =

@@ -39,6 +39,25 @@ async function request(method, urlPath, { token, body, expected, headers } = {})
   return { status: res.status, data };
 }
 
+async function collectSnapshot(token) {
+  const all = [];
+  let afterEntity;
+  let afterId;
+  for (let i = 0; i < 40; i += 1) {
+    const qs = new URLSearchParams({ limit: '80' });
+    if (afterEntity) qs.set('afterEntity', afterEntity);
+    if (afterId != null) qs.set('afterId', String(afterId));
+    const snap = await request('GET', `/sync/snapshot?${qs.toString()}`, { token, expected: 200 });
+    const batch = snap.data.changes || [];
+    all.push(...batch);
+    if (!snap.data.hasMore) break;
+    afterEntity = snap.data.nextAfterEntity;
+    afterId = snap.data.nextAfterId;
+    if (!afterEntity && !afterId) break;
+  }
+  return all;
+}
+
 function setupPayload(clinicName, username) {
   return {
     clinicName,
@@ -185,9 +204,8 @@ async function main() {
     const meDevice = await request('GET', '/auth/me', { token: deviceToken });
     assert(meDevice.status === 401, 'device JWT must not be a doctor session');
 
-    const snap = await request('GET', '/sync/snapshot?limit=50', { token: deviceToken, expected: 200 });
-    assert(Array.isArray(snap.data.changes), 'snapshot must return changes');
-    const hasPatient = snap.data.changes.some(
+    const snapChanges = await collectSnapshot(deviceToken);
+    const hasPatient = snapChanges.some(
       (c) => c.entity === 'patients' && c.row && String(c.row.fullName || '').includes('Sync Patient A'),
     );
     assert(hasPatient, 'snapshot must include clinic A patient');
@@ -201,7 +219,7 @@ async function main() {
             entity: 'patients',
             recordUid: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
             op: 'upsert',
-            row: { fullName: 'Injected into A', phone: '0700000000' },
+            row: { fullName: 'Injected into A', phone: '0700000000', fileNumber: 'P-SYNC01', gender: 'MALE' },
           },
         ],
       },
@@ -223,8 +241,8 @@ async function main() {
       body: { deviceId: completeB.data.deviceId, deviceSecret: completeB.data.deviceSecret },
       expected: [200, 201],
     });
-    const snapB = await request('GET', '/sync/snapshot?limit=50', { token: tokB.data.accessToken, expected: 200 });
-    const leaked = (snapB.data.changes || []).some(
+    const snapBChanges = await collectSnapshot(tokB.data.accessToken);
+    const leaked = snapBChanges.some(
       (c) => c.entity === 'patients' && c.row && String(c.row.fullName || '').includes('Sync Patient A'),
     );
     assert(!leaked, 'clinic B device snapshot must not include clinic A patients');

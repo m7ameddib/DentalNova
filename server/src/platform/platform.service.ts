@@ -884,7 +884,8 @@ export class PlatformService implements OnModuleInit {
     this.assertEnabled();
     return this.db
       .prepare(
-        `SELECT id, name, installation_id AS installationId, created_at AS createdAt, last_seen_at AS lastSeenAt, revoked_at AS revokedAt
+        `SELECT id, name, installation_id AS installationId, created_at AS createdAt, last_seen_at AS lastSeenAt,
+                revoked_at AS revokedAt, pull_checkpoint AS pullCheckpoint
          FROM sync_registered_devices WHERE clinic_id = ? ORDER BY created_at DESC`,
       )
       .all(clinicId);
