@@ -9,7 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
-import { remainingCents, creditCents } from '../common/money.util';
+import { buildAccountSummaryTotals } from '../common/treatment-account.util';
 
 @Injectable()
 export class PatientsService {
@@ -136,21 +136,19 @@ export class PatientsService {
     return this.patientsRepo.findArchived();
   }
 
+  /**
+   * Patient Account totals. Treatment amounts are due as soon as a treatment
+   * is added; completing that treatment does not create another charge.
+   */
   getAccountSummary(patientId: number) {
     this.assertExists(patientId);
     const subtotalCents = this.treatmentsRepo.totalCostForPatient(patientId);
     const accountDiscountCents = this.accountDiscountsRepo.totalForPatient(patientId);
-    const totalCostCents = Math.max(0, subtotalCents - accountDiscountCents);
     const totalPaidCents = this.paymentsRepo.totalPaidForPatient(patientId);
     const lastPayments = this.paymentsRepo.findByPatient(patientId, 2);
     const lastDiscounts = this.accountDiscountsRepo.findByPatient(patientId, 2);
     return {
-      subtotalCents,
-      accountDiscountCents,
-      totalCostCents,
-      totalPaidCents,
-      remainingCents: remainingCents(totalCostCents, totalPaidCents),
-      creditCents: creditCents(totalCostCents, totalPaidCents),
+      ...buildAccountSummaryTotals({ subtotalCents, accountDiscountCents, totalPaidCents }),
       lastPayments,
       lastDiscounts,
     };

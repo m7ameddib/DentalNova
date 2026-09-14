@@ -273,6 +273,112 @@ test('offline payment seeds a missing account-summary so the chart is not blank'
   assert.equal(summary.lastPayments[0]?.id, -11);
 });
 
+function accountSummary(next: ReturnType<typeof applyMutationToCaches>, patientId = 4) {
+  return next[`GET /patients/${patientId}/account-summary`].data as {
+    subtotalCents: number;
+    totalCostCents: number;
+    remainingCents: number;
+  };
+}
+
+test('offline add treatment with amount posts to account immediately', () => {
+  const next = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: { subtotalCents: 0, totalCostCents: 0, totalPaidCents: 0, remainingCents: 0 },
+        cachedAt: '',
+      },
+    },
+    {
+      method: 'POST',
+      url: '/treatments',
+      body: { patientId: 4, status: 'PLANNED' },
+      result: { id: -20, patientId: 4, status: 'PLANNED', finalAmountCents: 15000 },
+      tempId: -20,
+    },
+  );
+  const summary = accountSummary(next);
+  assert.equal(summary.subtotalCents, 15000);
+  assert.equal(summary.totalCostCents, 15000);
+  assert.equal(summary.remainingCents, 15000);
+});
+
+test('offline complete treatment does not duplicate the cached charge', () => {
+  const afterAdd = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: { subtotalCents: 0, totalCostCents: 0, totalPaidCents: 0, remainingCents: 0 },
+        cachedAt: '',
+      },
+      'GET /patients/4/treatments': {
+        key: 'GET /patients/4/treatments',
+        status: 200,
+        data: [],
+        cachedAt: '',
+      },
+    },
+    {
+      method: 'POST',
+      url: '/treatments',
+      body: { patientId: 4, status: 'PLANNED' },
+      result: { id: 8, patientId: 4, status: 'PLANNED', finalAmountCents: 15000 },
+    },
+  );
+  const afterComplete = applyMutationToCaches(afterAdd, {
+    method: 'PATCH',
+    url: '/treatments/8/status',
+    body: { status: 'COMPLETED' },
+    result: { id: 8, patientId: 4, status: 'COMPLETED', finalAmountCents: 15000 },
+  });
+  const replayed = applyMutationToCaches(afterComplete, {
+    method: 'POST',
+    url: '/treatments',
+    body: { patientId: 4, status: 'PLANNED' },
+    result: { id: 8, patientId: 4, status: 'COMPLETED', finalAmountCents: 15000 },
+  });
+  assert.equal(accountSummary(afterAdd).remainingCents, 15000);
+  assert.equal(accountSummary(afterComplete).remainingCents, 15000);
+  assert.equal(accountSummary(replayed).remainingCents, 15000);
+});
+
+test('offline edit updates the existing cached charge; delete removes it', () => {
+  const afterAdd = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: { subtotalCents: 0, totalCostCents: 0, totalPaidCents: 0, remainingCents: 0 },
+        cachedAt: '',
+      },
+    },
+    {
+      method: 'POST',
+      url: '/treatments',
+      body: { patientId: 4 },
+      result: { id: 9, patientId: 4, status: 'PLANNED', finalAmountCents: 8000 },
+    },
+  );
+  const afterEdit = applyMutationToCaches(afterAdd, {
+    method: 'PATCH',
+    url: '/treatments/9',
+    body: {},
+    result: { id: 9, patientId: 4, status: 'PLANNED', finalAmountCents: 11000 },
+  });
+  assert.equal(accountSummary(afterEdit).totalCostCents, 11000);
+  const afterDelete = applyMutationToCaches(afterEdit, {
+    method: 'DELETE',
+    url: '/treatments/9',
+    body: {},
+    result: { id: 9, patientId: 4 },
+  });
+  assert.equal(accountSummary(afterDelete).totalCostCents, 0);
+  assert.equal(accountSummary(afterDelete).remainingCents, 0);
+});
+
 test('pending count ignores finished conflicts', () => {
   assert.equal(
     pendingCount([

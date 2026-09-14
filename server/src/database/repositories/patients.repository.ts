@@ -3,6 +3,7 @@ import { DatabaseService } from '../database.service';
 import { toCamel, toCamelList } from '../row-mapper.util';
 import { localDayUtcBounds } from '../../common/local-date.util';
 import { remainingCents } from '../../common/money.util';
+import { billableTreatmentSql } from '../../common/treatment-account.util';
 import { FamilyGroup, Patient } from '../../common/types';
 import { nextPatientFileNumber } from '../../patients/file-number.util';
 
@@ -135,7 +136,7 @@ export class PatientsRepository {
          LEFT JOIN (
            SELECT patient_id, SUM(final_amount_cents) AS cost_cents
            FROM patient_treatments
-           WHERE status = 'COMPLETED'
+           WHERE ${billableTreatmentSql()}
            GROUP BY patient_id
          ) t ON t.patient_id = p.id
          LEFT JOIN (

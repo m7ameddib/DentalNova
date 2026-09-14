@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
 import { toCamel } from '../row-mapper.util';
 import { PatientTreatment, TreatmentStatus } from '../../common/types';
+import { billableTreatmentSql } from '../../common/treatment-account.util';
 
 export type TreatmentScope = 'SINGLE' | 'UPPER_JAW' | 'LOWER_JAW' | 'ALL_TEETH';
 
@@ -250,20 +251,30 @@ export class PatientTreatmentsRepository {
     return rows.map(mapDetailsRow) as PatientTreatmentReportRow[];
   }
 
-  /** Sum of COMPLETED treatment amounts — feeds the patient account total. */
+  /**
+   * Sum of billable treatment amounts for the patient Account.
+   * Added/open treatments count immediately; completing the same row does not add another charge.
+   * VOID treatments are excluded.
+   */
   totalCostForPatient(patientId: number): number {
     const row = this.db.connection
       .prepare(
-        `SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE patient_id = ? AND status = 'COMPLETED'`,
+        `SELECT COALESCE(SUM(final_amount_cents), 0) as total
+         FROM patient_treatments
+         WHERE patient_id = ? AND ${billableTreatmentSql()}`,
       )
       .get(patientId) as { total: number };
     return row.total;
   }
 
-  /** Clinic-wide sum of final amounts across all patients (all time) — used for the Reports outstanding balance. */
+  /** Clinic-wide sum of billable treatment amounts (all time). */
   totalFinalAmountAll(): number {
     const row = this.db.connection
-      .prepare(`SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE status = 'COMPLETED'`)
+      .prepare(
+        `SELECT COALESCE(SUM(final_amount_cents), 0) as total
+         FROM patient_treatments
+         WHERE ${billableTreatmentSql()}`,
+      )
       .get() as { total: number };
     return row.total;
   }

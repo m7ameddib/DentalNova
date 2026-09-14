@@ -21,6 +21,7 @@ import { useUiStore } from '@/store/ui.store';
 import { usePrintStore } from '@/store/print.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { openWhatsApp } from '@/utils/whatsapp';
+import { isBillableTreatment } from '@/utils/treatment-display';
 import { Patient, Payment } from '@/types/domain';
 
 type AccountAddMode = 'payment' | 'discount' | null;
@@ -184,7 +185,7 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
     print(
       <AccountStatementPrintable
         patient={patient}
-        treatments={treatments.filter((treatment) => treatment.status === 'COMPLETED')}
+        treatments={treatments.filter(isBillableTreatment)}
         payments={payments}
         totals={summary}
         clinic={clinic}

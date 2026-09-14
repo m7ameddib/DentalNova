@@ -266,3 +266,91 @@ test('tombstoned records are not resurrected by a later upsert', () => {
   db.close();
 });
 
+test('syncing a treatment then completing the same uid does not duplicate the charge', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT,
+      phone TEXT,
+      updated_at TEXT
+    );
+    CREATE TABLE treatment_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      label TEXT
+    );
+    CREATE TABLE patient_treatments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER,
+      treatment_type_id INTEGER,
+      final_amount_cents INTEGER,
+      status TEXT,
+      updated_at TEXT
+    );
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('Ada')`).run();
+  db.prepare(`INSERT INTO treatment_types (label) VALUES ('Filling')`).run();
+  const patientSnap = snapshotRow(db, 'patients', 1);
+  const typeSnap = snapshotRow(db, 'treatment_types', 1);
+  const first = applyChanges(
+    db,
+    [
+      {
+        changeId: 'tx-1',
+        entity: 'patient_treatments',
+        recordUid: 'tx-uid-1',
+        op: 'upsert',
+        row: {
+          patientUid: patientSnap?.recordUid,
+          treatmentTypeUid: typeSnap?.recordUid,
+          finalAmountCents: 12000,
+          status: 'PLANNED',
+        },
+      },
+    ],
+    'device-a',
+  );
+  assert.equal(first.accepted.includes('tx-1'), true);
+  const afterAdd = db
+    .prepare(
+      `SELECT COUNT(*) AS c, COALESCE(SUM(final_amount_cents), 0) AS total
+       FROM patient_treatments WHERE status != 'VOID'`,
+    )
+    .get() as { c: number; total: number };
+  assert.equal(afterAdd.c, 1);
+  assert.equal(afterAdd.total, 12000);
+
+  const complete = applyChanges(
+    db,
+    [
+      {
+        changeId: 'tx-2',
+        entity: 'patient_treatments',
+        recordUid: 'tx-uid-1',
+        op: 'upsert',
+        row: {
+          patientUid: patientSnap?.recordUid,
+          treatmentTypeUid: typeSnap?.recordUid,
+          finalAmountCents: 12000,
+          status: 'COMPLETED',
+        },
+      },
+    ],
+    'device-b',
+  );
+  assert.equal(complete.conflicts.length, 0);
+  const afterComplete = db
+    .prepare(
+      `SELECT COUNT(*) AS c, COALESCE(SUM(final_amount_cents), 0) AS total, status
+       FROM patient_treatments WHERE status != 'VOID'`,
+    )
+    .get() as { c: number; total: number; status: string };
+  assert.equal(afterComplete.c, 1);
+  assert.equal(afterComplete.total, 12000);
+  assert.equal(afterComplete.status, 'COMPLETED');
+  db.close();
+});
+
+
