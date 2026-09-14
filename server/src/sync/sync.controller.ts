@@ -63,8 +63,14 @@ export class SyncController {
   completePairing(@Body() dto: PairingCompleteDto, @Req() req: Request) {
     const key = `pair:${requestClientIp(req)}`;
     this.rateLimit.assertAllowed(key, 8, 15 * 60 * 1000);
-    this.rateLimit.recordFailure(key, 15 * 60 * 1000);
-    return this.pairing.completeFromOnline(dto);
+    try {
+      const result = this.pairing.completeFromOnline(dto);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, 15 * 60 * 1000);
+      throw err;
+    }
   }
 
   @SkipSubscriptionGuard()

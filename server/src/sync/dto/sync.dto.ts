@@ -1,4 +1,4 @@
-import { IsArray, IsOptional, IsString, MinLength } from 'class-validator';
+import { Equals, IsArray, IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class PairingCompleteDto {
   @IsString()
@@ -11,6 +11,14 @@ export class PairingCompleteDto {
   @IsOptional()
   @IsString()
   installationId?: string;
+
+  /** Offline must attest it has no operational clinic records. Online cannot inspect the Offline DB. */
+  @IsBoolean()
+  @Equals(true, {
+    message:
+      'Automatic pairing requires an empty Offline clinic (emptyClinic: true). Two populated databases cannot be merged.',
+  })
+  emptyClinic!: true;
 }
 
 export class ConnectOnlineDto {

@@ -20,6 +20,7 @@ import { ClinicSettingsRepository } from '../database/repositories/clinic-settin
 import { SYNC_DEVICE_JWT_ISSUER } from '../auth/jwt-payload.util';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { clinicOperationalCensus, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
 
 export interface StoredPeerConfig {
   deviceId: string;
@@ -52,10 +53,11 @@ export class SyncPairingService {
     if (!clinicId) throw new ForbiddenException('Clinic context required');
     const clinic = this.platform.requireClinic(clinicId);
     const { code, expiresAt } = this.platform.createPairingCode(clinicId, user.id);
+    this.platform.logEvent(clinicId, 'PAIRING_CODE', `user ${user.id}`);
     return { code, expiresAt, clinicName: clinic.name, clinicId };
   }
 
-  completeFromOnline(input: { code: string; deviceName: string; installationId?: string }): {
+  completeFromOnline(input: { code: string; deviceName: string; installationId?: string; emptyClinic: boolean }): {
     deviceId: string;
     deviceSecret: string;
     clinicId: string;
@@ -64,6 +66,11 @@ export class SyncPairingService {
   } {
     if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
       throw new BadRequestException('Pairing must be completed against the Online server.');
+    }
+    if (input.emptyClinic !== true) {
+      throw new BadRequestException(
+        'Automatic pairing requires an empty Offline clinic. Two populated databases cannot be merged.',
+      );
     }
     let clinicId: string;
     try {
@@ -80,6 +87,7 @@ export class SyncPairingService {
       secretHash,
       installationId: input.installationId ?? null,
     });
+    this.platform.logEvent(clinicId, 'PAIRING_COMPLETE', deviceId);
     return {
       deviceId,
       deviceSecret,
@@ -93,6 +101,17 @@ export class SyncPairingService {
     if (!this.deployment.isOffline()) {
       throw new BadRequestException('Connect to Online from the Offline Windows app.');
     }
+    if (this.readPeerConfig()) {
+      throw new BadRequestException('This Offline installation is already paired. Disconnect first before pairing again.');
+    }
+    const census = clinicOperationalCensus(this.db.connection);
+    if (census.populated) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: populatedOfflineMessage(census),
+        code: POPULATED_OFFLINE_CODE,
+      });
+    }
     const base = input.onlineUrl.replace(/\/$/, '');
     const installationId = this.installation.get().installationId;
     const res = await fetch(`${base}/api/sync/pairing/complete`, {
@@ -102,6 +121,7 @@ export class SyncPairingService {
         code: input.pairingCode.trim().toUpperCase(),
         deviceName: input.deviceName?.trim() || this.clinicSettings.get()?.clinicName || 'Offline clinic',
         installationId,
+        emptyClinic: true,
       }),
       signal: AbortSignal.timeout(20_000),
     });

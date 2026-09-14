@@ -736,6 +736,15 @@ export class PlatformService implements OnModuleInit {
         revoked_at TEXT,
         pull_checkpoint INTEGER NOT NULL DEFAULT 0
       );
+      CREATE TABLE IF NOT EXISTS ai_usage_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        clinic_id TEXT,
+        model TEXT,
+        duration_ms INTEGER,
+        rounds INTEGER,
+        has_image INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
     `);
     this.addColumnIfMissing('clinics', 'trial_type', 'TEXT');
     this.addColumnIfMissing('clinics', 'doctor_name', 'TEXT');
@@ -774,6 +783,7 @@ export class PlatformService implements OnModuleInit {
         `INSERT INTO clinic_signup_invites (id, code_hash, expires_at, created_by) VALUES (?, ?, ?, ?)`,
       )
       .run(crypto.randomUUID(), codeHash, expiresAt, createdBy ?? 'dibnova-admin');
+    this.logEvent(null, 'SIGNUP_INVITE', expiresAt);
     return { token, expiresAt };
   }
 
@@ -877,6 +887,9 @@ export class PlatformService implements OnModuleInit {
         `UPDATE sync_registered_devices SET revoked_at = datetime('now') WHERE id = ? AND clinic_id = ? AND revoked_at IS NULL`,
       )
       .run(deviceId, clinicId);
+    if (result.changes > 0) {
+      this.logEvent(clinicId, 'DEVICE_REVOKE', deviceId);
+    }
     return result.changes > 0;
   }
 
@@ -891,11 +904,114 @@ export class PlatformService implements OnModuleInit {
       .all(clinicId);
   }
 
+  recordAiUsage(input: {
+    clinicId: string | null;
+    model: string;
+    durationMs: number;
+    rounds: number;
+    hasImage: boolean;
+  }): void {
+    if (!this.isEnabled()) return;
+    this.db
+      .prepare(
+        `INSERT INTO ai_usage_events (clinic_id, model, duration_ms, rounds, has_image)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(input.clinicId, input.model, input.durationMs, input.rounds, input.hasImage ? 1 : 0);
+  }
+
+  listAiUsage(clinicId?: string) {
+    this.assertEnabled();
+    const rows = clinicId
+      ? (this.db
+          .prepare(
+            `SELECT clinic_id AS clinicId, COUNT(*) AS calls, COALESCE(SUM(duration_ms), 0) AS durationMs,
+                    COALESCE(SUM(has_image), 0) AS imageCalls
+             FROM ai_usage_events WHERE clinic_id = ? GROUP BY clinic_id`,
+          )
+          .all(clinicId) as Array<Record<string, unknown>>)
+      : (this.db
+          .prepare(
+            `SELECT clinic_id AS clinicId, COUNT(*) AS calls, COALESCE(SUM(duration_ms), 0) AS durationMs,
+                    COALESCE(SUM(has_image), 0) AS imageCalls
+             FROM ai_usage_events GROUP BY clinic_id ORDER BY calls DESC LIMIT 200`,
+          )
+          .all() as Array<Record<string, unknown>>);
+    return rows.map((row) => ({
+      clinicId: (row.clinicId as string | null) ?? null,
+      calls: Number(row.calls ?? 0),
+      durationMs: Number(row.durationMs ?? 0),
+      imageCalls: Number(row.imageCalls ?? 0),
+    }));
+  }
+
+  clinicOpsSummary(clinicId: string) {
+    this.assertEnabled();
+    const clinic = this.requireClinic(clinicId);
+    let patientCount = 0;
+    if (fs.existsSync(clinic.dbPath)) {
+      const clinicDb = new Database(clinic.dbPath, { readonly: true, fileMustExist: true });
+      try {
+        const row = clinicDb
+          .prepare(`SELECT COUNT(*) AS c FROM patients WHERE archived_at IS NULL`)
+          .get() as { c: number };
+        patientCount = Number(row?.c ?? 0);
+      } catch {
+        patientCount = 0;
+      } finally {
+        clinicDb.close();
+      }
+    }
+    const backupsDir = path.join(this.clinicDataDir(clinicId), 'backups');
+    const attachmentsDir = path.join(this.clinicDataDir(clinicId), 'attachments');
+    const backups = fs.existsSync(backupsDir)
+      ? fs.readdirSync(backupsDir).filter((f) => f.endsWith('.zip')).length
+      : 0;
+    return {
+      clinicId,
+      clinicName: clinic.name,
+      patientCount,
+      backupZipCount: backups,
+      attachmentBytes: this.directorySize(attachmentsDir),
+      clinicDbBytes: fs.existsSync(clinic.dbPath) ? fs.statSync(clinic.dbPath).size : 0,
+      syncDevices: this.listSyncDevices(clinicId),
+    };
+  }
+
+  private directorySize(dir: string): number {
+    if (!fs.existsSync(dir)) return 0;
+    let total = 0;
+    const stack = [dir];
+    while (stack.length) {
+      const current = stack.pop()!;
+      let entries: fs.Dirent[];
+      try {
+        entries = fs.readdirSync(current, { withFileTypes: true });
+      } catch {
+        continue;
+      }
+      for (const entry of entries) {
+        const full = path.join(current, entry.name);
+        if (entry.isDirectory()) stack.push(full);
+        else {
+          try {
+            total += fs.statSync(full).size;
+          } catch {
+            /* ignore */
+          }
+        }
+      }
+    }
+    return total;
+  }
+
   private secretsKey(): Buffer {
-    const raw =
-      this.config.get<string>('PLATFORM_SECRETS_KEY')?.trim() ||
-      this.config.get<string>('JWT_SECRET')?.trim() ||
-      'dev-secret';
+    const dedicated = this.config.get<string>('PLATFORM_SECRETS_KEY')?.trim();
+    const fallback = this.config.get<string>('JWT_SECRET')?.trim() || 'dev-secret';
+    if (!dedicated && this.config.get<string>('NODE_ENV') === 'production') {
+      this.logger.warn('PLATFORM_SECRETS_KEY is not set; trial password encryption falls back to JWT_SECRET.');
+    }
+    const raw = dedicated || fallback;
     return crypto.createHash('sha256').update(`dentalnova-platform|${raw}`).digest();
   }
 

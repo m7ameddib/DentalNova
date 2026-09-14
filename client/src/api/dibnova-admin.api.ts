@@ -260,6 +260,33 @@ export const dibnovaAdminApi = {
     adminClient()
       .post<AdminMarketingTrial>('/dibnova-admin/trials/marketing', { doctorName, phone })
       .then((r) => r.data),
+
+  createSignupInvite: () =>
+    adminClient()
+      .post<{ token: string; expiresAt: string }>('/dibnova-admin/signup-invite')
+      .then((r) => r.data),
+
+  opsHealth: () =>
+    adminClient()
+      .get<{
+        ok: boolean;
+        deploymentMode: string;
+        platformEnabled: boolean;
+        clinicCount: number;
+        r2Configured: boolean;
+        uptimeSec: number;
+      }>('/dibnova-admin/ops/health')
+      .then((r) => r.data),
+
+  clinicOps: (clinicId: string) =>
+    adminClient()
+      .get<AdminClinicOps>(`/dibnova-admin/clinics/${clinicId}/ops`)
+      .then((r) => r.data),
+
+  aiUsage: (clinicId?: string) =>
+    adminClient()
+      .get<AdminAiUsage[]>('/dibnova-admin/ai-usage', { params: { clinicId } })
+      .then((r) => r.data),
 };
 
 export interface AdminLicensePayment {
@@ -282,4 +309,21 @@ export interface AdminClinicUser {
   phone: string | null;
   roleName: string | null;
   roleLabel: string | null;
+}
+
+export interface AdminClinicOps {
+  clinicId: string;
+  clinicName?: string;
+  patientCount: number;
+  backupZipCount: number;
+  attachmentBytes: number;
+  clinicDbBytes?: number;
+  syncDevices?: Array<{ id: string; name: string; revokedAt?: string | null }>;
+}
+
+export interface AdminAiUsage {
+  clinicId: string | null;
+  calls: number;
+  durationMs: number;
+  imageCalls: number;
 }

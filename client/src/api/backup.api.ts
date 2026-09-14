@@ -5,6 +5,7 @@ export interface BackupInfo {
   filename: string;
   createdAt: string;
   sizeBytes: number;
+  r2Uploaded?: boolean;
 }
 
 export interface BackupManifest {

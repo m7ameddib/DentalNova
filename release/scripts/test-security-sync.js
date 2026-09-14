@@ -189,8 +189,12 @@ async function main() {
 
     const pairing = await request('POST', '/sync/pairing/start', { token: tokenA, expected: [200, 201] });
     assert(pairing.data.code, 'pairing code missing');
+    const refusePopulated = await request('POST', '/sync/pairing/complete', {
+      body: { code: pairing.data.code, deviceName: 'Test PC', emptyClinic: false },
+    });
+    assert(refusePopulated.status === 400, `emptyClinic:false must be rejected (got ${refusePopulated.status})`);
     const complete = await request('POST', '/sync/pairing/complete', {
-      body: { code: pairing.data.code, deviceName: 'Test PC', installationId: 'inst-a' },
+      body: { code: pairing.data.code, deviceName: 'Test PC', installationId: 'inst-a', emptyClinic: true },
       expected: [200, 201],
     });
     assert(complete.data.deviceId && complete.data.deviceSecret, 'device credentials missing');
@@ -234,7 +238,7 @@ async function main() {
 
     const pairingB = await request('POST', '/sync/pairing/start', { token: tokenB, expected: [200, 201] });
     const completeB = await request('POST', '/sync/pairing/complete', {
-      body: { code: pairingB.data.code, deviceName: 'PC B' },
+      body: { code: pairingB.data.code, deviceName: 'PC B', emptyClinic: true },
       expected: [200, 201],
     });
     const tokB = await request('POST', '/sync/token', {
@@ -305,6 +309,29 @@ async function main() {
       (payConflict.data.conflicts || []).length >= 1 || (payConflict.data.accepted || []).length <= 1,
       'immutable payment rows must not silently overwrite',
     );
+
+    const clinicJwtAdmin = await request('GET', '/dibnova-admin/clinics', { token: tokenA });
+    assert(clinicJwtAdmin.status === 401, `clinic session must not access Admin (got ${clinicJwtAdmin.status})`);
+
+    const health = await request('GET', '/dibnova-admin/ops/health', { token: adminToken, expected: 200 });
+    assert(health.data.ok === true, 'admin health must be ok');
+    assert(health.data.r2Configured === false || typeof health.data.r2Configured === 'boolean', 'r2Configured flag missing');
+
+    const opsA = await request('GET', `/dibnova-admin/clinics/${clinicA.data.user.clinicId}/ops`, {
+      token: adminToken,
+      expected: 200,
+    });
+    const opsB = await request('GET', `/dibnova-admin/clinics/${clinicB.data.user.clinicId}/ops`, {
+      token: adminToken,
+      expected: 200,
+    });
+    assert(opsA.data.clinicId === clinicA.data.user.clinicId, 'ops A must be tenant-scoped');
+    assert(opsB.data.clinicId === clinicB.data.user.clinicId, 'ops B must be tenant-scoped');
+    assert(opsA.data.patientCount >= 1, 'clinic A ops should count its patient');
+    assert(opsB.data.patientCount === 0, 'clinic B ops must not include clinic A patients');
+
+    const unknownOps = await request('GET', '/dibnova-admin/clinics/not-a-clinic/ops', { token: adminToken });
+    assert(unknownOps.status >= 400, `unknown clinic ops must fail (got ${unknownOps.status})`);
 
     console.log('PASS: security + clinic sync');
   } catch (err) {

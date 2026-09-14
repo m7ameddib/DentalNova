@@ -19,7 +19,13 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
   { name: 'guarantors', table: 'guarantors', fks: {}, conflict: 'lww-safe' },
   { name: 'disease_catalog', table: 'disease_catalog', fks: {}, conflict: 'lww-safe' },
   { name: 'medication_catalog', table: 'medication_catalog', fks: {}, conflict: 'lww-safe' },
-  { name: 'users', table: 'users', fks: {}, conflict: 'review', skipColumns: ['password_hash'] },
+  {
+    name: 'users',
+    table: 'users',
+    fks: {},
+    conflict: 'review',
+    skipColumns: ['password_hash', 'role_id'],
+  },
   { name: 'family_groups', table: 'family_groups', fks: {}, conflict: 'lww-safe' },
   {
     name: 'patients',

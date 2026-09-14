@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { nextPatientFileNumber } from '../patients/file-number.util';
 import {
   camelToSnake,
   ConflictPolicy,
@@ -105,12 +106,6 @@ function entityOrder(name: string): number {
   return idx < 0 ? 999 : idx;
 }
 
-function nextPatientFileNumber(db: Database.Database): string {
-  const row = db.prepare(`SELECT file_number FROM patients ORDER BY id DESC LIMIT 1`).get() as { file_number?: string } | undefined;
-  const lastSeq = row?.file_number ? parseInt(String(row.file_number).replace(/\D/g, ''), 10) || 0 : 0;
-  return `P-${String(lastSeq + 1).padStart(6, '0')}`;
-}
-
 export function markAcked(db: Database.Database, changeIds: string[]): void {
   const stmt = db.prepare(`UPDATE sync_change_log SET acked_at = datetime('now') WHERE change_id = ?`);
   for (const id of changeIds) stmt.run(id);
@@ -169,6 +164,7 @@ export function changesSince(db: Database.Database, since: number, excludeDevice
       recordUid: row.record_uid,
       op: row.op,
       row: snap,
+      updatedAt: snap?.updatedAt as string | undefined,
     });
   }
   return { changes, until };
@@ -244,12 +240,25 @@ export function applyChanges(
   return { accepted, skipped, conflicts };
 }
 
+export function recordInboundConflicts(
+  db: Database.Database,
+  conflicts: Array<{ entity: string; recordUid: string; reason: string }>,
+): void {
+  for (const conflict of conflicts) {
+    recordConflict(db, conflict.entity, conflict.recordUid, conflict.reason, null, conflict);
+  }
+}
+
 function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: string | null): 'accepted' | 'skipped' | string {
   const existingChange = db.prepare('SELECT change_id FROM sync_change_log WHERE change_id = ?').get(change.changeId);
   if (existingChange) return 'skipped';
 
   const def = SYNC_ENTITY_BY_NAME[change.entity];
   if (!def || !tableExists(db, def.table)) return 'skipped';
+
+  if (change.entity === 'users') {
+    return applyUserLinkOnly(db, change, deviceId);
+  }
 
   if (change.op === 'delete') {
     const localId = getLocalId(db, change.entity, change.recordUid);
@@ -269,7 +278,20 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
     return 'accepted';
   }
 
-  if (!change.row) return 'skipped';
+  if (!change.row) {
+    recordConflict(db, change.entity, change.recordUid, 'empty-upsert', null, change);
+    appendRemoteLog(db, change, deviceId, getLocalId(db, change.entity, change.recordUid));
+    return 'empty-upsert';
+  }
+
+  const tombstoned = db
+    .prepare(`SELECT 1 FROM sync_tombstones WHERE entity = ? AND record_uid = ?`)
+    .get(change.entity, change.recordUid);
+  if (tombstoned) {
+    recordConflict(db, change.entity, change.recordUid, 'tombstone-block', null, change.row);
+    appendRemoteLog(db, change, deviceId, getLocalId(db, change.entity, change.recordUid));
+    return 'tombstone-block';
+  }
 
   const localId = getLocalId(db, change.entity, change.recordUid);
   const policy: ConflictPolicy = def.conflict;
@@ -314,6 +336,7 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
 
   const cols = columnsOf(db, def.table);
   const values: Record<string, unknown> = {};
+  let fileNumberCollision = false;
   for (const [key, value] of Object.entries(change.row)) {
     if (key === 'recordUid') continue;
     if (key.endsWith('Uid')) {
@@ -331,8 +354,27 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
     }
   }
 
-  if (change.entity === 'patients' && localId == null && cols.includes('file_number') && !values.file_number) {
-    values.file_number = nextPatientFileNumber(db);
+  if (change.entity === 'patients' && cols.includes('file_number')) {
+    if (localId == null && !values.file_number) {
+      values.file_number = nextPatientFileNumber(db);
+    } else if (values.file_number) {
+      const clash = db
+        .prepare(`SELECT id FROM patients WHERE file_number = ?`)
+        .get(String(values.file_number)) as { id: number } | undefined;
+      if (clash && clash.id !== localId) {
+        const original = values.file_number;
+        values.file_number = nextPatientFileNumber(db);
+        recordConflict(
+          db,
+          'patients',
+          change.recordUid,
+          'file-number-collision',
+          { existingLocalId: clash.id, originalFileNumber: original, assignedFileNumber: values.file_number },
+          change.row,
+        );
+        fileNumberCollision = true;
+      }
+    }
   }
 
   let appliedId = localId;
@@ -360,7 +402,7 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
   }
 
   appendRemoteLog(db, change, deviceId, appliedId);
-  return 'accepted';
+  return fileNumberCollision ? 'file-number-collision' : 'accepted';
 }
 
 function appendRemoteLog(
@@ -373,6 +415,69 @@ function appendRemoteLog(
     `INSERT OR IGNORE INTO sync_change_log (change_id, entity, record_uid, local_id, op, origin, device_id, acked_at)
      VALUES (?, ?, ?, ?, ?, 'remote', ?, datetime('now'))`,
   ).run(change.changeId, change.entity, change.recordUid, localId, change.op, deviceId);
+}
+
+function applyUserLinkOnly(
+  db: Database.Database,
+  change: SyncChangePayload,
+  deviceId: string | null,
+): 'accepted' | 'skipped' | string {
+  if (change.op === 'delete') {
+    recordConflict(db, 'users', change.recordUid, 'user-delete-blocked', null, change.row ?? null);
+    appendRemoteLog(db, change, deviceId, getLocalId(db, 'users', change.recordUid));
+    return 'user-delete-blocked';
+  }
+  const username = String(change.row?.username ?? '').trim();
+  if (!username) {
+    recordConflict(db, 'users', change.recordUid, 'user-unlinked', null, change.row ?? null);
+    appendRemoteLog(db, change, deviceId, null);
+    return 'user-unlinked';
+  }
+  const local = db.prepare(`SELECT id FROM users WHERE username = ? COLLATE NOCASE`).get(username) as
+    | { id: number }
+    | undefined;
+  if (!local) {
+    recordConflict(db, 'users', change.recordUid, 'user-unlinked', { username }, change.row ?? null);
+    appendRemoteLog(db, change, deviceId, null);
+    return 'user-unlinked';
+  }
+  const mappedUid = db
+    .prepare(`SELECT record_uid AS recordUid FROM sync_id_map WHERE entity = 'users' AND local_id = ?`)
+    .get(local.id) as { recordUid: string } | undefined;
+  if (mappedUid && mappedUid.recordUid !== change.recordUid) {
+    recordConflict(
+      db,
+      'users',
+      change.recordUid,
+      'user-id-mismatch',
+      { localId: local.id, existingUid: mappedUid.recordUid },
+      change.row,
+    );
+    appendRemoteLog(db, change, deviceId, local.id);
+    return 'user-id-mismatch';
+  }
+  const mappedLocal = getLocalId(db, 'users', change.recordUid);
+  if (mappedLocal != null && mappedLocal !== local.id) {
+    recordConflict(
+      db,
+      'users',
+      change.recordUid,
+      'user-id-mismatch',
+      { mappedLocalId: mappedLocal, usernameLocalId: local.id },
+      change.row,
+    );
+    appendRemoteLog(db, change, deviceId, mappedLocal);
+    return 'user-id-mismatch';
+  }
+  if (!mappedUid) {
+    db.prepare('INSERT OR IGNORE INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(
+      'users',
+      local.id,
+      change.recordUid,
+    );
+  }
+  appendRemoteLog(db, change, deviceId, local.id);
+  return 'accepted';
 }
 
 export function unresolvedConflictCount(db: Database.Database): number {

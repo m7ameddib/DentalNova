@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, Injectable, Logger } from '@nestjs/common';
 import { DatabaseService } from '../database/database.service';
 import { DeploymentService } from '../common/deployment.service';
 import { PlatformService } from '../platform/platform.service';
@@ -13,6 +13,7 @@ import {
   maxSeq,
   pendingCount,
   pendingOutbound,
+  recordInboundConflicts,
   resolveConflict,
   setCheckpoint,
   unresolvedConflictCount,
@@ -20,6 +21,7 @@ import {
 import { SyncChangePayload } from './sync.entities';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { clinicOperationalCensus, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
@@ -129,10 +131,13 @@ export class SyncEngineService {
         const data = (await res.json()) as {
           accepted?: string[];
           skipped?: string[];
-          conflicts?: Array<{ changeId: string }>;
+          conflicts?: Array<{ changeId: string; entity: string; recordUid: string; reason: string }>;
         };
         if (!res.ok) throw new Error(`push-failed-${res.status}`);
         if (!Array.isArray(data.accepted)) throw new Error('push-missing-ack');
+        if (data.conflicts?.length) {
+          recordInboundConflicts(this.db.connection, data.conflicts);
+        }
         const done = [
           ...data.accepted,
           ...(data.skipped ?? []),
@@ -171,13 +176,26 @@ export class SyncEngineService {
     }
   }
 
-  async bootstrapOffline(): Promise<{ pulled: number }> {
+  async bootstrapOffline(): Promise<{ pulled: number; alreadyBootstrapped?: boolean }> {
     const peer = this.pairing.readPeerConfig();
     if (!peer) return { pulled: 0 };
+    if (this.readPeerValue('bootstrapped_at')) {
+      return { pulled: 0, alreadyBootstrapped: true };
+    }
+    const inProgress = this.readPeerValue('bootstrap_in_progress') === '1';
+    const census = clinicOperationalCensus(this.db.connection);
+    if (census.populated && !inProgress) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: populatedOfflineMessage(census),
+        code: POPULATED_OFFLINE_CODE,
+      });
+    }
     const token = await this.deviceToken(peer);
+    this.writePeerValue('bootstrap_in_progress', '1');
     let pulled = 0;
-    let afterEntity: string | undefined;
-    let afterId: number | undefined;
+    let afterEntity: string | undefined = this.readPeerValue('bootstrap_after_entity') || undefined;
+    let afterId: number | undefined = Number(this.readPeerValue('bootstrap_after_id') || 0) || undefined;
     for (let i = 0; i < 50; i += 1) {
       const qs = new URLSearchParams();
       if (afterEntity) qs.set('afterEntity', afterEntity);
@@ -201,6 +219,8 @@ export class SyncEngineService {
       pulled += batch.length;
       afterEntity = data.nextAfterEntity;
       afterId = data.nextAfterId;
+      if (afterEntity) this.writePeerValue('bootstrap_after_entity', afterEntity);
+      if (afterId != null) this.writePeerValue('bootstrap_after_id', String(afterId));
       if (data.checkpoint != null) setCheckpoint(this.db.connection, data.checkpoint);
       if (!data.hasMore) break;
     }
@@ -208,6 +228,8 @@ export class SyncEngineService {
     const checkpoint = currentCheckpoint(this.db.connection);
     await this.reportCheckpoint(peer, token, checkpoint);
     this.writePeerValue('last_synced_at', new Date().toISOString());
+    this.writePeerValue('bootstrapped_at', new Date().toISOString());
+    this.writePeerValue('bootstrap_in_progress', '0');
     return { pulled };
   }
 
@@ -229,39 +251,49 @@ export class SyncEngineService {
     const rows = this.db.connection
       .prepare(`SELECT stored_path AS storedPath, mime_type AS mimeType FROM patient_attachments`)
       .all() as Array<{ storedPath: string; mimeType: string | null }>;
-    for (const row of rows) {
-      if (!row.storedPath) continue;
-      const already = this.tableExists('sync_file_objects')
-        ? (this.db.connection
-            .prepare(`SELECT uploaded_at AS uploadedAt FROM sync_file_objects WHERE record_uid = ?`)
-            .get(row.storedPath) as { uploadedAt?: string } | undefined)
-        : undefined;
-      const local = await this.objectStorage.getObject(row.storedPath);
-      if (local && local.length > 0) {
-        if (already?.uploadedAt) continue;
-        const encoded = local.toString('base64');
-        const res = await this.onlineFetch(peer, token, '/api/sync/files', {
-          method: 'POST',
-          body: JSON.stringify({
-            relativePath: row.storedPath,
-            contentBase64: encoded,
-            mimeType: row.mimeType,
-          }),
-        });
-        if (res.ok) this.markFileUploaded(row.storedPath, local.length, row.mimeType);
-        continue;
-      }
-      const res = await this.onlineFetch(
-        peer,
-        token,
-        `/api/sync/files?path=${encodeURIComponent(row.storedPath)}`,
-        { method: 'GET' },
-      );
-      const data = (await res.json().catch(() => ({}))) as { found?: boolean; contentBase64?: string };
-      if (res.ok && data.found && data.contentBase64) {
-        await this.objectStorage.putObject(row.storedPath, Buffer.from(data.contentBase64, 'base64'), row.mimeType);
-        this.markFileUploaded(row.storedPath, Buffer.from(data.contentBase64, 'base64').length, row.mimeType);
-      }
+    const pending = rows.filter((row) => row.storedPath);
+    const concurrency = 3;
+    for (let i = 0; i < pending.length; i += concurrency) {
+      const slice = pending.slice(i, i + concurrency);
+      await Promise.all(slice.map((row) => this.syncOneAttachment(peer, token, row)));
+    }
+  }
+
+  private async syncOneAttachment(
+    peer: { onlineBaseUrl: string },
+    token: string,
+    row: { storedPath: string; mimeType: string | null },
+  ): Promise<void> {
+    const already = this.tableExists('sync_file_objects')
+      ? (this.db.connection
+          .prepare(`SELECT uploaded_at AS uploadedAt FROM sync_file_objects WHERE record_uid = ?`)
+          .get(row.storedPath) as { uploadedAt?: string } | undefined)
+      : undefined;
+    const local = await this.objectStorage.getObject(row.storedPath);
+    if (local && local.length > 0) {
+      if (already?.uploadedAt) return;
+      const encoded = local.toString('base64');
+      const res = await this.onlineFetch(peer, token, '/api/sync/files', {
+        method: 'POST',
+        body: JSON.stringify({
+          relativePath: row.storedPath,
+          contentBase64: encoded,
+          mimeType: row.mimeType,
+        }),
+      });
+      if (res.ok) this.markFileUploaded(row.storedPath, local.length, row.mimeType);
+      return;
+    }
+    const res = await this.onlineFetch(
+      peer,
+      token,
+      `/api/sync/files?path=${encodeURIComponent(row.storedPath)}`,
+      { method: 'GET' },
+    );
+    const data = (await res.json().catch(() => ({}))) as { found?: boolean; contentBase64?: string };
+    if (res.ok && data.found && data.contentBase64) {
+      await this.objectStorage.putObject(row.storedPath, Buffer.from(data.contentBase64, 'base64'), row.mimeType);
+      this.markFileUploaded(row.storedPath, Buffer.from(data.contentBase64, 'base64').length, row.mimeType);
     }
   }
 

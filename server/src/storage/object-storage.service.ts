@@ -5,6 +5,7 @@ import * as path from 'path';
 import { UploadsService } from '../common/uploads.service';
 import { DeploymentService } from '../common/deployment.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { r2ObjectKey, withRetries } from './object-storage.util';
 
 const DEFAULT_BUCKET = 'dentalnova-files';
 
@@ -54,14 +55,16 @@ export class ObjectStorageService implements OnModuleInit {
     if (this.s3) {
       try {
         const { PutObjectCommand } = await import('@aws-sdk/client-s3');
-        await this.s3.send(
-          new PutObjectCommand({
-            Bucket: this.bucket,
-            Key: this.objectKey(relativePath),
-            Body: bytes,
-            ContentType: mimeType || 'application/octet-stream',
-          }),
-        );
+        await withRetries(async () => {
+          await this.s3!.send(
+            new PutObjectCommand({
+              Bucket: this.bucket,
+              Key: this.objectKey(relativePath),
+              Body: bytes,
+              ContentType: mimeType || 'application/octet-stream',
+            }),
+          );
+        });
       } catch (err) {
         this.logger.warn(`R2 put failed; local copy kept: ${(err as Error).message}`);
         if (this.deployment.isOnline()) {
@@ -79,11 +82,13 @@ export class ObjectStorageService implements OnModuleInit {
     if (this.s3) {
       try {
         const { GetObjectCommand } = await import('@aws-sdk/client-s3');
-        const res = await this.s3.send(
-          new GetObjectCommand({
-            Bucket: this.bucket,
-            Key: this.objectKey(relativePath),
-          }),
+        const res = await withRetries(async () =>
+          this.s3!.send(
+            new GetObjectCommand({
+              Bucket: this.bucket,
+              Key: this.objectKey(relativePath),
+            }),
+          ),
         );
         const bytes = await this.streamToBuffer(res.Body);
         if (bytes && local) {
@@ -103,16 +108,35 @@ export class ObjectStorageService implements OnModuleInit {
     if (this.s3) {
       try {
         const { DeleteObjectCommand } = await import('@aws-sdk/client-s3');
-        await this.s3.send(
-          new DeleteObjectCommand({
-            Bucket: this.bucket,
-            Key: this.objectKey(relativePath),
-          }),
-        );
+        await withRetries(async () => {
+          await this.s3!.send(
+            new DeleteObjectCommand({
+              Bucket: this.bucket,
+              Key: this.objectKey(relativePath),
+            }),
+          );
+        });
       } catch (err) {
         this.logger.warn(`R2 delete failed: ${(err as Error).message}`);
       }
     }
+  }
+
+  /** R2-only write used for backup zips. Never deletes the local file. */
+  async putRemoteObject(relativePath: string, bytes: Buffer, mimeType?: string | null): Promise<boolean> {
+    if (!this.s3) return false;
+    const { PutObjectCommand } = await import('@aws-sdk/client-s3');
+    await withRetries(async () => {
+      await this.s3!.send(
+        new PutObjectCommand({
+          Bucket: this.bucket,
+          Key: this.objectKey(relativePath),
+          Body: bytes,
+          ContentType: mimeType || 'application/octet-stream',
+        }),
+      );
+    });
+    return true;
   }
 
   private r2Configured(): boolean {
@@ -124,10 +148,7 @@ export class ObjectStorageService implements OnModuleInit {
   }
 
   private objectKey(relativePath: string): string {
-    const trimmed = relativePath.replace(/\\/g, '/').replace(/^\/+/, '');
-    const clinicId = getTenantClinicId() || 'offline-local';
-    const namespaced = `${clinicId}/${trimmed}`;
-    return this.prefix ? `${this.prefix.replace(/\/+$/, '')}/${namespaced}` : namespaced;
+    return r2ObjectKey(relativePath, getTenantClinicId(), this.prefix);
   }
 
   private async streamToBuffer(body: unknown): Promise<Buffer | null> {

@@ -61,6 +61,7 @@ export function ClinicSyncSection({ mode }: { mode: 'online' | 'offline' }) {
       <h2>{t('settings.clinicSync.title')}</h2>
       <p className="muted">{t('settings.clinicSync.subtitle')}</p>
       <p className="muted">{t('settings.clinicSync.notBackup')}</p>
+      {mode === 'offline' && <p className="muted">{t('settings.clinicSync.emptyOnly')}</p>}
 
       {status && (
         <dl className="updates-info-grid">

@@ -141,7 +141,7 @@ export class ReportsService {
 
   getPatientsDetail(query: ReportPeriodDto, onlyNew: boolean) {
     const { from, to } = this.resolvePeriod(query);
-    return onlyNew ? this.patientsRepo.findCreatedForPeriod(from, to) : this.patientsRepo.findAll(100000);
+    return onlyNew ? this.patientsRepo.findCreatedForPeriod(from, to) : this.patientsRepo.findAll(2000);
   }
 
   getDailyReport(date?: string) {

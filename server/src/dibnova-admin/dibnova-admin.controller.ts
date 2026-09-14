@@ -11,6 +11,8 @@ import { SetMetadata } from '@nestjs/common';
 import { PlatformService } from '../platform/platform.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import { DeploymentService } from '../common/deployment.service';
+import { ObjectStorageService } from '../storage/object-storage.service';
 
 @UseGuards(DibNovaAdminGuard)
 @SetMetadata(SKIP_INSTALLATION_GUARD, true)
@@ -22,6 +24,8 @@ export class DibNovaAdminController {
     private readonly offlineLicensing: OfflineLicensingService,
     private readonly platform: PlatformService,
     private readonly installation: InstallationService,
+    private readonly deployment: DeploymentService,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
   /** Clinic installation info — online subscription or offline license metadata. */
@@ -160,6 +164,35 @@ export class DibNovaAdminController {
   @Post('payments/:id/void')
   voidPayment(@Param('id') id: string, @Body() dto: AdminNotesDto) {
     return this.platform.voidPayment(Number(id), dto.reason ?? dto.notes);
+  }
+
+  @Get('ops/health')
+  opsHealth() {
+    return {
+      ok: true,
+      deploymentMode: this.deployment.getMode(),
+      platformEnabled: this.platform.isEnabled(),
+      clinicCount: this.platform.isEnabled() ? this.subscription.listAdminClinics().length : 0,
+      r2Configured: this.objectStorage.usesR2(),
+      uptimeSec: Math.round(process.uptime()),
+    };
+  }
+
+  @Get('clinics/:clinicId/ops')
+  clinicOps(@Param('clinicId') clinicId: string) {
+    if (!this.platform.isEnabled()) {
+      return { clinicId, patientCount: 0, backupZipCount: 0, attachmentBytes: 0, clinicDbBytes: 0, syncDevices: [] };
+    }
+    try {
+      return this.platform.clinicOpsSummary(clinicId);
+    } catch {
+      throw new BadRequestException('Unknown clinic');
+    }
+  }
+
+  @Get('ai-usage')
+  aiUsage(@Query('clinicId') clinicId?: string) {
+    return this.platform.isEnabled() ? this.platform.listAiUsage(clinicId) : [];
   }
 
   @Get('clinics/:clinicId/users')

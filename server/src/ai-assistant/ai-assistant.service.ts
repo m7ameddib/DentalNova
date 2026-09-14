@@ -3,6 +3,8 @@ import { AuthenticatedUser } from '../auth/auth.types';
 import { AiActionExecutor } from './ai-action.executor';
 import { AiContextBuilder } from './ai-context.builder';
 import { GeminiService } from './gemini.service';
+import { PlatformService } from '../platform/platform.service';
+import { getTenantClinicId } from '../platform/tenant-context';
 import {
   AiChatMessage,
   AiChatResult,
@@ -30,6 +32,7 @@ export class AiAssistantService {
     private readonly provider: GeminiService,
     private readonly contextBuilder: AiContextBuilder,
     private readonly executor: AiActionExecutor,
+    private readonly platform: PlatformService,
   ) {}
 
   getStatus() {
@@ -135,6 +138,14 @@ export class AiAssistantService {
     this.logger.log(
       `AI timing — gemini: ${(geminiTotalMs / 1000).toFixed(1)}s, read-actions: ${readActionsMs}ms, backend processing: ${backendProcessingMs}ms, total: ${(serverTotalMs / 1000).toFixed(1)}s (${rounds} round(s))`,
     );
+
+    this.platform.recordAiUsage({
+      clinicId: user.clinicId || getTenantClinicId() || null,
+      model: this.provider.getModel(),
+      durationMs: geminiTotalMs,
+      rounds,
+      hasImage: Boolean(imageBase64),
+    });
 
     const reply = parsed?.reply?.trim() || 'Sorry, I could not process that request.';
     let proposedAction = parsed?.proposedAction ?? undefined;
