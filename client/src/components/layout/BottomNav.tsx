@@ -1,15 +1,12 @@
 import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { CalendarDays, ClipboardList, BarChart3, Users, MoreHorizontal } from 'lucide-react';
+import { CalendarDays, ClipboardList, BarChart3, Users, Sparkles, Settings } from 'lucide-react';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
-import { useUiStore } from '@/store/ui.store';
 
 export function BottomNav() {
   const { t } = useTranslation();
   const location = useLocation();
-  const mobileNavOpen = useUiStore((s) => s.mobileNavOpen);
-  const setMobileNavOpen = useUiStore((s) => s.setMobileNavOpen);
   const isPatientWorkspaceActive =
     location.pathname === '/' || location.pathname.startsWith('/patients');
 
@@ -17,9 +14,11 @@ export function BottomNav() {
   const canViewAppointments = usePermission(PERMISSIONS.APPOINTMENTS_VIEW);
   const canViewFollowUps = usePermission(PERMISSIONS.FOLLOWUPS_MANAGE);
   const canViewReports = usePermission(PERMISSIONS.REPORTS_VIEW);
+  const canUseAiAssistant = usePermission(PERMISSIONS.AI_ASSISTANT_USE);
+  const canViewSettings = usePermission(PERMISSIONS.SETTINGS_VIEW);
 
   return (
-    <nav className="bottom-nav" aria-label={t('nav.more')}>
+    <nav className="bottom-nav" aria-label={t('app.name')}>
       {canViewPatients && (
         <NavLink
           to="/"
@@ -47,15 +46,18 @@ export function BottomNav() {
           <span>{t('nav.reports')}</span>
         </NavLink>
       )}
-      <button
-        type="button"
-        className={mobileNavOpen ? 'bottom-nav__link bottom-nav__link--more active' : 'bottom-nav__link bottom-nav__link--more'}
-        aria-expanded={mobileNavOpen}
-        onClick={() => setMobileNavOpen(!mobileNavOpen)}
-      >
-        <MoreHorizontal size={18} />
-        <span>{t('nav.more')}</span>
-      </button>
+      {canUseAiAssistant && (
+        <NavLink to="/ai-assistant" className="bottom-nav__link">
+          <Sparkles size={18} />
+          <span>{t('nav.aiAssistant')}</span>
+        </NavLink>
+      )}
+      {canViewSettings && (
+        <NavLink to="/settings" className="bottom-nav__link">
+          <Settings size={18} />
+          <span>{t('nav.settings')}</span>
+        </NavLink>
+      )}
     </nav>
   );
 }
