@@ -19,7 +19,16 @@ export function ConnectionStatusChip() {
   return (
     <span
       className={`connection-status-chip connection-status-chip--${connection}`}
-      title={pending > 0 ? t('offlineFallback.offlinePending', { count: pending }) : label}
+      title={
+        pending > 0
+          ? t(
+              connection === 'offline'
+                ? 'offlineFallback.offlinePending'
+                : 'offlineFallback.onlinePending',
+              { count: pending },
+            )
+          : label
+      }
     >
       <span className="connection-status-chip__dot" aria-hidden />
       {label}

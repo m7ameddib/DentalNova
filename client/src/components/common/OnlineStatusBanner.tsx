@@ -13,11 +13,14 @@ export function OnlineStatusBanner() {
   const conflicts = useOfflineStatusStore((s) => s.conflicts);
   const needsReauth = useOfflineStatusStore((s) => s.needsReauth);
 
+  const browserOffline = typeof navigator !== 'undefined' && navigator.onLine === false;
+  const showOffline = connection === 'offline' && browserOffline;
+
   if (!enabled) {
     return null;
   }
 
-  if (connection === 'online' && pending === 0 && conflicts === 0 && !needsReauth) {
+  if (!showOffline && connection !== 'syncing' && pending === 0 && conflicts === 0 && !needsReauth) {
     return null;
   }
 
@@ -26,20 +29,30 @@ export function OnlineStatusBanner() {
     : connection === 'syncing'
       ? t('offlineFallback.syncing', { count: pending })
       : pending > 0
-        ? t('offlineFallback.offlinePending', { count: pending })
-        : t('offlineFallback.offline');
+        ? t(showOffline ? 'offlineFallback.offlinePending' : 'offlineFallback.onlinePending', {
+            count: pending,
+          })
+        : showOffline
+          ? t('offlineFallback.offline')
+          : null;
+
+  const pendingOnline = !showOffline;
 
   return (
     <div
       className={
-        connection === 'syncing'
+        connection === 'syncing' || pendingOnline
           ? 'online-status-banner online-status-banner--syncing'
           : 'online-status-banner'
       }
       role="status"
     >
-      {connection === 'syncing' ? <RefreshCw size={14} aria-hidden /> : <WifiOff size={14} aria-hidden />}
-      <span>{message}</span>
+      {connection === 'syncing' || pendingOnline ? (
+        <RefreshCw size={14} aria-hidden />
+      ) : (
+        <WifiOff size={14} aria-hidden />
+      )}
+      {message ? <span>{message}</span> : null}
       {conflicts > 0 && <span>{t('offlineFallback.conflicts', { count: conflicts })}</span>}
       {(pending > 0 || conflicts > 0) && connection !== 'syncing' && !needsReauth && (
         <button

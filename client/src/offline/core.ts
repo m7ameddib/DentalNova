@@ -151,10 +151,70 @@ export function remapIds<T>(value: T, idMap: Record<string, number>): T {
 
 export function classifyReplayError(status?: number): 'conflict' | 'failed' | 'auth' | 'retry' {
   if (!status) return 'retry';
-  if (status === 401 || status === 403) return 'auth';
+  if (status === 401) return 'auth';
   if (status === 404 || status === 409) return 'conflict';
   if (status >= 400 && status < 500) return 'failed';
   return 'retry';
+}
+
+/** 404/409 on replay usually means the write already landed or the row is gone. */
+export function isAlreadyAppliedReplay(status?: number): boolean {
+  return status === 404 || status === 409;
+}
+
+export function parseOutboxHttpStatus(lastError?: string): number | undefined {
+  if (!lastError) return undefined;
+  const coded = lastError.match(/status code (\d{3})/i) ?? lastError.match(/^http-(\d{3})$/i);
+  if (coded) return Number(coded[1]);
+  if (lastError === 'conflict') return 409;
+  return undefined;
+}
+
+/** Client errors that will never sync; keeping them only pins the banner. */
+export function isUnreplayableClientError(status?: number): boolean {
+  return status === 400 || status === 403 || status === 404 || status === 409 || status === 422;
+}
+
+export function isSettledUnreplayable(item: Pick<OutboxItem, 'status' | 'lastError'>): boolean {
+  if (item.status === 'conflict') return true;
+  if (item.status !== 'failed') return false;
+  if (item.lastError === 'unmapped-temp-id') return true;
+  return isUnreplayableClientError(parseOutboxHttpStatus(item.lastError));
+}
+
+export function stillHasUnmappedTempId(value: unknown): boolean {
+  if (value == null) return false;
+  if (typeof value === 'number') return isTempId(value);
+  if (typeof value === 'string') return /(^|\/)-\d+(?=\/|$|\?)/.test(value);
+  if (Array.isArray(value)) return value.some((item) => stillHasUnmappedTempId(item));
+  if (typeof value === 'object') {
+    return Object.values(value as Record<string, unknown>).some((item) => stillHasUnmappedTempId(item));
+  }
+  return false;
+}
+
+export function collectTempIds(value: unknown, into = new Set<number>()): Set<number> {
+  if (value == null) return into;
+  if (typeof value === 'number') {
+    if (isTempId(value)) into.add(value);
+    return into;
+  }
+  if (typeof value === 'string') {
+    const re = /(^|\/)(-\d+)(?=\/|$|\?)/g;
+    let match: RegExpExecArray | null;
+    while ((match = re.exec(value))) {
+      into.add(Number(match[2]));
+    }
+    return into;
+  }
+  if (Array.isArray(value)) {
+    value.forEach((item) => collectTempIds(item, into));
+    return into;
+  }
+  if (typeof value === 'object') {
+    Object.values(value as Record<string, unknown>).forEach((item) => collectTempIds(item, into));
+  }
+  return into;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -616,7 +676,8 @@ export function isStuckSyncing(item: OutboxItem, now = Date.now()): boolean {
 }
 
 export function canAutoRetryFailed(item: OutboxItem, now = Date.now()): boolean {
-  if (item.status !== 'failed' && item.status !== 'conflict') return false;
+  if (isSettledUnreplayable(item)) return false;
+  if (item.status !== 'failed') return false;
   if ((item.attempts ?? 0) >= MAX_SYNC_ATTEMPTS) return false;
   const at = item.lastAttemptAt ? Date.parse(item.lastAttemptAt) : 0;
   return !at || now - at > STUCK_SYNC_MS;
@@ -636,5 +697,5 @@ export function pendingCount(items: OutboxItem[]): number {
 }
 
 export function conflictCount(items: OutboxItem[]): number {
-  return items.filter((item) => item.status === 'conflict' || item.status === 'failed').length;
+  return items.filter((item) => item.status === 'failed' && !isSettledUnreplayable(item)).length;
 }

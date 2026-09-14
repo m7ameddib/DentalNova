@@ -20,7 +20,12 @@ export function ProtectedRoute({ permission }: { permission?: string | string[] 
   });
 
   if (!isAuthenticated) {
-    if (!permission && location.pathname === '/' && installStatus?.deploymentMode === 'online') {
+    if (!permission && location.pathname === '/') {
+      // Public website guests should see the landing page immediately.
+      // Only USB/offline clinics skip it — and only after we know the mode.
+      if (installStatus?.deploymentMode === 'offline') {
+        return <Navigate to="/login" replace />;
+      }
       return <LandingPage />;
     }
     return <Navigate to="/login" replace />;

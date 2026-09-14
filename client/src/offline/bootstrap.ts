@@ -28,10 +28,10 @@ async function connectOrStayOffline(): Promise<void> {
   if (!useOfflineStatusStore.getState().enabled) return;
   const mark = useOfflineStatusStore.getState();
   const browserOnline = typeof navigator === 'undefined' || navigator.onLine;
-  if (!browserOnline || mark.pending > 0) {
+  if (!browserOnline) {
     mark.setConnection('offline');
+    return;
   }
-  if (!browserOnline) return;
   const up = await probeApiHealth(apiClient);
   if (up) {
     await syncWhenOnline(apiClient);
@@ -61,6 +61,7 @@ function bindFallbackLifecycle(): void {
   });
   window.setInterval(() => {
     if (!useOfflineStatusStore.getState().enabled) return;
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
     void (async () => {
       await syncWhenOnline(apiClient);
       if (useOfflineStatusStore.getState().connection === 'online') {
