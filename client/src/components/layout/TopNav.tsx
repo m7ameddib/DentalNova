@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -13,7 +13,6 @@ import {
   Sparkles,
   Menu,
   X,
-  MoreHorizontal,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { ConnectionStatusChip } from '@/components/common/ConnectionStatusChip';
@@ -29,11 +28,8 @@ export function TopNav() {
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
   const { language, setLanguage, mobileNavOpen, setMobileNavOpen } = useUiStore();
-  const [moreOpen, setMoreOpen] = useState(false);
   const isPatientWorkspaceActive =
     location.pathname === '/' || location.pathname.startsWith('/patients');
-  const isMoreActive =
-    location.pathname.startsWith('/ai-assistant') || location.pathname.startsWith('/settings');
 
   const canViewPatients = usePermission(PERMISSIONS.PATIENTS_VIEW);
   const canViewAppointments = usePermission(PERMISSIONS.APPOINTMENTS_VIEW);
@@ -42,11 +38,9 @@ export function TopNav() {
   const canViewReports = usePermission(PERMISSIONS.REPORTS_VIEW);
   const canViewSettings = usePermission(PERMISSIONS.SETTINGS_VIEW);
   const canUseAiAssistant = usePermission(PERMISSIONS.AI_ASSISTANT_USE);
-  const hasOverflow = canUseAiAssistant || canViewSettings;
 
   useEffect(() => {
     setMobileNavOpen(false);
-    setMoreOpen(false);
   }, [location.pathname, setMobileNavOpen]);
 
   useEffect(() => {
@@ -121,37 +115,13 @@ export function TopNav() {
             <BarChart3 size={16} /> {t('nav.reports')}
           </NavLink>
         )}
-        {hasOverflow && (
-          <div className="top-nav__overflow">
-            <button
-              type="button"
-              className={isMoreActive ? 'top-nav__link active' : 'top-nav__link'}
-              aria-expanded={moreOpen}
-              onClick={() => setMoreOpen((open) => !open)}
-            >
-              <MoreHorizontal size={16} /> {t('nav.more')}
-            </button>
-            <div className={moreOpen ? 'top-nav__overflow-menu top-nav__overflow-menu--open' : 'top-nav__overflow-menu'}>
-              {canUseAiAssistant && (
-                <NavLink to="/ai-assistant" className="top-nav__link" onClick={closeMenu}>
-                  <Sparkles size={16} /> {t('nav.aiAssistant')}
-                </NavLink>
-              )}
-              {canViewSettings && (
-                <NavLink to="/settings" className="top-nav__link" onClick={closeMenu}>
-                  <Settings size={16} /> {t('nav.settings')}
-                </NavLink>
-              )}
-            </div>
-          </div>
-        )}
         {canUseAiAssistant && (
-          <NavLink to="/ai-assistant" className="top-nav__link top-nav__link--drawer-only" onClick={closeMenu}>
+          <NavLink to="/ai-assistant" className="top-nav__link" onClick={closeMenu}>
             <Sparkles size={16} /> {t('nav.aiAssistant')}
           </NavLink>
         )}
         {canViewSettings && (
-          <NavLink to="/settings" className="top-nav__link top-nav__link--drawer-only" onClick={closeMenu}>
+          <NavLink to="/settings" className="top-nav__link" onClick={closeMenu}>
             <Settings size={16} /> {t('nav.settings')}
           </NavLink>
         )}

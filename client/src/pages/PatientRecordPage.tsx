@@ -14,7 +14,7 @@ import { MedicalAlertsBanner } from '@/components/patient-record/MedicalAlertsBa
 import { ClinicalVisitNotesSection } from '@/components/patient-record/ClinicalVisitNotesSection';
 import { LabCasesSection } from '@/components/patient-record/LabCasesSection';
 import { MoreClinicalSections } from '@/components/patient-record/MoreClinicalSections';
-import { WorkspaceTodayPanel } from '@/components/patient-record/WorkspaceTodayPanel';
+import { BrandLogo } from '@/components/common/BrandLogo';
 
 export function PatientRecordPage() {
   const { id } = useParams<{ id: string }>();
@@ -75,7 +75,9 @@ export function PatientRecordPage() {
           />
         </>
       ) : isNew ? null : (
-        <WorkspaceTodayPanel />
+        <div className="patient-record__empty-state" aria-hidden="true">
+          <BrandLogo variant="workspace" />
+        </div>
       )}
     </div>
   );

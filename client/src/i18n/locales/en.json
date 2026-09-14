@@ -3,14 +3,6 @@
     "name": "DentalNova",
     "poweredBy": "Powered by DibNova"
   },
-  "workspaceToday": {
-    "appointments": "Today's appointments",
-    "followUps": "Due follow-ups",
-    "noAppointments": "No appointments today",
-    "noFollowUps": "No follow-ups due today",
-    "viewCalendar": "Open calendar",
-    "viewFollowUps": "Open follow-ups"
-  },
   "landing": {
     "nav": {
       "product": "Product",

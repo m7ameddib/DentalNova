@@ -835,13 +835,6 @@ body.top-nav-menu-open {
 }
 
 @media (max-width: 1024px) {
-  .top-nav__overflow {
-    display: none;
-  }
-  .top-nav__link--drawer-only {
-    display: flex;
-  }
-
   .bottom-nav {
     display: flex;
     position: fixed;

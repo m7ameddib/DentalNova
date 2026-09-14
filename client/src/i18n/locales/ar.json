@@ -3,14 +3,6 @@
     "name": "DentalNova",
     "poweredBy": "بدعم من ديبنوفا"
   },
-  "workspaceToday": {
-    "appointments": "مواعيد اليوم",
-    "followUps": "متابعات مستحقة",
-    "noAppointments": "لا مواعيد اليوم",
-    "noFollowUps": "لا متابعات مستحقة اليوم",
-    "viewCalendar": "فتح التقويم",
-    "viewFollowUps": "فتح المتابعات"
-  },
   "landing": {
     "nav": {
       "product": "المنتج",
