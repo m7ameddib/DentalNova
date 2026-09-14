@@ -4950,6 +4950,8 @@ textarea {
   padding: 6px;
   position: sticky;
   top: 12px;
+  max-height: calc(100vh - 88px);
+  overflow-y: auto;
 }
 .settings-nav__item {
   display: flex;

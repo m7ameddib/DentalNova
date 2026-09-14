@@ -89,7 +89,9 @@ export function ClinicSyncSection({ mode }: { mode: 'online' | 'offline' }) {
       <p className="muted">{mode === 'offline' ? t('settings.clinicSync.offlineSubtitle') : t('settings.clinicSync.subtitle')}</p>
       <p className="muted">{t('settings.clinicSync.notBackup')}</p>
 
-      {status && <SyncStatusCard status={status} locale={locale} />}
+      {status && (mode === 'offline' || status.paired) && (
+        <SyncStatusCard status={status} locale={locale} />
+      )}
       {status?.lastError ? <div className="form-error-banner">{status.lastError}</div> : null}
 
       {mode === 'online' && (

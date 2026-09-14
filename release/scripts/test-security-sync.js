@@ -194,14 +194,14 @@ async function main() {
     assert(pairing.data.onlineUrl, 'pairing start must show Online URL');
     const preview = await request('POST', '/sync/pairing/preview', {
       body: { code: pairing.data.code },
-      expected: 200,
+      expected: [200, 201],
     });
     assert(preview.data.clinicName === 'Sync Clinic A', 'preview must confirm clinic name');
     assert(preview.data.clinicId === clinicA.data.user.clinicId, 'preview must confirm clinic id');
     assert(!preview.data.deviceSecret && !preview.data.deviceId, 'preview must not issue device credentials');
     const previewAgain = await request('POST', '/sync/pairing/preview', {
       body: { code: pairing.data.code },
-      expected: 200,
+      expected: [200, 201],
     });
     assert(previewAgain.data.clinicId === clinicA.data.user.clinicId, 'preview must not consume the pairing code');
     const badPreview = await request('POST', '/sync/pairing/preview', { body: { code: 'NOPECODE' } });

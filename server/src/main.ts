@@ -77,10 +77,11 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   const clientDistCandidates = [
+    path.join(__dirname, '..', '..', 'client', 'dist'),
+    path.join(process.cwd(), '..', 'client', 'dist'),
+    path.join(process.cwd(), 'client', 'dist'),
     path.join(__dirname, '..', 'public'),
     path.join(process.cwd(), 'public'),
-    path.join(__dirname, '..', '..', 'client', 'dist'),
-    path.join(process.cwd(), 'client', 'dist'),
   ];
 
   const clientDist = clientDistCandidates.find((p) => fs.existsSync(path.join(p, 'index.html')));
