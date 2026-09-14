@@ -5,24 +5,19 @@ import {
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcryptjs';
-import * as crypto from 'crypto';
 import { UsersRepository } from '../database/repositories/users.repository';
 import { PasswordResetRepository } from '../database/repositories/password-reset.repository';
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
-import { DeploymentService } from '../common/deployment.service';
-import { isValidPhone, maskPhone, normalizePhone } from '../common/phone.util';
+import { isValidPhone, normalizePhone } from '../common/phone.util';
 import { JwtSecretService } from './jwt-secret.service';
-import { SmsService } from './sms.service';
 import { PasswordResetJwtPayload } from './auth.types';
 import { PASSWORD_RESET_JWT_ISSUER } from './jwt-payload.util';
 import { PlatformService } from '../platform/platform.service';
 import { runInTenant } from '../platform/tenant-context';
 
-const OTP_LENGTH = 6;
-const OTP_TTL_MINUTES = 10;
-const OTP_MAX_ATTEMPTS = 5;
-const OTP_RATE_LIMIT = 3;
-const OTP_RATE_WINDOW_HOURS = 1;
+export const RECOVERY_CODE_ONLY =
+  'SMS verification is not available. Use the clinic recovery code from Settings or DibNova Admin.';
+
 const RESET_TOKEN_TTL = '15m';
 
 @Injectable()
@@ -30,10 +25,8 @@ export class PasswordResetService {
   constructor(
     private readonly usersRepo: UsersRepository,
     private readonly resetRepo: PasswordResetRepository,
-    private readonly smsService: SmsService,
     private readonly jwtService: JwtService,
     private readonly jwtSecret: JwtSecretService,
-    private readonly deployment: DeploymentService,
     private readonly platform: PlatformService,
     private readonly clinicSettings: ClinicSettingsRepository,
   ) {}
@@ -43,12 +36,6 @@ export class PasswordResetService {
     const directory = this.platform.findUserByUsername(username);
     if (!directory) return fn();
     return runInTenant(directory.clinicId, fn);
-  }
-
-  private ensureOnlineRecoveryEnabled(): void {
-    if (!this.deployment.isOnline()) {
-      throw new BadRequestException('Self-service password reset is available for online clinics only.');
-    }
   }
 
   async recoverWithCode(username: string, recoveryCode: string): Promise<{ resetToken: string }> {
@@ -107,105 +94,15 @@ export class PasswordResetService {
     return { usernames: user ? [user.username] : [] };
   }
 
-  async requestOtp(username: string, phone: string): Promise<{ message: string }> {
-    if (!this.deployment.isOnline()) {
-      throw new BadRequestException('Use the clinic recovery code to reset a password on this installation.');
-    }
-
-    if (!isValidPhone(phone)) {
-      throw new BadRequestException('Enter a valid phone number.');
-    }
-
-    const phoneNormalized = normalizePhone(phone);
-    const genericMessage =
-      'If the account details are correct, a verification code will be sent to the registered phone number.';
-
-    const prepared = this.inUserClinic(username.trim(), () => {
-      const user = this.usersRepo.findByUsername(username.trim());
-      if (!user || !user.isActive || !user.phoneNormalized) return null;
-      if (user.phoneNormalized !== phoneNormalized) return null;
-      const since = new Date(Date.now() - OTP_RATE_WINDOW_HOURS * 60 * 60 * 1000).toISOString();
-      if (this.resetRepo.countRecentRequestsForPhone(phoneNormalized, since) >= OTP_RATE_LIMIT) {
-        return null;
-      }
-      return user;
-    });
-    if (!prepared) {
-      return { message: genericMessage };
-    }
-
-    const code = this.generateOtp();
-    const codeHash = await bcrypt.hash(code, 10);
-    const expiresAt = new Date(Date.now() + OTP_TTL_MINUTES * 60 * 1000).toISOString();
-
-    this.inUserClinic(username.trim(), () => {
-      this.resetRepo.create({
-        userId: prepared.id,
-        phoneNormalized,
-        codeHash,
-        expiresAt,
-      });
-    });
-
-    await this.smsService.sendPasswordResetOtp(prepared.phone ?? phone, code);
-
-    return { message: genericMessage };
+  async requestOtp(_username: string, _phone: string): Promise<{ message: string }> {
+    throw new BadRequestException(RECOVERY_CODE_ONLY);
   }
 
-  async verifyOtp(username: string, phone: string, code: string): Promise<{ resetToken: string }> {
-    this.ensureOnlineRecoveryEnabled();
-
-    if (!/^\d{6}$/.test(code.trim())) {
-      throw new BadRequestException('Enter the 6-digit verification code.');
-    }
-
-    const phoneNormalized = normalizePhone(phone);
-    const directory = this.platform.isEnabled() ? this.platform.findUserByUsername(username.trim()) : undefined;
-    const verified = this.inUserClinic(username.trim(), () => {
-      const user = this.usersRepo.findByUsername(username.trim());
-      if (!user || !user.isActive || user.phoneNormalized !== phoneNormalized) {
-        return { user: null as null, otp: null as null };
-      }
-      return { user, otp: this.resetRepo.findActiveByUserId(user.id) ?? null };
-    });
-    if (!verified.user) {
-      throw new UnauthorizedException('Invalid verification code.');
-    }
-    const otp = verified.otp;
-    if (!otp) {
-      throw new UnauthorizedException('Invalid or expired verification code.');
-    }
-
-    if (otp.attemptCount >= OTP_MAX_ATTEMPTS) {
-      throw new UnauthorizedException('Too many attempts. Request a new verification code.');
-    }
-
-    const valid = await bcrypt.compare(code.trim(), otp.codeHash);
-    if (!valid) {
-      this.inUserClinic(username.trim(), () => this.resetRepo.incrementAttempts(otp.id));
-      throw new UnauthorizedException('Invalid verification code.');
-    }
-
-    this.inUserClinic(username.trim(), () => this.resetRepo.markUsed(otp.id));
-
-    const payload: PasswordResetJwtPayload = {
-      sub: verified.user.id,
-      username: verified.user.username,
-      purpose: 'password_reset',
-      clinicId: directory?.clinicId,
-    };
-
-    const resetToken = this.jwtService.sign(payload, {
-      secret: this.jwtSecret.getResetSecret(),
-      expiresIn: RESET_TOKEN_TTL,
-      issuer: PASSWORD_RESET_JWT_ISSUER,
-    });
-
-    return { resetToken };
+  async verifyOtp(_username: string, _phone: string, _code: string): Promise<{ resetToken: string }> {
+    throw new BadRequestException(RECOVERY_CODE_ONLY);
   }
 
   async resetPassword(resetToken: string, newPassword: string): Promise<{ message: string }> {
-
     if (newPassword.length < 8) {
       throw new BadRequestException('Password must be at least 8 characters.');
     }
@@ -241,11 +138,5 @@ export class PasswordResetService {
     else persist();
 
     return { message: 'Password updated successfully. You can sign in with your new password.' };
-  }
-
-  private generateOtp(): string {
-    const max = 10 ** OTP_LENGTH;
-    const num = crypto.randomInt(0, max);
-    return num.toString().padStart(OTP_LENGTH, '0');
   }
 }

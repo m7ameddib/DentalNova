@@ -201,7 +201,7 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `CORS_ORIGINS` | — | domain URL | Allowed browser origins |
 | `DOMAIN` | — | `dentalnova.dibnova.com` | Caddy HTTPS domain |
 | `GEMINI_API_KEY` | optional | optional | AI assistant. If set Online, `AI_SERVICE_SECRET` must be a unique non-default value. Leave empty if you do not need AI yet |
-| `AI_SERVICE_SECRET` | unique shared secret | unique secret | Offline proxy auth to Online `/api/ai-provider`. Never use `DentalNova.AI.Proxy.v1` or the example placeholder |
+| `AI_SERVICE_URL` | empty unless set | — | Offline AI proxy origin. **Must be set explicitly** to enable; omitting it no longer defaults to production Online |
 | `ONLINE_CLINIC_SIGNUP` | — | `open` / `invite` / `disabled` | Production Online defaults to **invite**. Create tokens via DibNova admin `POST /dibnova-admin/signup-invite` |
 | `ALLOW_DEMO_USERS` | `1` to seed demo logins | refused when `NODE_ENV=production` | Demo `doctor` / `employee` accounts |
 | `R2_ACCOUNT_ID` | optional | optional | Cloudflare R2 account id (Online should set when using object storage) |
@@ -232,7 +232,7 @@ If the process **exits on start** with a message that `GEMINI_API_KEY` is set bu
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
 
-Use the same unique secret on Offline Windows installs that proxy AI through this Online server (`AI_SERVICE_URL` + `AI_SERVICE_SECRET`). Do not weaken or skip this check.
+Use the same unique secret on Offline Windows installs that proxy AI through this Online server (`AI_SERVICE_URL` + `AI_SERVICE_SECRET`). Leave `AI_SERVICE_URL` empty to disable the Offline AI proxy — it does **not** default to production. Do not weaken or skip this check.
 
 ---
 

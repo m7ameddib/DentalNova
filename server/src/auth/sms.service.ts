@@ -1,6 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { maskPhone } from '../common/phone.util';
+
+/** SMS delivery is not shipped. Password reset uses clinic recovery codes only. */
+export const SMS_NOT_CONFIGURED =
+  'SMS password reset is not available. Use the clinic recovery code from Settings or DibNova Admin.';
 
 @Injectable()
 export class SmsService {
@@ -8,19 +11,9 @@ export class SmsService {
 
   constructor(private readonly config: ConfigService) {}
 
-  async sendPasswordResetOtp(phone: string, code: string): Promise<void> {
+  async sendPasswordResetOtp(_phone: string, _code: string): Promise<void> {
     const provider = this.config.get<string>('SMS_PROVIDER')?.trim() || 'stub';
-    const masked = maskPhone(phone);
-
-    if (provider === 'stub') {
-      this.logger.log(`Password reset OTP sent to ${masked} via stub provider`);
-      if (this.config.get<string>('PASSWORD_RESET_LOG_OTP') === 'true') {
-        this.logger.warn(`[PASSWORD_RESET_LOG_OTP] code for ${masked}: ${code}`);
-      }
-      return;
-    }
-
-    // Future: Twilio or other providers plug in here without changing auth flow.
-    this.logger.warn(`SMS provider "${provider}" is not configured; OTP for ${masked} was not delivered`);
+    this.logger.warn(`Refusing SMS OTP (provider=${provider || 'stub'}). Recovery codes only.`);
+    throw new ServiceUnavailableException(SMS_NOT_CONFIGURED);
   }
 }

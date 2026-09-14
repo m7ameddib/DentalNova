@@ -233,6 +233,10 @@ export function applyChanges(
           });
         }
       }
+      for (const change of ordered) {
+        if (change.op === 'delete' || !change.row) continue;
+        relinkForeignKeys(db, change);
+      }
     });
     txn();
   });
@@ -258,6 +262,10 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
 
   if (change.entity === 'users') {
     return applyUserLinkOnly(db, change, deviceId);
+  }
+
+  if (change.entity === 'clinic_settings') {
+    return applyClinicSettingsSingleton(db, change, deviceId);
   }
 
   if (change.op === 'delete') {
@@ -403,6 +411,75 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
 
   appendRemoteLog(db, change, deviceId, appliedId);
   return fileNumberCollision ? 'file-number-collision' : 'accepted';
+}
+
+/** Second pass so circular FKs (lab payment ↔ expense) resolve after both rows exist. */
+function relinkForeignKeys(db: Database.Database, change: SyncChangePayload): void {
+  const def = SYNC_ENTITY_BY_NAME[change.entity];
+  if (!def || !change.row || !tableExists(db, def.table)) return;
+  const localId = getLocalId(db, change.entity, change.recordUid);
+  if (localId == null) return;
+  const cols = columnsOf(db, def.table);
+  const updates: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(change.row)) {
+    if (!key.endsWith('Uid')) continue;
+    const snake = camelToSnake(key.replace(/Uid$/, 'Id'));
+    const fkEntity = def.fks[snake];
+    if (!fkEntity || !cols.includes(snake)) continue;
+    const resolved = getLocalId(db, fkEntity, value as string | null);
+    if (resolved != null) updates[snake] = resolved;
+  }
+  const assignments = Object.keys(updates)
+    .map((c) => `${c} = ?`)
+    .join(', ');
+  if (!assignments) return;
+  db.prepare(`UPDATE ${def.table} SET ${assignments} WHERE id = ?`).run(
+    ...Object.keys(updates).map((c) => updates[c]),
+    localId,
+  );
+}
+
+function applyClinicSettingsSingleton(
+  db: Database.Database,
+  change: SyncChangePayload,
+  deviceId: string | null,
+): 'accepted' | 'skipped' | string {
+  if (change.op === 'delete') {
+    appendRemoteLog(db, change, deviceId, 1);
+    return 'skipped';
+  }
+  if (!change.row) return 'empty-upsert';
+  const cols = columnsOf(db, 'clinic_settings');
+  const skip = new Set(['id', 'account_recovery_code_hash', 'logo_path', 'logo_original_name']);
+  const values: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(change.row)) {
+    if (key === 'recordUid' || key.endsWith('Uid')) continue;
+    const snake = camelToSnake(key);
+    if (cols.includes(snake) && !skip.has(snake)) values[snake] = value;
+  }
+  const exists = db.prepare(`SELECT id FROM clinic_settings WHERE id = 1`).get() as { id: number } | undefined;
+  if (exists) {
+    const assignments = Object.keys(values)
+      .map((c) => `${c} = ?`)
+      .join(', ');
+    if (assignments) {
+      db.prepare(`UPDATE clinic_settings SET ${assignments} WHERE id = 1`).run(
+        ...Object.keys(values).map((c) => values[c] ?? null),
+      );
+    }
+  } else {
+    values.id = 1;
+    const insertCols = Object.keys(values);
+    db.prepare(
+      `INSERT INTO clinic_settings (${insertCols.join(', ')}) VALUES (${insertCols.map(() => '?').join(', ')})`,
+    ).run(...insertCols.map((c) => values[c] ?? null));
+  }
+  db.prepare(`DELETE FROM sync_id_map WHERE entity = 'clinic_settings'`).run();
+  db.prepare(`INSERT INTO sync_id_map (entity, local_id, record_uid) VALUES ('clinic_settings', 1, ?)`).run(
+    change.recordUid,
+  );
+  appendRemoteLog(db, change, deviceId, 1);
+  return 'accepted';
 }
 
 function appendRemoteLog(

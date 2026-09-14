@@ -214,7 +214,8 @@ export class GeminiService {
   private getAiServiceUrl(): string | undefined {
     const raw = this.config.get<string>('AI_SERVICE_URL');
     if (raw !== undefined && raw.trim() === '') return undefined;
-    return (raw?.trim() || GeminiService.DEFAULT_AI_SERVICE_URL).replace(/\/$/, '');
+    if (!raw?.trim()) return undefined;
+    return raw.trim().replace(/\/$/, '');
   }
 
   private getApiKey(): string | undefined {

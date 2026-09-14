@@ -15,6 +15,11 @@ import { spawn } from 'child_process';
 import { APP_VERSION } from '../common/version';
 import { PathsService } from '../common/paths.service';
 import { assertInstallerChecksumPresent, missingInstallerChecksumMessage } from './installer-checksum.util';
+import {
+  assertAuthenticodeTrusted,
+  inspectAuthenticodePayload,
+  AuthenticodeInspection,
+} from './installer-authenticode.util';
 
 interface GitHubReleaseAsset {
   name: string;
@@ -148,6 +153,7 @@ export class UpdatesService {
     }
 
     const installerPath = status.downloadedPath;
+    await this.assertWindowsAuthenticode(installerPath, status.installerFileName || path.basename(installerPath));
     this.logger.log(`Launching update installer: ${installerPath}`);
 
     const child = spawn(installerPath, [], {
@@ -313,6 +319,57 @@ export class UpdatesService {
       fs.unlinkSync(installerPath);
       throw new InternalServerErrorException('Downloaded installer failed checksum verification.');
     }
+
+    if (process.platform === 'win32') {
+      await this.assertWindowsAuthenticode(installerPath, installerFileName);
+    }
+  }
+
+  private async assertWindowsAuthenticode(installerPath: string, installerFileName: string): Promise<void> {
+    const allowUnsigned =
+      (this.config.get<string>('ALLOW_UNSIGNED_UPDATES') || '').trim() === '1' &&
+      (this.config.get<string>('NODE_ENV') || '').toLowerCase() !== 'production';
+    if (allowUnsigned) {
+      this.logger.warn('ALLOW_UNSIGNED_UPDATES=1 — skipping Authenticode (not for production).');
+      return;
+    }
+    const inspection = await this.readAuthenticodeSignature(installerPath);
+    try {
+      assertAuthenticodeTrusted(
+        inspection,
+        installerFileName,
+        this.config.get<string>('UPDATE_AUTHENTICODE_PUBLISHER'),
+      );
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+  }
+
+  private readAuthenticodeSignature(installerPath: string): Promise<AuthenticodeInspection> {
+    return new Promise((resolve) => {
+      const child = spawn(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `Get-AuthenticodeSignature -FilePath ${JSON.stringify(installerPath)} | ConvertTo-Json -Compress`,
+        ],
+        { windowsHide: true },
+      );
+      let out = '';
+      child.stdout.on('data', (chunk) => {
+        out += String(chunk);
+      });
+      child.on('error', () => resolve({ status: 'UnknownError', signer: null }));
+      child.on('close', () => {
+        try {
+          resolve(inspectAuthenticodePayload(JSON.parse(out)));
+        } catch {
+          resolve({ status: 'UnknownError', signer: null });
+        }
+      });
+    });
   }
 
   private normalizeVersion(tag: string): string {

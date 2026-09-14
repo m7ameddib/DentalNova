@@ -780,7 +780,7 @@ export class PlatformService implements OnModuleInit {
     this.platformDb = new Database(file);
     this.platformDb.pragma('journal_mode = WAL');
     this.platformDb.pragma('foreign_keys = ON');
-    this.platformDb.pragma('busy_timeout = 5000');
+    this.platformDb.pragma('busy_timeout = 15000');
     this.ensureSchema();
     this.logger.log(`Online platform registry ready at ${file}`);
     this.adoptLegacyClinicIfNeeded();

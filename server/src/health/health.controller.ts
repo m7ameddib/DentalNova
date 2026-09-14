@@ -21,14 +21,16 @@ export class HealthController {
       databaseOk = false;
     }
     const status = this.installation.getStatus();
-    const body = {
+    const body: Record<string, unknown> = {
       ok: databaseOk,
-      version: APP_VERSION,
-      product: status.product,
-      phase: status.phase,
-      deploymentMode: this.deployment.getMode(),
       timestamp: new Date().toISOString(),
     };
+    if (!this.deployment.isProduction()) {
+      body.version = APP_VERSION;
+      body.product = status.product;
+      body.phase = status.phase;
+      body.deploymentMode = this.deployment.getMode();
+    }
     if (!databaseOk) {
       throw new ServiceUnavailableException(body);
     }

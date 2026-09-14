@@ -42,9 +42,11 @@ export function useClinicAutoSync() {
       if (document.visibilityState === 'visible') void syncIfPaired();
     }
 
+    const t = window.setTimeout(() => void syncIfPaired(), 2000);
     window.addEventListener('online', onOnline);
     document.addEventListener('visibilitychange', onVisible);
     return () => {
+      window.clearTimeout(t);
       window.removeEventListener('online', onOnline);
       document.removeEventListener('visibilitychange', onVisible);
     };
