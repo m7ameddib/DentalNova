@@ -5,6 +5,7 @@ import { Archive, Building2, Clock, CreditCard, FlaskConical, HardDrive, History
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { useUiStore } from '@/store/ui.store';
+import { SettingsGeneralSection } from '@/components/settings/SettingsGeneralSection';
 import { TreatmentCatalogSection } from '@/components/settings/TreatmentCatalogSection';
 import { ClinicInfoSection } from '@/components/settings/ClinicInfoSection';
 import { PaymentMethodsSection } from '@/components/settings/PaymentMethodsSection';
@@ -31,7 +32,8 @@ interface NavItem {
 
 export function SettingsPage() {
   const { t } = useTranslation();
-  const { language, setLanguage } = useUiStore();
+  const { language } = useUiStore();
+  const [activeId, setActiveId] = useState('general');
   const canManageUsers = usePermission(PERMISSIONS.USERS_MANAGE);
   const canManageTreatments = usePermission(PERMISSIONS.TREATMENTS_MANAGE);
   const canManageSettings = usePermission(PERMISSIONS.SETTINGS_MANAGE);
@@ -45,24 +47,22 @@ export function SettingsPage() {
   });
   const isOfflineMode = installStatus?.deploymentMode !== 'online';
 
-  const generalContent = (
-    <section className="settings-section">
-      <h2>{t('settings.generalTitle')}</h2>
-      <div className="lang-switch-group">
-        <button className={language === 'en' ? 'lang-btn lang-btn--active' : 'lang-btn'} onClick={() => setLanguage('en')}>
-          English
-        </button>
-        <button className={language === 'ar' ? 'lang-btn lang-btn--active' : 'lang-btn'} onClick={() => setLanguage('ar')}>
-          العربية
-        </button>
-      </div>
-      <h2 className="settings-section__sub-title">{t('settings.aboutTitle')}</h2>
-      <p className="muted">{t('settings.aboutText')}</p>
-    </section>
-  );
-
   const items: NavItem[] = useMemo(() => {
-    const list: NavItem[] = [{ id: 'general', label: t('settings.generalTitle'), icon: <SettingsIcon size={15} />, content: generalContent }];
+    const list: NavItem[] = [
+      {
+        id: 'general',
+        label: t('settings.generalTitle'),
+        icon: <SettingsIcon size={15} />,
+        content: (
+          <SettingsGeneralSection
+            onOpenSection={setActiveId}
+            canOpenClinic={canManageSettings}
+            canOpenHours={canManageSettings}
+            canOpenUsers={canManageUsers}
+          />
+        ),
+      },
+    ];
     if (canManageSettings) {
       list.push({ id: 'clinicInfo', label: t('settings.clinicInfo.title'), icon: <Building2 size={15} />, content: <ClinicInfoSection /> });
     }
@@ -165,7 +165,6 @@ export function SettingsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canManageSettings, canManageTreatments, canManageUsers, canViewAudit, canManageArchive, canManageLab, isOfflineMode, language, t]);
 
-  const [activeId, setActiveId] = useState('general');
   const active = items.find((i) => i.id === activeId) ?? items[0];
 
   return (

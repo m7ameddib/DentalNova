@@ -1,4 +1,4 @@
-import { CallHandler, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
+import { CallHandler, ConflictException, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable, of } from 'rxjs';
 import { tap } from 'rxjs/operators';
 import { DatabaseService } from '../database/database.service';
@@ -29,12 +29,16 @@ export class IdempotencyInterceptor implements NestInterceptor {
     try {
       this.ensureTable();
       const existing = this.database.connection
-        .prepare('SELECT response_json FROM request_idempotency WHERE key = ?')
-        .get(key) as { response_json: string } | undefined;
+        .prepare('SELECT method, path, response_json FROM request_idempotency WHERE key = ?')
+        .get(key) as { method: string; path: string; response_json: string } | undefined;
       if (existing) {
+        if (existing.method !== method || existing.path !== path) {
+          throw new ConflictException('Idempotency key already used for a different request');
+        }
         return of(JSON.parse(existing.response_json));
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof ConflictException) throw err;
       return next.handle();
     }
 

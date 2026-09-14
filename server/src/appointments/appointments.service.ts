@@ -23,6 +23,19 @@ export class AppointmentsService {
     private readonly audit: AuditService,
   ) {}
 
+  getById(id: number) {
+    const appointment = this.appointmentsRepo.findDetailedById(id);
+    if (!appointment) throw new NotFoundException('Appointment not found');
+    return {
+      ...appointment,
+      outsideWorkingHours: !this.workingSchedule.isWithinWorkingHours(
+        appointment.date,
+        appointment.time,
+        appointment.durationMin ?? 30,
+      ),
+    };
+  }
+
   getMonthOverview(yearMonth: string) {
     return this.appointmentsRepo.countByMonth(yearMonth);
   }
@@ -31,7 +44,14 @@ export class AppointmentsService {
     const appointments = this.appointmentsRepo.findByDate(date);
     const resolved = this.workingSchedule.resolveForDate(date);
     const slotDefs = this.workingSchedule.buildSlotsForDate(date);
-    const bookedTimes = new Set(appointments.map((a: { time: string }) => a.time));
+    const bookedTimes = new Set(
+      appointments
+        .filter(
+          (a: { status: string; appointmentType?: string }) =>
+            a.status !== 'CANCELLED' && a.status !== 'COMPLETED' && a.appointmentType !== 'EMERGENCY',
+        )
+        .map((a: { time: string }) => a.time),
+    );
     const enrichedAppointments = appointments.map((a: any) => ({
       ...a,
       outsideWorkingHours: !this.workingSchedule.isWithinWorkingHours(
@@ -176,16 +196,16 @@ export class AppointmentsService {
       patientId = null;
     }
 
-    if (this.hasOverlap(date, time, durationMin, id)) {
+    const appointmentType =
+      dto.appointmentType !== undefined ? dto.appointmentType : appointment.appointmentType;
+
+    if (appointmentType !== 'EMERGENCY' && this.hasOverlap(date, time, durationMin, id)) {
       throw new ConflictException('This time overlaps with another appointment');
     }
 
-    if (currentUser) {
+    if (appointmentType !== 'EMERGENCY' && currentUser) {
       this.assertWorkingHours(date, time, durationMin, dto.allowOutsideHours, currentUser);
     }
-
-    const appointmentType =
-      dto.appointmentType !== undefined ? dto.appointmentType : appointment.appointmentType;
 
     const updated = this.appointmentsRepo.update(id, {
       patientId,

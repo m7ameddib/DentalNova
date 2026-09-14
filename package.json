@@ -36,7 +36,8 @@
     "release:test-licensing": "node release/scripts/test-offline-licensing.js",
     "release:test-license-rotation": "node release/scripts/test-license-key-rotation.js",
     "test:online-multiclinic": "node release/scripts/test-online-multiclinic.js",
-    "test:offline-fallback": "npx --yes tsx --test client/src/offline/core.test.ts"
+    "test:offline-fallback": "npx --yes tsx --test client/src/offline/core.test.ts",
+    "test:unit": "npx --yes tsx --test client/src/offline/core.test.ts client/src/utils/date.test.ts client/src/utils/landingPath.test.ts server/src/common/money.util.test.ts"
   },
   "devDependencies": {
     "cross-env": "^7.0.3"

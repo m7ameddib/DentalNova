@@ -6936,4 +6936,348 @@ textarea {
   }
 }
 
+/* ---------- Visual CHANGE list (27 items) ---------- */
+
+.pwa-install-banner {
+  padding: 6px 12px;
+  font-size: 12px;
+  gap: 8px;
+  flex-wrap: nowrap;
+}
+
+.top-nav {
+  flex-wrap: nowrap;
+  gap: 12px;
+}
+.top-nav__links {
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+.top-nav__link {
+  padding: 6px 10px;
+  font-size: 13px;
+}
+.top-nav__overflow {
+  position: relative;
+}
+.top-nav__overflow-menu {
+  display: none;
+  position: absolute;
+  inset-inline-start: 0;
+  top: calc(100% + 4px);
+  min-width: 200px;
+  padding: 6px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(15, 23, 42, 0.12);
+  z-index: 20;
+  flex-direction: column;
+}
+.top-nav__overflow-menu--open {
+  display: flex;
+}
+.top-nav__link--drawer-only {
+  display: none;
+}
+
+.trial-chip--compact {
+  max-width: none;
+  margin-top: 2px;
+  padding: 1px 6px;
+  font-size: 10px;
+  align-self: flex-end;
+}
+
+.app-shell__footer {
+  display: none;
+}
+
+.patient-record__medical-alerts {
+  flex: 1 1 320px;
+  width: auto;
+  max-width: 42%;
+  min-width: 240px;
+}
+.medical-alerts-section--empty {
+  background: #fffbeb;
+}
+.medical-alerts-section--alert {
+  background: #fff7ed;
+  border-color: #f59e0b;
+}
+.medical-alerts-section__empty-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  list-style: none;
+}
+.patient-record__medical-alerts .medical-alerts-section--empty,
+.patient-record__medical-alerts .medical-alerts-section--alert {
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.patient-record__main-row:has(.section-card--appointments-empty) {
+  grid-template-columns: minmax(0, 72fr) minmax(240px, 20fr) minmax(168px, 10fr);
+}
+
+.patient-identity-form {
+  max-width: 640px;
+}
+
+.account-summary__row--planned,
+.account-summary__row--paid {
+  font-weight: 700;
+}
+.account-summary__row--balance-quiet {
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.workspace-today-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-width: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+}
+.workspace-today-panel__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.workspace-today-panel__heading h2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  font-size: 14px;
+}
+.workspace-today-panel__list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.workspace-today-panel__list a {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  text-decoration: none;
+  color: inherit;
+  padding: 8px 10px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+.workspace-today-panel__list a:hover {
+  border-color: var(--color-primary);
+}
+.workspace-today-panel__empty {
+  margin: 8px 0 0;
+}
+
+.more-clinical {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.more-clinical__tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.more-clinical__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: white;
+  color: var(--color-text-muted);
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+.more-clinical__tab--active {
+  background: var(--color-primary-soft);
+  color: var(--color-primary);
+  border-color: transparent;
+}
+
+.settings-general__facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+  margin: 16px 0;
+}
+.settings-general__facts dt {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+.settings-general__facts dd {
+  margin: 2px 0 0;
+  font-weight: 700;
+}
+.settings-general__shortcuts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.simple-money-chart {
+  margin-top: 16px;
+  padding: 12px 14px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+}
+.simple-money-chart__title {
+  margin: 0 0 10px;
+  font-size: 14px;
+}
+.simple-money-chart__bars {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.simple-money-chart__bars li {
+  display: grid;
+  grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr) auto;
+  gap: 8px;
+  align-items: center;
+}
+.simple-money-chart__label,
+.simple-money-chart__value {
+  font-size: 12px;
+}
+.simple-money-chart__value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.simple-money-chart__track {
+  height: 8px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+.simple-money-chart__fill {
+  display: block;
+  height: 100%;
+  background: var(--color-primary);
+  border-radius: inherit;
+}
+
+.empty-state-compact {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 16px 0;
+}
+.empty-state-compact p {
+  margin: 0;
+  color: var(--color-text-muted);
+}
+
+.follow-up-date-bar__input,
+.follow-up-date-bar input[type='date'] {
+  width: auto;
+  max-width: 11.5rem;
+}
+
+.month-agenda {
+  min-height: 0;
+  padding: 10px;
+}
+.month-agenda__cell {
+  min-height: 56px;
+  padding: 6px 4px;
+  gap: 2px;
+}
+.month-agenda__cell-count {
+  font-size: 0.85rem;
+  min-width: 28px;
+  padding: 2px 8px;
+}
+
+.appointment-card__patient {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: unset;
+  font-size: 13px;
+}
+.appointment-card__time {
+  overflow: visible;
+  text-overflow: unset;
+}
+
+.mobile-day-agenda {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: 10px;
+}
+.mobile-day-agenda .week-agenda__mobile-strip {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 4px;
+  margin-bottom: 10px;
+}
+.mobile-day-agenda__title {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+.mobile-day-agenda__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.mobile-day-agenda__card {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 10px 12px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  text-align: start;
+  font: inherit;
+  cursor: pointer;
+}
+.mobile-day-agenda__time {
+  font-size: 13px;
+  font-weight: 700;
+}
+.mobile-day-agenda__name {
+  font-size: 15px;
+  font-weight: 700;
+}
+.mobile-day-agenda__reason {
+  font-size: 12px;
+  color: var(--color-text-muted);
+}
+
+.bottom-nav {
+  display: none;
+}
+
 

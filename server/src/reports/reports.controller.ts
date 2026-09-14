@@ -2,10 +2,12 @@ import { Controller, Get, Query, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { PermissionsGuard } from '../auth/guards/permissions.guard';
 import { RequirePermissions } from '../auth/decorators/permissions.decorator';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
 import { PERMISSIONS } from '../common/rbac.constants';
 import { ReportsService } from './reports.service';
 import { ReportPeriodDto } from './dto/report-period.dto';
 import { AppointmentStatus } from '../common/types';
+import { AuthenticatedUser } from '../auth/auth.types';
 
 @UseGuards(JwtAuthGuard, PermissionsGuard)
 @Controller('reports')
@@ -20,8 +22,9 @@ export class ReportsController {
 
   @RequirePermissions(PERMISSIONS.REPORTS_VIEW)
   @Get('summary')
-  summary(@Query() query: ReportPeriodDto) {
-    return this.reportsService.getSummary(query);
+  summary(@Query() query: ReportPeriodDto, @CurrentUser() user: AuthenticatedUser) {
+    const includeFinancial = user.permissions.includes(PERMISSIONS.REPORTS_FINANCIAL_VIEW);
+    return this.reportsService.getSummary(query, includeFinancial);
   }
 
   /** Treatment Value / Discounts drill-down. `onlyDiscounted=true` filters to Discount > 0. */

@@ -86,7 +86,7 @@ export class PaymentsRepository {
          LEFT JOIN payment_methods pm ON pm.code = p.method
          LEFT JOIN users vu ON vu.id = p.voided_by_id
          JOIN patients pat ON pat.id = p.patient_id
-         WHERE date(p.date) BETWEEN date(?) AND date(?)
+         WHERE ${ACTIVE_PAYMENT_SQL} AND date(p.date) BETWEEN date(?) AND date(?)
          ORDER BY p.date DESC, p.id DESC`,
       )
       .all(fromIso, toIso) as Record<string, unknown>[];

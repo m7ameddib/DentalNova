@@ -142,14 +142,15 @@ export function DailyReportPage() {
 
       <p className="muted daily-report-page__date">
         {formatDateDisplay(report.date, language)}
-        {report.generatedAt && (
-          <>
-            {' · '}
-            {t('dailyReport.createdAt', {
-              datetime: formatDateTimeDisplay(report.generatedAt, language),
-            })}
-          </>
-        )}
+        {(() => {
+          const created = report.generatedAt ? formatDateTimeDisplay(report.generatedAt, language) : '';
+          return created ? (
+            <>
+              {' · '}
+              {t('dailyReport.createdAt', { datetime: created })}
+            </>
+          ) : null;
+        })()}
       </p>
 
       <div className="daily-report-summary">

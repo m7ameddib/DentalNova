@@ -47,6 +47,7 @@ export class UpdatePatientDto {
   @IsInt()
   guarantorId?: number | null;
 
+  /** Accepted for backward compatibility; ignored. Use account discount entries. */
   @IsOptional()
   @IsNumber()
   @Min(0)

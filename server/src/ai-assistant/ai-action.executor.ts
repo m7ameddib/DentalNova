@@ -15,6 +15,7 @@ import { CreateTreatmentDto } from '../treatments/dto/create-treatment.dto';
 import { CreatePaymentDto } from '../payments/dto/create-payment.dto';
 import { CreateAppointmentDto } from '../appointments/dto/create-appointment.dto';
 import { UpdateAppointmentDto } from '../appointments/dto/create-appointment.dto';
+import { localTodayIso } from '../common/local-date.util';
 import {
   AI_ACTION_PERMISSIONS,
   AI_PRINT_ACTIONS,
@@ -97,7 +98,7 @@ export class AiActionExecutor {
         }));
       }
       case 'get_daily_appointments': {
-        const date = String(params.date ?? new Date().toISOString().slice(0, 10));
+        const date = String(params.date ?? localTodayIso());
         const schedule = this.appointmentsService.getDaySchedule(date);
         return schedule.appointments.map((a) => ({
           id: a.id,
@@ -362,14 +363,14 @@ export class AiActionExecutor {
         break;
       }
       case 'print_daily_appointments': {
-        const date = String(params.date ?? new Date().toISOString().slice(0, 10));
+        const date = String(params.date ?? localTodayIso());
         printParams.date = date;
         description = `AI Assistant print daily appointments for ${date}`;
         message = `Opening daily appointments print for ${date}.`;
         break;
       }
       case 'print_financial_report': {
-        const today = new Date().toISOString().slice(0, 10);
+        const today = localTodayIso();
         const from = String(params.from ?? today);
         const to = String(params.to ?? today);
         printParams.from = from;

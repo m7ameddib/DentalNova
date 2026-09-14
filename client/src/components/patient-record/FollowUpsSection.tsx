@@ -6,11 +6,14 @@ import { SectionCard } from '@/components/common/SectionCard';
 import { followUpsApi } from '@/api/follow-ups.api';
 import { useUiStore } from '@/store/ui.store';
 import { formatDateDisplay } from '@/utils/date';
+import { usePermission } from '@/hooks/usePermission';
+import { PERMISSIONS } from '@/constants/permissions';
 
 export function FollowUpsSection({ patientId }: { patientId: number }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { language } = useUiStore();
+  const canManageFollowUps = usePermission(PERMISSIONS.FOLLOWUPS_MANAGE);
 
   const { data } = useQuery({
     queryKey: ['patient-follow-ups', patientId],
@@ -25,7 +28,7 @@ export function FollowUpsSection({ patientId }: { patientId: number }) {
     <SectionCard
       title={t('patientRecord.sections.followUps')}
       icon={<ClipboardList size={16} />}
-      onAdd={() => navigate(`/follow-ups?patientId=${patientId}`)}
+      onAdd={canManageFollowUps ? () => navigate(`/follow-ups?patientId=${patientId}`) : undefined}
       addTitle={t('followUp.viewDetails') ?? ''}
       className="section-card--follow-ups"
     >

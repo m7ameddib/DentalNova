@@ -1,22 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery } from '@tanstack/react-query';
-import {
-  Bot,
-  Camera,
-  ImagePlus,
-  Loader2,
-  Mic,
-  Send,
-  Sparkles,
-  User,
-} from 'lucide-react';
-import {
-  aiAssistantApi,
-  AiChatMessage,
-  AiImageAnalysis,
-  AiProposedAction,
-} from '@/api/ai-assistant.api';
+import { Camera, ImagePlus, Loader2, Mic, Send } from 'lucide-react';
+import { aiAssistantApi, AiImageAnalysis, AiProposedAction } from '@/api/ai-assistant.api';
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -39,7 +25,7 @@ function fileToBase64(file: File): Promise<{ base64: string; mime: string; previ
 
 function ImageAnalysisCard({ analysis, t }: { analysis: AiImageAnalysis; t: (k: string) => string }) {
   return (
-    <div className="ai-analysis-card">
+    <div className="ops-ai-card">
       <h4>{t('aiAssistant.imageAnalysis.title')}</h4>
       {analysis.patientName && (
         <p>
@@ -47,7 +33,7 @@ function ImageAnalysisCard({ analysis, t }: { analysis: AiImageAnalysis; t: (k: 
         </p>
       )}
       {analysis.treatments.length > 0 && (
-        <div className="ai-analysis-card__treatments">
+        <div>
           <strong>{t('aiAssistant.imageAnalysis.detectedTreatments')}:</strong>
           <ul>
             {analysis.treatments.map((tr, idx) => (
@@ -61,7 +47,7 @@ function ImageAnalysisCard({ analysis, t }: { analysis: AiImageAnalysis; t: (k: 
         </div>
       )}
       {analysis.notes && (
-        <p className="ai-analysis-card__notes">
+        <p>
           <strong>{t('aiAssistant.imageAnalysis.notes')}:</strong> {analysis.notes}
         </p>
       )}
@@ -83,17 +69,17 @@ function ConfirmationCard({
   t: (k: string) => string;
 }) {
   return (
-    <div className="ai-confirm-card">
+    <div className="ops-ai-card ops-ai-confirm">
       <h4>{action.label}</h4>
-      <dl className="ai-confirm-card__fields">
+      <dl>
         {Object.entries(action.display).map(([key, value]) => (
-          <div key={key} className="ai-confirm-card__row">
+          <div key={key} className="ops-ai-kv">
             <dt>{key}</dt>
             <dd>{value}</dd>
           </div>
         ))}
       </dl>
-      <div className="ai-confirm-card__actions">
+      <div className="ops-row-actions">
         <button type="button" className="btn btn--primary btn--small" onClick={onConfirm} disabled={isPending}>
           {isPending ? <Loader2 size={14} className="spin" /> : null}
           {t('aiAssistant.confirm.add')}
@@ -236,168 +222,157 @@ export function AiAssistantPage() {
   }
 
   const isLoading = chatMutation.isPending || executeMutation.isPending;
+  const isFresh = messages.length <= 1 && !activeConfirmation;
 
   if (!user?.id || !hydrated) {
     return <p className="muted">{t('common.loading')}</p>;
   }
 
   return (
-    <div className="ai-assistant-page">
-      <header className="ai-assistant-page__header">
-        <div className="ai-assistant-page__title">
-          <Sparkles size={22} />
-          <div>
-            <h1>{t('aiAssistant.title')}</h1>
-            <p className="muted">{t('aiAssistant.subtitle')}</p>
-          </div>
+    <div className="ops-shell ai-page">
+      <header className="ops-page-head">
+        <div className="ops-page-head-copy">
+          <h1>{t('aiAssistant.title')}</h1>
+          <p>{t('aiAssistant.subtitle')}</p>
         </div>
         {status && (
-          <div className={`ai-assistant-page__status${status.configured ? ' ai-assistant-page__status--ok' : ''}`}>
-            <Bot size={14} />
-            {status.configured
-              ? t('aiAssistant.statusReady', { model: status.model })
-              : t('aiAssistant.statusNotConfigured')}
-          </div>
+          <span className={`ops-status-chip${status.configured ? ' on' : ''}`}>
+            {status.configured ? t('aiAssistant.statusOn') : t('aiAssistant.statusNotConfigured')}
+          </span>
         )}
       </header>
 
-      {!status?.configured && (
-        <div className="ai-assistant-banner ai-assistant-banner--warn">
-          {t('aiAssistant.configureHint')}
-        </div>
-      )}
+      {!status?.configured && <div className="ops-banner is-warn">{t('aiAssistant.configureHint')}</div>}
 
-      <div className="ai-assistant-disclaimer muted">{t('aiAssistant.medicalDisclaimer')}</div>
+      <div className="ops-ai-layout">
+        <div className="ops-ai-thread">
+          <div className="ops-ai-msgs">
+            {isFresh ? (
+              <div className="ops-ai-empty">
+                <h2>{t('aiAssistant.emptyTitle')}</h2>
+                <p>{messages[0]?.content || t('aiAssistant.welcome')}</p>
+                <div className="ops-suggest">
+                  {[1, 2, 3, 4].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setInput(t(`aiAssistant.example${n}`))}
+                    >
+                      {t(`aiAssistant.example${n}`)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              messages.map((msg, idx) => (
+                <div key={idx} className={`ops-msg ${msg.role}`}>
+                  {msg.imagePreview && <img src={msg.imagePreview} alt="" className="ops-ai-img" />}
+                  <p>{msg.content}</p>
+                  {msg.imageAnalysis && <ImageAnalysisCard analysis={msg.imageAnalysis} t={t} />}
+                </div>
+              ))
+            )}
 
-      <div className="ai-assistant-chat">
-        <div className="ai-assistant-chat__messages">
-          {messages.map((msg, idx) => (
-            <div
-              key={idx}
-              className={`ai-chat-bubble ai-chat-bubble--${msg.role}`}
-            >
-              <div className="ai-chat-bubble__avatar">
-                {msg.role === 'assistant' ? <Bot size={16} /> : <User size={16} />}
+            {activeConfirmation && (
+              <ConfirmationCard
+                action={activeConfirmation}
+                onConfirm={() =>
+                  executeMutation.mutate({
+                    action: activeConfirmation.action,
+                    params: activeConfirmation.params,
+                  })
+                }
+                onCancel={() => setActiveConfirmation(null)}
+                isPending={executeMutation.isPending}
+                t={t}
+              />
+            )}
+
+            {isLoading && (
+              <div className="ops-msg system">
+                <Loader2 size={16} className="spin" /> {t('aiAssistant.thinking')}
               </div>
-              <div className="ai-chat-bubble__body">
-                {msg.imagePreview && (
-                  <img src={msg.imagePreview} alt="" className="ai-chat-bubble__image" />
-                )}
-                <p>{msg.content}</p>
-                {msg.imageAnalysis && <ImageAnalysisCard analysis={msg.imageAnalysis} t={t} />}
-              </div>
+            )}
+
+            <div ref={chatEndRef} />
+          </div>
+
+          {error && <div className="ops-banner is-warn ops-ai-error">{error}</div>}
+
+          {pendingImage && (
+            <div className="ops-ai-preview">
+              <img src={pendingImage.preview} alt="" />
+              <button type="button" className="link-btn" onClick={() => setPendingImage(null)}>
+                {t('common.cancel')}
+              </button>
             </div>
-          ))}
-
-          {activeConfirmation && (
-            <ConfirmationCard
-              action={activeConfirmation}
-              onConfirm={() =>
-                executeMutation.mutate({
-                  action: activeConfirmation.action,
-                  params: activeConfirmation.params,
-                })
-              }
-              onCancel={() => setActiveConfirmation(null)}
-              isPending={executeMutation.isPending}
-              t={t}
-            />
           )}
 
-          {isLoading && (
-            <div className="ai-chat-loading">
-              <Loader2 size={18} className="spin" />
-              {t('aiAssistant.thinking')}
+          <div className="ops-ai-composer">
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={t('aiAssistant.inputPlaceholder') ?? ''}
+              rows={3}
+              disabled={isLoading}
+            />
+            <div className="ops-ai-tools">
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                title={t('aiAssistant.uploadImage') ?? ''}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isLoading}
+              >
+                <ImagePlus size={16} /> {t('aiAssistant.uploadImage')}
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                title={t('aiAssistant.camera') ?? ''}
+                onClick={() => cameraInputRef.current?.click()}
+                disabled={isLoading}
+              >
+                <Camera size={16} /> {t('aiAssistant.camera')}
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost btn--small"
+                title={t('aiAssistant.voiceComingSoon') ?? ''}
+                disabled
+              >
+                <Mic size={16} /> {t('aiAssistant.voiceComingSoon')}
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary ops-ai-send"
+                onClick={handleSend}
+                disabled={isLoading || (!input.trim() && !pendingImage)}
+              >
+                {isLoading ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                hidden
+                onChange={(e) => handleImageSelect(e.target.files?.[0] ?? null)}
+              />
+              <input
+                ref={cameraInputRef}
+                type="file"
+                accept="image/*"
+                capture="environment"
+                hidden
+                onChange={(e) => handleImageSelect(e.target.files?.[0] ?? null)}
+              />
             </div>
-          )}
-
-          <div ref={chatEndRef} />
-        </div>
-
-        {error && <div className="form-error-banner ai-assistant-chat__error">{error}</div>}
-
-        {pendingImage && (
-          <div className="ai-assistant-preview">
-            <img src={pendingImage.preview} alt="" />
-            <button type="button" className="link-btn" onClick={() => setPendingImage(null)}>
-              {t('common.cancel')}
-            </button>
           </div>
-        )}
-
-        <div className="ai-assistant-input">
-          <div className="ai-assistant-input__tools">
-            <button
-              type="button"
-              className="icon-btn"
-              title={t('aiAssistant.uploadImage') ?? ''}
-              onClick={() => fileInputRef.current?.click()}
-              disabled={isLoading}
-            >
-              <ImagePlus size={18} />
-            </button>
-            <button
-              type="button"
-              className="icon-btn"
-              title={t('aiAssistant.camera') ?? ''}
-              onClick={() => cameraInputRef.current?.click()}
-              disabled={isLoading}
-            >
-              <Camera size={18} />
-            </button>
-            <button
-              type="button"
-              className="icon-btn icon-btn--disabled"
-              title={t('aiAssistant.voiceComingSoon') ?? ''}
-              disabled
-            >
-              <Mic size={18} />
-            </button>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              hidden
-              onChange={(e) => handleImageSelect(e.target.files?.[0] ?? null)}
-            />
-            <input
-              ref={cameraInputRef}
-              type="file"
-              accept="image/*"
-              capture="environment"
-              hidden
-              onChange={(e) => handleImageSelect(e.target.files?.[0] ?? null)}
-            />
-          </div>
-          <textarea
-            className="ai-assistant-input__field"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={t('aiAssistant.inputPlaceholder') ?? ''}
-            rows={2}
-            disabled={isLoading}
-          />
-          <button
-            type="button"
-            className="btn btn--primary ai-assistant-input__send"
-            onClick={handleSend}
-            disabled={isLoading || (!input.trim() && !pendingImage)}
-          >
-            <Send size={16} />
-          </button>
         </div>
       </div>
 
-      <aside className="ai-assistant-examples">
-        <h3>{t('aiAssistant.examplesTitle')}</h3>
-        <ul>
-          <li>{t('aiAssistant.example1')}</li>
-          <li>{t('aiAssistant.example2')}</li>
-          <li>{t('aiAssistant.example3')}</li>
-          <li>{t('aiAssistant.example4')}</li>
-        </ul>
-      </aside>
+      <p className="ops-disclaimer">{t('aiAssistant.medicalDisclaimer')}</p>
     </div>
   );
 }

@@ -50,6 +50,15 @@ import { OdontogramPreviewPage } from '@/pages/OdontogramPreviewPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
 import { OnlineStatusBanner } from '@/components/common/OnlineStatusBanner';
 import { PwaInstallBanner } from '@/components/common/PwaInstallBanner';
+import { useAuthStore } from '@/store/auth.store';
+import { defaultLandingPath } from '@/utils/landingPath';
+
+function FallbackRedirect() {
+  const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const user = useAuthStore((s) => s.user);
+  if (!isAuthenticated) return <Navigate to="/" replace />;
+  return <Navigate to={defaultLandingPath(user?.permissions)} replace />;
+}
 
 export default function App() {
 
@@ -168,11 +177,11 @@ export default function App() {
 
 
 
-          <Route path="/home" element={<Navigate to="/" replace />} />
+          <Route path="/home" element={<FallbackRedirect />} />
 
-          <Route path="/patients" element={<Navigate to="/" replace />} />
+          <Route path="/patients" element={<FallbackRedirect />} />
 
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<FallbackRedirect />} />
 
         </Routes>
 

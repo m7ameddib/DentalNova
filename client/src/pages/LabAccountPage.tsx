@@ -202,31 +202,39 @@ export function LabAccountPage() {
             <Wallet size={22} /> {t('labCases.accounts.title')}
           </h1>
         </div>
-        <table className="patients-table">
-          <thead>
-            <tr>
-              <th>{t('labCases.labName')}</th>
-              <th>{t('labCases.accounts.total')}</th>
-              <th>{t('labCases.accounts.paid')}</th>
-              <th>{t('labCases.accounts.remaining')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sortedAccounts.map((row) => (
-              <tr key={row.labNameId}>
-                <td>
-                  <Link to={`/lab-accounts/${row.labNameId}`} className="link-btn">
-                    {row.labName}
-                  </Link>
-                </td>
-                <td>{formatMoney(row.totalCents)}</td>
-                <td>{formatMoney(row.paidCents)}</td>
-                <td>{formatMoney(row.remainingCents)}</td>
+        {sortedAccounts.length === 0 ? (
+          <div className="empty-state-compact">
+            <p>{t('labCases.accounts.emptyTitle')}</p>
+            <Link to="/lab-cases" className="btn btn--primary btn--small">
+              {t('labCases.accounts.emptyCta')}
+            </Link>
+          </div>
+        ) : (
+          <table className="patients-table">
+            <thead>
+              <tr>
+                <th>{t('labCases.labName')}</th>
+                <th>{t('labCases.accounts.total')}</th>
+                <th>{t('labCases.accounts.paid')}</th>
+                <th>{t('labCases.accounts.remaining')}</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-        {sortedAccounts.length === 0 && <p className="muted">{t('labCases.accounts.selectLab')}</p>}
+            </thead>
+            <tbody>
+              {sortedAccounts.map((row) => (
+                <tr key={row.labNameId}>
+                  <td>
+                    <Link to={`/lab-accounts/${row.labNameId}`} className="link-btn">
+                      {row.labName}
+                    </Link>
+                  </td>
+                  <td>{formatMoney(row.totalCents)}</td>
+                  <td>{formatMoney(row.paidCents)}</td>
+                  <td>{formatMoney(row.remainingCents)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
       </div>
     );
   }

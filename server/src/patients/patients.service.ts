@@ -9,6 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { remainingCents } from '../common/money.util';
 
 @Injectable()
 export class PatientsService {
@@ -77,13 +78,12 @@ export class PatientsService {
     if (payload.dateOfBirth) {
       payload.approxAge = undefined;
     }
+    delete payload.accountDiscount;
     const repoInput: UpdatePatientInput = {
       ...payload,
       approxAge: payload.dateOfBirth ? null : payload.approxAge,
     };
-    if (payload.accountDiscount !== undefined) {
-      repoInput.accountDiscountCents = Math.round(payload.accountDiscount * 100);
-    }
+    // Legacy patients.account_discount_cents is unused — balances come from account_discounts.
     const updated = this.patientsRepo.update(id, repoInput);
     if (!updated) throw new NotFoundException('Patient not found');
     this.audit.log({
@@ -149,7 +149,7 @@ export class PatientsService {
       accountDiscountCents,
       totalCostCents,
       totalPaidCents,
-      remainingCents: totalCostCents - totalPaidCents,
+      remainingCents: remainingCents(totalCostCents, totalPaidCents),
       lastPayments,
       lastDiscounts,
     };

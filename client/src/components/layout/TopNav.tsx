@@ -13,6 +13,7 @@ import {
   Sparkles,
   Menu,
   X,
+  MoreHorizontal,
 } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { ConnectionStatusChip } from '@/components/common/ConnectionStatusChip';
@@ -27,28 +28,33 @@ export function TopNav() {
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
   const logout = useAuthStore((s) => s.logout);
-  const { language, setLanguage } = useUiStore();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const { language, setLanguage, mobileNavOpen, setMobileNavOpen } = useUiStore();
+  const [moreOpen, setMoreOpen] = useState(false);
   const isPatientWorkspaceActive =
     location.pathname === '/' || location.pathname.startsWith('/patients');
+  const isMoreActive =
+    location.pathname.startsWith('/ai-assistant') || location.pathname.startsWith('/settings');
 
+  const canViewPatients = usePermission(PERMISSIONS.PATIENTS_VIEW);
   const canViewAppointments = usePermission(PERMISSIONS.APPOINTMENTS_VIEW);
   const canViewFollowUps = usePermission(PERMISSIONS.FOLLOWUPS_MANAGE);
   const canViewLabCases = usePermission(PERMISSIONS.LAB_CASES_MANAGE);
   const canViewReports = usePermission(PERMISSIONS.REPORTS_VIEW);
   const canViewSettings = usePermission(PERMISSIONS.SETTINGS_VIEW);
   const canUseAiAssistant = usePermission(PERMISSIONS.AI_ASSISTANT_USE);
+  const hasOverflow = canUseAiAssistant || canViewSettings;
 
   useEffect(() => {
-    setMenuOpen(false);
-  }, [location.pathname]);
+    setMobileNavOpen(false);
+    setMoreOpen(false);
+  }, [location.pathname, setMobileNavOpen]);
 
   useEffect(() => {
-    document.body.classList.toggle('top-nav-menu-open', menuOpen);
+    document.body.classList.toggle('top-nav-menu-open', mobileNavOpen);
     return () => document.body.classList.remove('top-nav-menu-open');
-  }, [menuOpen]);
+  }, [mobileNavOpen]);
 
-  const closeMenu = () => setMenuOpen(false);
+  const closeMenu = () => setMobileNavOpen(false);
 
   return (
     <header className="top-nav">
@@ -60,15 +66,15 @@ export function TopNav() {
       <button
         type="button"
         className="top-nav__menu-btn icon-btn"
-        aria-expanded={menuOpen}
+        aria-expanded={mobileNavOpen}
         aria-controls="top-nav-menu"
-        aria-label={menuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
-        onClick={() => setMenuOpen((open) => !open)}
+        aria-label={mobileNavOpen ? t('nav.closeMenu') : t('nav.openMenu')}
+        onClick={() => setMobileNavOpen(!mobileNavOpen)}
       >
-        {menuOpen ? <X size={18} /> : <Menu size={18} />}
+        {mobileNavOpen ? <X size={18} /> : <Menu size={18} />}
       </button>
 
-      {menuOpen && (
+      {mobileNavOpen && (
         <button
           type="button"
           className="top-nav__backdrop"
@@ -79,15 +85,17 @@ export function TopNav() {
 
       <nav
         id="top-nav-menu"
-        className={menuOpen ? 'top-nav__links top-nav__links--open' : 'top-nav__links'}
+        className={mobileNavOpen ? 'top-nav__links top-nav__links--open' : 'top-nav__links'}
       >
-        <NavLink
-          to="/"
-          className={isPatientWorkspaceActive ? 'top-nav__link active' : 'top-nav__link'}
-          onClick={closeMenu}
-        >
-          <Users size={16} /> {t('nav.patientWorkspace')}
-        </NavLink>
+        {canViewPatients && (
+          <NavLink
+            to="/"
+            className={isPatientWorkspaceActive ? 'top-nav__link active' : 'top-nav__link'}
+            onClick={closeMenu}
+          >
+            <Users size={16} /> {t('nav.patientWorkspace')}
+          </NavLink>
+        )}
         {canViewAppointments && (
           <NavLink to="/appointments" className="top-nav__link" onClick={closeMenu}>
             <CalendarDays size={16} /> {t('nav.appointments')}
@@ -113,13 +121,37 @@ export function TopNav() {
             <BarChart3 size={16} /> {t('nav.reports')}
           </NavLink>
         )}
+        {hasOverflow && (
+          <div className="top-nav__overflow">
+            <button
+              type="button"
+              className={isMoreActive ? 'top-nav__link active' : 'top-nav__link'}
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen((open) => !open)}
+            >
+              <MoreHorizontal size={16} /> {t('nav.more')}
+            </button>
+            <div className={moreOpen ? 'top-nav__overflow-menu top-nav__overflow-menu--open' : 'top-nav__overflow-menu'}>
+              {canUseAiAssistant && (
+                <NavLink to="/ai-assistant" className="top-nav__link" onClick={closeMenu}>
+                  <Sparkles size={16} /> {t('nav.aiAssistant')}
+                </NavLink>
+              )}
+              {canViewSettings && (
+                <NavLink to="/settings" className="top-nav__link" onClick={closeMenu}>
+                  <Settings size={16} /> {t('nav.settings')}
+                </NavLink>
+              )}
+            </div>
+          </div>
+        )}
         {canUseAiAssistant && (
-          <NavLink to="/ai-assistant" className="top-nav__link" onClick={closeMenu}>
+          <NavLink to="/ai-assistant" className="top-nav__link top-nav__link--drawer-only" onClick={closeMenu}>
             <Sparkles size={16} /> {t('nav.aiAssistant')}
           </NavLink>
         )}
         {canViewSettings && (
-          <NavLink to="/settings" className="top-nav__link" onClick={closeMenu}>
+          <NavLink to="/settings" className="top-nav__link top-nav__link--drawer-only" onClick={closeMenu}>
             <Settings size={16} /> {t('nav.settings')}
           </NavLink>
         )}
@@ -143,10 +175,10 @@ export function TopNav() {
           </div>
 
           <div className="top-nav__user">
-            <TrialRemainingChip compact />
             <div className="top-nav__user-info">
               <span className="top-nav__user-name">{user?.fullName}</span>
               <span className="top-nav__user-role">{user?.roleLabel}</span>
+              <TrialRemainingChip compact />
             </div>
             <button className="icon-btn" title={t('common.logout') ?? ''} onClick={logout}>
               <LogOut size={16} />
@@ -173,10 +205,10 @@ export function TopNav() {
       </div>
 
       <div className="top-nav__user top-nav__user--desktop">
-        <TrialRemainingChip compact />
         <div className="top-nav__user-info">
           <span className="top-nav__user-name">{user?.fullName}</span>
           <span className="top-nav__user-role">{user?.roleLabel}</span>
+          <TrialRemainingChip compact />
         </div>
         <button className="icon-btn" title={t('common.logout') ?? ''} onClick={logout}>
           <LogOut size={16} />

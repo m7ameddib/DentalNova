@@ -55,6 +55,7 @@ export function Odontogram({
 
   return (
     <div className="do-chart" data-odontogram="v5" data-print={printLayout ? 'true' : undefined}>
+      <div className="do-chart__pan">
       <div className="do-arch do-arch--upper">
         <div className="do-quadrant do-quadrant--right">
           <QuadrantRow teeth={ODONTOGRAM_UPPER_RIGHT} arch="upper" {...shared} />
@@ -73,6 +74,7 @@ export function Odontogram({
         <div className="do-quadrant do-quadrant--left">
           <QuadrantRow teeth={ODONTOGRAM_LOWER_LEFT} arch="lower" {...shared} />
         </div>
+      </div>
       </div>
     </div>
   );

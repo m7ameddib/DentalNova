@@ -7,7 +7,7 @@ import { patientsApi } from '@/api/patients.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AppointmentStatus, AppointmentWithPatient, Patient } from '@/types/domain';
-import { formatClockTime } from '@/utils/calendar';
+import { buildMondayFirstMonthGrid, formatClockTime, mondayFirstWeekdayLabels } from '@/utils/calendar';
 import { todayIso, formatDateDisplay, currentTimeRounded, localAddDaysIso } from '@/utils/date';
 import { getErrorMessage } from '@/utils/errors';
 import { DEFAULT_DURATION, EMERGENCY_STATUS_OPTIONS, EMERGENCY_TYPE, CalendarViewMode } from './constants';
@@ -29,23 +29,6 @@ interface AgendaSidebarProps {
 
 function toMonthKey(year: number, month: number): string {
   return `${year}-${month.toString().padStart(2, '0')}`;
-}
-
-function buildMonthGrid(year: number, month: number): (string | null)[][] {
-  const first = new Date(year, month, 1);
-  const startDay = first.getDay();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const cells: (string | null)[] = [];
-  for (let i = 0; i < startDay; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) {
-    const m = (month + 1).toString().padStart(2, '0');
-    const day = d.toString().padStart(2, '0');
-    cells.push(`${year}-${m}-${day}`);
-  }
-  while (cells.length % 7 !== 0) cells.push(null);
-  const weeks: (string | null)[][] = [];
-  for (let i = 0; i < cells.length; i += 7) weeks.push(cells.slice(i, i + 7));
-  return weeks;
 }
 
 export function AgendaSidebar({
@@ -100,21 +83,14 @@ export function AgendaSidebar({
   });
 
   const countMap = useMemo(() => new Map(monthCounts.map((c) => [c.date, c.count])), [monthCounts]);
-  const weeks = useMemo(() => buildMonthGrid(viewYear, viewMonth - 1), [viewYear, viewMonth]);
+  const weeks = useMemo(() => buildMondayFirstMonthGrid(viewYear, viewMonth - 1), [viewYear, viewMonth]);
 
   const monthLabel = new Date(viewYear, viewMonth - 1, 1).toLocaleDateString(language, {
     month: 'long',
     year: 'numeric',
   });
 
-  const weekdayLabels = useMemo(() => {
-    const base = new Date(2024, 0, 7);
-    return Array.from({ length: 7 }, (_, i) => {
-      const d = new Date(base);
-      d.setDate(base.getDate() + i);
-      return d.toLocaleDateString(language, { weekday: 'narrow' });
-    });
-  }, [language]);
+  const weekdayLabels = useMemo(() => mondayFirstWeekdayLabels(language, 'narrow'), [language]);
 
   const emergencies = (schedule?.appointments ?? [])
     .filter((a) => a.appointmentType === EMERGENCY_TYPE && a.status !== 'CANCELLED')
@@ -216,14 +192,14 @@ export function AgendaSidebar({
             className={slotStepMin === 15 ? 'slot-interval-bar__btn slot-interval-bar__btn--active' : 'slot-interval-bar__btn'}
             onClick={() => onSlotStepChange(15)}
           >
-            15 min
+            {t('appointmentsPage.durationMinutes', { count: 15 })}
           </button>
           <button
             type="button"
             className={slotStepMin === 30 ? 'slot-interval-bar__btn slot-interval-bar__btn--active' : 'slot-interval-bar__btn'}
             onClick={() => onSlotStepChange(30)}
           >
-            30 min
+            {t('appointmentsPage.durationMinutes', { count: 30 })}
           </button>
         </div>
       </div>

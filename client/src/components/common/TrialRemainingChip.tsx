@@ -17,8 +17,11 @@ export function TrialRemainingChip({ compact = false }: { compact?: boolean }) {
   if (days == null) return null;
 
   return (
-    <span className={compact ? 'trial-chip trial-chip--compact' : 'trial-chip'}>
-      {t('subscription.trialDaysLeft', { count: days, days })}
+    <span
+      className={compact ? 'trial-chip trial-chip--compact' : 'trial-chip'}
+      title={t('subscription.trialDaysLeft', { count: days, days }) ?? ''}
+    >
+      {t('subscription.trialDaysShort', { days })}
     </span>
   );
 }

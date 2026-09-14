@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Link, useSearchParams } from 'react-router-dom';
-import { FlaskConical, Plus, Printer, Wallet } from 'lucide-react';
+import { Plus, Printer, Wallet } from 'lucide-react';
 import { LabOrderPrintable } from '@/components/patient-record/PrintableTemplates';
 import { usePrintStore } from '@/store/print.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
@@ -13,8 +13,17 @@ import { LabCaseFormModal } from '@/components/lab-cases/LabCaseFormModal';
 import { LabCaseWithDetails, Patient } from '@/types/domain';
 import { useUiStore } from '@/store/ui.store';
 import { formatDateDisplay } from '@/utils/date';
+import { formatMoney } from '@/utils/money';
 
 const FILTERS: LabCaseListFilter[] = ['active', 'due_today', 'overdue', 'received', 'delivered', 'all'];
+
+function labStatusClass(status: LabCaseWithDetails['status']) {
+  if (status === 'CANCELLED') return 'ops-status is-overdue';
+  if (status === 'DELIVERED_TO_PATIENT') return 'ops-status is-delivered';
+  if (status === 'RECEIVED_FROM_LAB') return 'ops-status is-received';
+  if (status === 'PENDING') return 'ops-status is-pending';
+  return 'ops-status is-sent';
+}
 
 export function LabCasesPage() {
   const { t } = useTranslation();
@@ -90,21 +99,18 @@ export function LabCasesPage() {
   function dueBadge(alert: LabCaseWithDetails['dueAlert']) {
     if (!alert) return null;
     const cls =
-      alert === 'OVERDUE'
-        ? 'lab-case-alert lab-case-alert--overdue'
-        : alert === 'DUE_TODAY'
-          ? 'lab-case-alert lab-case-alert--today'
-          : 'lab-case-alert lab-case-alert--tomorrow';
+      alert === 'OVERDUE' ? 'ops-status is-overdue' : alert === 'DUE_TODAY' ? 'ops-status is-due' : 'ops-status is-pending';
     return <span className={cls}>{t(`labCases.alerts.${alert}`)}</span>;
   }
 
   return (
-    <div className="lab-cases-page">
-      <div className="lab-cases-page__header">
-        <h1>
-          <FlaskConical size={22} /> {t('labCases.title')}
-        </h1>
-        <div className="lab-cases-page__header-actions">
+    <div className="ops-shell lab-cases-page">
+      <header className="ops-page-head">
+        <div className="ops-page-head-copy">
+          <h1>{t('labCases.title')}</h1>
+          <p>{t('labCases.pageHint')}</p>
+        </div>
+        <div className="ops-page-head-actions">
           <Link to="/lab-accounts" className="page-feature-link page-feature-link--lab">
             <span className="page-feature-link__icon" aria-hidden="true">
               <Wallet size={16} />
@@ -115,95 +121,126 @@ export function LabCasesPage() {
             <Plus size={14} /> {t('labCases.addCase')}
           </button>
         </div>
+      </header>
+
+      <div className="ops-kpis">
+        <div className="ops-kpi is-due">
+          <span className="ops-kpi-label">{t('labCases.alerts.DUE_TODAY')}</span>
+          <span className="ops-kpi-value">{summary?.dueToday ?? 0}</span>
+        </div>
+        <div className="ops-kpi is-overdue">
+          <span className="ops-kpi-label">{t('labCases.alerts.OVERDUE')}</span>
+          <span className="ops-kpi-value">{summary?.overdue ?? 0}</span>
+        </div>
       </div>
 
-      <div className="lab-cases-summary">
-        <div className="lab-cases-summary__card">
-          <span className="lab-cases-summary__value">{summary?.dueToday ?? 0}</span>
-          <span className="lab-cases-summary__label">{t('labCases.alerts.DUE_TODAY')}</span>
-        </div>
-        <div className="lab-cases-summary__card lab-cases-summary__card--warn">
-          <span className="lab-cases-summary__value">{summary?.overdue ?? 0}</span>
-          <span className="lab-cases-summary__label">{t('labCases.alerts.OVERDUE')}</span>
-        </div>
-      </div>
-
-      <div className="lab-cases-toolbar">
-        <div className="day-toggle-group">
+      <div className="ops-toolbar">
+        <div className="ops-seg">
           {FILTERS.map((f) => (
             <button
               key={f}
               type="button"
-              className={filter === f ? 'day-toggle-btn day-toggle-btn--active' : 'day-toggle-btn'}
+              aria-pressed={filter === f}
+              className={filter === f ? 'active' : undefined}
               onClick={() => setFilter(f)}
             >
               {t(`labCases.filters.${f}`)}
             </button>
           ))}
         </div>
-        <input
-          className="lab-cases-search"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={t('labCases.searchPlaceholder') ?? ''}
-        />
+        <label className="ops-search">
+          <input
+            type="search"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={t('labCases.searchPlaceholder') ?? ''}
+          />
+        </label>
       </div>
 
       {isLoading ? (
         <p className="muted">{t('common.loading')}</p>
       ) : filteredItems.length === 0 ? (
-        <p className="muted">{t('labCases.empty')}</p>
+        <div className="ops-empty">
+          <strong>{t('labCases.empty')}</strong>
+          <p>{t('labCases.emptyHint')}</p>
+          <button type="button" className="btn btn--primary btn--small" onClick={openAdd}>
+            <Plus size={14} /> {t('labCases.addCase')}
+          </button>
+        </div>
       ) : (
-        <table className="patients-table lab-cases-table">
-          <thead>
-            <tr>
-              <th>{t('labCases.patient')}</th>
-              <th>{t('labCases.labName')}</th>
-              <th>{t('labCases.teeth')}</th>
-              <th>{t('labCases.workType')}</th>
-              <th>{t('labCases.sentDate')}</th>
-              <th>{t('labCases.expectedDelivery')}</th>
-              <th>{t('labCases.status')}</th>
-              <th>{t('common.actions')}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredItems.map((row) => (
-              <tr
-                key={row.id}
-                className={row.status === 'CANCELLED' ? 'lab-case-row--cancelled' : undefined}
-              >
-                <td>{row.patientName}</td>
-                <td>{row.labName}</td>
-                <td>{row.teeth.join(', ')}</td>
-                <td>{row.workTypeLabel}</td>
-                <td>{row.sentDate ? formatDateDisplay(row.sentDate, language) : '—'}</td>
-                <td>
-                  {row.expectedDeliveryDate ? formatDateDisplay(row.expectedDeliveryDate, language) : '—'}{' '}
-                  {dueBadge(row.dueAlert)}
-                </td>
-                <td>
-                  <span className={`status-chip status-chip--lab-${row.status.toLowerCase()}`}>
-                    {t(`labCases.statuses.${row.status}`)}
+        <div className="ops-worklist">
+          <div className="ops-worklist-head lab-cols">
+            <span>{t('labCases.patient')}</span>
+            <span>{t('labCases.workType')}</span>
+            <span>{t('labCases.labName')}</span>
+            <span>{t('labCases.teeth')}</span>
+            <span>{t('labCases.sentDate')}</span>
+            <span>{t('labCases.expectedDelivery')}</span>
+            <span>{t('labCases.financial.labCost')}</span>
+            <span>{t('labCases.status')}</span>
+            <span>{t('common.actions')}</span>
+          </div>
+          {filteredItems.map((row) => (
+            <div
+              key={row.id}
+              className={[
+                'ops-work-row',
+                'is-static',
+                'lab-cols',
+                row.status === 'CANCELLED' ? 'is-cancelled' : '',
+              ]
+                .filter(Boolean)
+                .join(' ')}
+            >
+              <div className="ops-id" data-label={t('labCases.patient')}>
+                <strong>{row.patientName}</strong>
+                <span>#{row.patientFileNumber}</span>
+              </div>
+              <div className="ops-id" data-label={t('labCases.workType')}>
+                <strong>{row.workTypeLabel}</strong>
+                {row.treatmentLabel && <span>{row.treatmentLabel}</span>}
+              </div>
+              <span className="ops-meta" data-label={t('labCases.labName')}>
+                {row.labName}
+              </span>
+              <span data-label={t('labCases.teeth')}>{row.teeth.join(', ') || '—'}</span>
+              <span data-label={t('labCases.sentDate')}>
+                {row.sentDate ? formatDateDisplay(row.sentDate, language) : '—'}
+              </span>
+              <div className="ops-id" data-label={t('labCases.expectedDelivery')}>
+                <span>
+                  {row.expectedDeliveryDate ? formatDateDisplay(row.expectedDeliveryDate, language) : t('labCases.noDueDate')}
+                </span>
+                {dueBadge(row.dueAlert)}
+              </div>
+              <div className="ops-id" data-label={t('labCases.financial.labCost')}>
+                <strong className="ops-money">{formatMoney(row.labCostCents)}</strong>
+                {row.remainingLabBalanceCents != null && row.remainingLabBalanceCents > 0 && (
+                  <span className="ops-money is-out">
+                    {t('labCases.financial.remaining')}: {formatMoney(row.remainingLabBalanceCents)}
                   </span>
-                </td>
-                <td>
-                  <button type="button" className="btn btn--ghost btn--small" onClick={() => openEdit(row)}>
-                    {t('common.edit')}
+                )}
+              </div>
+              <span data-label={t('labCases.status')}>
+                <span className={labStatusClass(row.status)}>{t(`labCases.statuses.${row.status}`)}</span>
+              </span>
+              <div className="ops-row-actions" data-label={t('common.actions')}>
+                <button type="button" className="btn btn--ghost btn--small" onClick={() => openEdit(row)}>
+                  {t('common.edit')}
+                </button>
+                <button type="button" className="btn btn--ghost btn--small" onClick={() => handlePrint(row)}>
+                  <Printer size={13} /> {t('common.print')}
+                </button>
+                {row.status !== 'CANCELLED' && (
+                  <button type="button" className="btn btn--ghost btn--small" onClick={() => setCancelling(row)}>
+                    {t('common.cancel')}
                   </button>
-                  <button type="button" className="btn btn--ghost btn--small" onClick={() => handlePrint(row)}>
-                    <Printer size={13} /> {t('common.print')}
-                  </button>
-                  {row.status !== 'CANCELLED' && (
-                    <button type="button" className="btn btn--ghost btn--small" onClick={() => setCancelling(row)}>
-                      {t('common.cancel')}
-                    </button>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       <LabCaseFormModal

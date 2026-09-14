@@ -383,7 +383,7 @@ export interface PatientsSummary {
 
 export interface ReportsSummary {
   period: { from: string; to: string };
-  financial: FinancialSummary;
+  financial?: FinancialSummary;
   appointments: AppointmentsSummary;
   patients: PatientsSummary;
 }
@@ -498,6 +498,7 @@ export interface FollowUpWithPatient extends FollowUp {
   remainingCents?: number;
   totalCostCents?: number;
   totalPaidCents?: number;
+  accountDiscountCents?: number;
   lastPaymentDate?: string | null;
   lastPaymentAmountCents?: number | null;
 }

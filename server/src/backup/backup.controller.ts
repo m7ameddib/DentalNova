@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -54,7 +55,7 @@ export class BackupController {
     }),
   )
   async validate(@UploadedFile() file: Express.Multer.File) {
-    if (!file) throw new Error('No backup file uploaded');
+    if (!file) throw new BadRequestException('No backup file uploaded');
     try {
       const manifest = await this.backupService.validateUploadedBackup(file.path);
       return { valid: true, manifest };
@@ -75,7 +76,7 @@ export class BackupController {
     }),
   )
   async restore(@UploadedFile() file: Express.Multer.File, @Body('confirm') confirm?: string) {
-    if (!file) throw new Error('No backup file uploaded');
+    if (!file) throw new BadRequestException('No backup file uploaded');
     try {
       return await this.backupService.restoreFromUpload(file.path, confirm === 'true' || confirm === '1');
     } finally {

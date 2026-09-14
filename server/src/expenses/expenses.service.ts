@@ -3,9 +3,10 @@ import { ClinicExpensesRepository } from '../database/repositories/clinic-expens
 import { ExpenseCategoriesRepository } from '../database/repositories/expense-categories.repository';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { localTodayIso } from '../common/local-date.util';
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localTodayIso();
 }
 
 @Injectable()

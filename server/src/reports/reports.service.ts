@@ -59,34 +59,15 @@ export class ReportsService {
     return { from, to };
   }
 
-  getSummary(query: ReportPeriodDto) {
+  getSummary(query: ReportPeriodDto, includeFinancial = true) {
     const { from, to } = this.resolvePeriod(query);
-
-    const treatmentTotals = this.treatmentsRepo.sumForPeriod(from, to);
-    const collectedForPeriod = this.paymentsRepo.totalForPeriod(from, to);
-    const outstandingBalanceCents = Math.max(
-      0,
-      this.treatmentsRepo.totalFinalAmountAll() -
-        this.patientsRepo.totalAccountDiscountAll() -
-        this.paymentsRepo.totalPaidAll(),
-    );
-    const totalExpensesCents = this.expensesRepo.totalForPeriod(from, to);
-    const netCashCents = collectedForPeriod - totalExpensesCents;
 
     const statusCounts = this.appointmentsRepo.countByStatusForPeriod(from, to);
     const countsByStatus = new Map(statusCounts.map((s) => [s.status, s.count]));
     const appointmentsTotal = statusCounts.reduce((sum, s) => sum + s.count, 0);
 
-    return {
+    const summary: Record<string, unknown> = {
       period: { from, to },
-      financial: {
-        totalTreatmentValueCents: treatmentTotals.baseCents,
-        totalDiscountCents: treatmentTotals.discountCents,
-        totalCollectedCents: collectedForPeriod,
-        outstandingBalanceCents,
-        totalExpensesCents,
-        netCashCents,
-      },
       appointments: {
         total: appointmentsTotal,
         ...Object.fromEntries(
@@ -98,6 +79,28 @@ export class ReportsService {
         newPatients: this.patientsRepo.countCreatedForPeriod(from, to),
       },
     };
+
+    if (includeFinancial) {
+      const treatmentTotals = this.treatmentsRepo.sumForPeriod(from, to);
+      const collectedForPeriod = this.paymentsRepo.totalForPeriod(from, to);
+      const outstandingBalanceCents = Math.max(
+        0,
+        this.treatmentsRepo.totalFinalAmountAll() -
+          this.patientsRepo.totalAccountDiscountAll() -
+          this.paymentsRepo.totalPaidAll(),
+      );
+      const totalExpensesCents = this.expensesRepo.totalForPeriod(from, to);
+      summary.financial = {
+        totalTreatmentValueCents: treatmentTotals.baseCents,
+        totalDiscountCents: treatmentTotals.discountCents,
+        totalCollectedCents: collectedForPeriod,
+        outstandingBalanceCents,
+        totalExpensesCents,
+        netCashCents: collectedForPeriod - totalExpensesCents,
+      };
+    }
+
+    return summary;
   }
 
   // ---- Drill-down detail lists (all respect the same selected period) ----
@@ -151,7 +154,9 @@ export class ReportsService {
     this.followUpsService.syncFinancialFollowUps();
 
     const newPatients = this.patientsRepo.findCreatedForLocalDate(reportDate);
-    const payments = this.paymentsRepo.findForPeriodWithPatient(reportDate, reportDate);
+    const payments = this.paymentsRepo
+      .findForPeriodWithPatient(reportDate, reportDate)
+      .filter((p) => (p.status ?? 'ACTIVE') !== 'VOID');
     const paymentsTotalCents = payments.reduce((sum, p) => sum + p.amountCents, 0);
 
     const historyToday = this.followUpsRepo.findHistoryForLocalDate(reportDate);

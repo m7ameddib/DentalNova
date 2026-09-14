@@ -26,7 +26,7 @@ import { usePrintStore } from '@/store/print.store';
 import { useAuthStore } from '@/store/auth.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { openWhatsApp } from '@/utils/whatsapp';
-import { calculateAge, formatDateDisplay, todayIso } from '@/utils/date';
+import { calculateAge, formatDateDisplay } from '@/utils/date';
 import { getErrorMessage } from '@/utils/errors';
 import { getAreaTextForEdit, getPatientAreaDisplay, resolveAreaFields } from '@/utils/patientArea';
 import { loadRecentPatients, rememberRecentPatient } from '@/utils/recentPatients';
@@ -62,7 +62,7 @@ export function PatientSection({
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [dateOfBirth, setDateOfBirth] = useState(forceAdd ? todayIso() : '');
+  const [dateOfBirth, setDateOfBirth] = useState('');
   const [approxAge, setApproxAge] = useState('');
   const [gender, setGender] = useState('');
   const [weightKg, setWeightKg] = useState('');
@@ -202,7 +202,6 @@ export function PatientSection({
 
   function startAdd() {
     resetForm();
-    setDateOfBirth(todayIso());
     setMode('add');
   }
 
@@ -476,7 +475,7 @@ export function PatientSection({
             </div>
           </div>
         ) : (
-          <div className="inline-form">
+          <div className="inline-form patient-identity-form">
             <FormField label={t('patients.fullName')} required error={errors.fullName}>
               <input
                 autoFocus
@@ -498,7 +497,6 @@ export function PatientSection({
               <FormField label={t('patientRecord.patient.dob')} className="inline-form__col">
                 <DmyDateField
                   value={dateOfBirth}
-                  startOnToday={mode === 'add'}
                   onChange={(next) => {
                     setDateOfBirth(next);
                     if (next) setApproxAge('');
@@ -727,38 +725,38 @@ export function PatientSection({
             {canEdit && (
               <button
                 type="button"
-                className="icon-btn icon-btn--small"
+                className="icon-btn"
                 title={t('patientRecord.patient.editTitle') ?? ''}
                 onClick={startEdit}
               >
-                <Pencil size={13} />
+                <Pencil size={16} />
               </button>
             )}
             {canDelete && (
               <button
                 type="button"
-                className="icon-btn icon-btn--small icon-btn--danger"
+                className="icon-btn icon-btn--danger"
                 title={t('patientRecord.patient.deleteTitle') ?? ''}
                 onClick={openDeleteConfirm}
               >
-                <Trash2 size={13} />
+                <Trash2 size={16} />
               </button>
             )}
             <button
               type="button"
-              className="icon-btn icon-btn--small"
+              className="icon-btn"
               title={t('patientRecordPrint.printAction') ?? ''}
               onClick={handlePrintPatientFile}
             >
-              <Printer size={13} />
+              <Printer size={16} />
             </button>
             <button
               type="button"
-              className="icon-btn icon-btn--small"
+              className="icon-btn"
               title={t('patientRecordPrint.printCompactAction') ?? ''}
               onClick={handlePrintPatientRecordCompact}
             >
-              <Printer size={13} />
+              <Printer size={16} />
             </button>
           </div>
         </div>

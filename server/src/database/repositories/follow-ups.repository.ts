@@ -1,7 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { DatabaseService } from '../database.service';
 import { toCamel, toCamelList } from '../row-mapper.util';
-import { localDayUtcBounds } from '../../common/local-date.util';
+import { localDayUtcBounds, localTodayIso } from '../../common/local-date.util';
+import { remainingCents } from '../../common/money.util';
 import {
   FollowUp,
   FollowUpHistoryEntry,
@@ -38,7 +39,27 @@ export interface CreateFollowUpHistoryInput {
 }
 
 function todayIso(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localTodayIso();
+}
+
+/** Completed treatment value (gross) — invoice total is net after discounts, matching account summary. */
+const PATIENT_GROSS_COST_SQL = `COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0)`;
+const PATIENT_DISCOUNT_SQL = `COALESCE((SELECT SUM(ad.amount_cents) FROM account_discounts ad WHERE ad.patient_id = p.id AND COALESCE(ad.status, 'ACTIVE') != 'VOID'), 0)`;
+
+function applyFinancialTotals<T extends {
+  type: FollowUpType;
+  totalCostCents?: number;
+  totalPaidCents?: number;
+  accountDiscountCents?: number;
+  remainingCents?: number;
+}>(row: T): T {
+  if (row.type !== 'FINANCIAL') return row;
+  const discountCents = Math.max(0, row.accountDiscountCents ?? 0);
+  const totalCostCents = Math.max(0, (row.totalCostCents ?? 0) - discountCents);
+  row.accountDiscountCents = discountCents;
+  row.totalCostCents = totalCostCents;
+  row.remainingCents = remainingCents(totalCostCents, row.totalPaidCents ?? 0);
+  return row;
 }
 
 function computeDisplayStatus(storedStatus: FollowUpStoredStatus, followUpDate: string): FollowUpWithPatient['displayStatus'] {
@@ -61,6 +82,7 @@ export class FollowUpsRepository {
       remainingCents?: number;
       totalCostCents?: number;
       totalPaidCents?: number;
+      accountDiscountCents?: number;
       lastPaymentDate?: string | null;
       lastPaymentAmountCents?: number | null;
     }>(row);
@@ -81,7 +103,8 @@ export class FollowUpsRepository {
         p.full_name as patient_name,
         p.file_number as patient_file_number,
         p.phone as patient_phone,
-        COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0) as total_cost_cents,
+        ${PATIENT_GROSS_COST_SQL} as total_cost_cents,
+        ${PATIENT_DISCOUNT_SQL} as account_discount_cents,
         COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents,
         (SELECT pay2.date FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_date,
         (SELECT pay2.amount_cents FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_amount_cents
@@ -95,13 +118,7 @@ export class FollowUpsRepository {
     }
     sql += ' ORDER BY f.follow_up_date ASC, f.id ASC';
     const rows = this.db.connection.prepare(sql).all(...params) as Record<string, unknown>[];
-    return rows.map((row) => {
-      const enriched = this.enrichRow(row);
-      if (enriched.type === 'FINANCIAL') {
-        enriched.remainingCents = Math.max(0, (enriched.totalCostCents ?? 0) - (enriched.totalPaidCents ?? 0));
-      }
-      return enriched;
-    });
+    return rows.map((row) => applyFinancialTotals(this.enrichRow(row)));
   }
 
   /** Active follow-ups due on or before a date, plus items completed on that date. */
@@ -111,7 +128,8 @@ export class FollowUpsRepository {
         p.full_name as patient_name,
         p.file_number as patient_file_number,
         p.phone as patient_phone,
-        COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0) as total_cost_cents,
+        ${PATIENT_GROSS_COST_SQL} as total_cost_cents,
+        ${PATIENT_DISCOUNT_SQL} as account_discount_cents,
         COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents,
         (SELECT pay2.date FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_date,
         (SELECT pay2.amount_cents FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_amount_cents
@@ -128,13 +146,7 @@ export class FollowUpsRepository {
     }
     sql += ' ORDER BY CASE WHEN f.status = \'COMPLETED\' THEN 1 ELSE 0 END, f.follow_up_date ASC, f.id ASC';
     const rows = this.db.connection.prepare(sql).all(...params) as Record<string, unknown>[];
-    return rows.map((row) => {
-      const enriched = this.enrichRow(row);
-      if (enriched.type === 'FINANCIAL') {
-        enriched.remainingCents = Math.max(0, (enriched.totalCostCents ?? 0) - (enriched.totalPaidCents ?? 0));
-      }
-      return enriched;
-    });
+    return rows.map((row) => applyFinancialTotals(this.enrichRow(row)));
   }
 
   /** @deprecated Use findForDate — kept as alias for callers expecting today's queue. */
@@ -166,7 +178,8 @@ export class FollowUpsRepository {
           p.full_name as patient_name,
           p.file_number as patient_file_number,
           p.phone as patient_phone,
-          COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0) as total_cost_cents,
+          ${PATIENT_GROSS_COST_SQL} as total_cost_cents,
+          ${PATIENT_DISCOUNT_SQL} as account_discount_cents,
           COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents,
           (SELECT pay2.date FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_date,
           (SELECT pay2.amount_cents FROM payments pay2 WHERE pay2.patient_id = p.id AND COALESCE(pay2.status, 'ACTIVE') != 'VOID' ORDER BY pay2.date DESC, pay2.id DESC LIMIT 1) as last_payment_amount_cents
@@ -176,13 +189,7 @@ export class FollowUpsRepository {
          ORDER BY CASE WHEN f.status = 'ACTIVE' THEN 0 ELSE 1 END, f.follow_up_date ASC`,
       )
       .all(patientId) as Record<string, unknown>[];
-    return rows.map((row) => {
-      const enriched = this.enrichRow(row);
-      if (enriched.type === 'FINANCIAL') {
-        enriched.remainingCents = Math.max(0, (enriched.totalCostCents ?? 0) - (enriched.totalPaidCents ?? 0));
-      }
-      return enriched;
-    });
+    return rows.map((row) => applyFinancialTotals(this.enrichRow(row)));
   }
 
   findById(id: number): FollowUpWithPatient | undefined {

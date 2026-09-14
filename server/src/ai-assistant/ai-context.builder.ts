@@ -8,6 +8,7 @@ import {
   AiActionName,
   AiMutationActionName,
 } from './ai-action.types';
+import { localTodayIso } from '../common/local-date.util';
 
 @Injectable()
 export class AiContextBuilder {
@@ -28,7 +29,7 @@ export class AiContextBuilder {
         `- id=${t.id}: ${t.label} (${t.abbreviation}) — default $${(t.defaultPriceCents / 100).toFixed(2)}`,
     );
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localTodayIso();
 
     return `You are the DentalNova AI Assistant — a bilingual (Arabic + English) helper for clinic staff.
 

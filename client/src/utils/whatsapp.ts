@@ -63,3 +63,42 @@ export function openWhatsAppDesktop(phone: string | null | undefined, message?: 
   document.body.removeChild(link);
   return true;
 }
+
+const DESKTOP_HANDOFF_MS = 1500;
+
+/**
+ * Prefer the desktop protocol on machines that have WhatsApp installed,
+ * then fall back to wa.me only if the page never loses focus/visibility
+ * (handoff to the desktop app). A short hasFocus-only timer was opening
+ * both WhatsApp Desktop and a wa.me tab on Windows.
+ */
+export function openWhatsAppPreferred(phone: string | null | undefined, message?: string): boolean {
+  const webUrl = buildWhatsAppUrl(phone, message);
+  if (!webUrl) return false;
+  const desktopUrl = buildWhatsAppDesktopUrl(phone, message);
+  if (!desktopUrl) {
+    window.open(webUrl, '_blank', 'noopener,noreferrer');
+    return true;
+  }
+
+  let handedOff = false;
+  const markHandoff = () => {
+    handedOff = true;
+  };
+  const onVisibility = () => {
+    if (document.visibilityState === 'hidden') markHandoff();
+  };
+  window.addEventListener('blur', markHandoff);
+  document.addEventListener('visibilitychange', onVisibility);
+
+  openWhatsAppDesktop(phone, message);
+
+  window.setTimeout(() => {
+    window.removeEventListener('blur', markHandoff);
+    document.removeEventListener('visibilitychange', onVisibility);
+    if (!handedOff && document.hasFocus() && document.visibilityState === 'visible') {
+      window.open(webUrl, '_blank', 'noopener,noreferrer');
+    }
+  }, DESKTOP_HANDOFF_MS);
+  return true;
+}

@@ -6,7 +6,7 @@ import {
   buildFinancialFollowUpMessage,
   resolveWhatsAppMessageLanguage,
 } from '@/utils/whatsappTemplates';
-import { normalizeWhatsAppPhone, openWhatsAppDesktop } from '@/utils/whatsapp';
+import { normalizeWhatsAppPhone, openWhatsAppPreferred } from '@/utils/whatsapp';
 
 export function buildFollowUpWhatsAppMessage(
   fu: FollowUpWithPatient,
@@ -33,10 +33,10 @@ export function buildFollowUpWhatsAppMessage(
 
 export function openFollowUpWhatsApp(fu: FollowUpWithPatient, settings: ClinicSettings): boolean {
   const message = buildFollowUpWhatsAppMessage(fu, settings);
-  return openWhatsAppDesktop(fu.patientPhone, message);
+  return openWhatsAppPreferred(fu.patientPhone, message);
 }
 
-const BULK_OPEN_DELAY_MS = 800;
+const BULK_OPEN_DELAY_MS = 1600;
 
 /** Opens WhatsApp Desktop for each follow-up using that row's type-specific message. */
 export function openFollowUpsWhatsAppBulk(

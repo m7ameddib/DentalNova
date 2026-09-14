@@ -1,8 +1,8 @@
-import { Fragment, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSearchParams } from 'react-router-dom';
-import { ClipboardList, MessageCircle, Plus, Printer } from 'lucide-react';
+import { MessageCircle, Plus, Printer } from 'lucide-react';
 import { followUpsApi } from '@/api/follow-ups.api';
 import { patientsApi } from '@/api/patients.api';
 import { settingsApi } from '@/api/settings.api';
@@ -20,6 +20,13 @@ import { openFollowUpWhatsApp, openFollowUpsWhatsAppBulk } from '@/utils/followU
 
 type FilterType = 'ALL' | FollowUpType;
 
+function statusOpsClass(status: FollowUpWithPatient['displayStatus']) {
+  if (status === 'OVERDUE') return 'ops-status is-overdue';
+  if (status === 'TODAY') return 'ops-status is-due';
+  if (status === 'COMPLETED') return 'ops-status is-done';
+  return 'ops-status is-pending';
+}
+
 export function FollowUpPage() {
   const { t } = useTranslation();
   const { language } = useUiStore();
@@ -32,9 +39,14 @@ export function FollowUpPage() {
   const [showHistory, setShowHistory] = useState(false);
   const [selectedDate, setSelectedDate] = useState(todayIso());
   const [filter, setFilter] = useState<FilterType>('ALL');
+  const [listQuery, setListQuery] = useState('');
   const [expandedId, setExpandedId] = useState<number | null>(
     followUpFilterId ? Number(followUpFilterId) : null,
   );
+
+  useEffect(() => {
+    if (followUpFilterId) setExpandedId(Number(followUpFilterId));
+  }, [followUpFilterId]);
   const [error, setError] = useState<string | null>(null);
   const [addingClinical, setAddingClinical] = useState(false);
   const [newPatientQuery, setNewPatientQuery] = useState('');
@@ -76,6 +88,18 @@ export function FollowUpPage() {
     if (!patientFilter) return items;
     return items.filter((i) => String(i.patientId) === patientFilter);
   }, [items, patientFilter]);
+
+  const visibleItems = useMemo(() => {
+    const q = listQuery.trim().toLowerCase();
+    if (!q) return filteredItems;
+    return filteredItems.filter(
+      (fu) =>
+        fu.patientName.toLowerCase().includes(q) ||
+        fu.patientFileNumber.toLowerCase().includes(q) ||
+        fu.reason.toLowerCase().includes(q) ||
+        (fu.details ?? '').toLowerCase().includes(q),
+    );
+  }, [filteredItems, listQuery]);
 
   const historyByFollowUpId = useMemo(() => {
     const map = new Map<number, (typeof history)[0]>();
@@ -138,22 +162,18 @@ export function FollowUpPage() {
     setError(null);
   }
 
-  function statusClass(status: FollowUpWithPatient['displayStatus']) {
-    return `follow-up-status follow-up-status--${status.toLowerCase()}`;
-  }
-
   function toggleRow(id: number) {
     setExpandedId((prev) => (prev === id ? null : id));
   }
 
   return (
-    <div className="follow-up-page">
-      <div className="follow-up-page__header">
-        <h1>
-          <ClipboardList size={22} className="follow-up-page__title-icon" />
-          {t('followUp.title')}
-        </h1>
-        <div className="follow-up-page__header-actions">
+    <div className="ops-shell follow-up-page">
+      <header className="ops-page-head">
+        <div className="ops-page-head-copy">
+          <h1>{t('followUp.title')}</h1>
+          <p>{t('followUp.pageHint')}</p>
+        </div>
+        <div className="ops-page-head-actions">
           <button type="button" className="btn btn--ghost btn--small" onClick={handlePrintFollowUps}>
             <Printer size={14} />{' '}
             {isToday ? t('followUp.printToday') : t('followUp.printForDate', { date: formatDateDisplay(selectedDate, language) })}
@@ -162,75 +182,86 @@ export function FollowUpPage() {
             <MessageCircle size={14} />{' '}
             {isToday ? t('followUp.whatsappToday') : t('followUp.whatsappForDate', { date: formatDateDisplay(selectedDate, language) })}
           </button>
-          <button type="button" className="btn btn--ghost btn--small" onClick={() => setAddingClinical((v) => !v)}>
+          <button type="button" className="btn btn--primary btn--small" onClick={() => setAddingClinical((v) => !v)}>
             <Plus size={14} /> {t('followUp.addClinical')}
           </button>
         </div>
-      </div>
+      </header>
 
-      <div className="follow-up-date-bar">
-        <label className="follow-up-date-bar__label" htmlFor="follow-up-selected-date">
-          {t('followUp.selectDate')}
-        </label>
-        <DateField
-          id="follow-up-selected-date"
-          className="follow-up-date-bar__input"
-          value={selectedDate}
-          onChange={(value) => {
-            setSelectedDate(value);
-            setExpandedId(null);
-            setError(null);
-          }}
-        />
-        {!isToday && (
-          <button type="button" className="link-btn follow-up-date-bar__today" onClick={() => setSelectedDate(todayIso())}>
-            {t('followUp.backToToday')}
-          </button>
-        )}
-      </div>
-
-      <div className="follow-up-summary">
-        <div className="follow-up-summary__card">
-          <span className="follow-up-summary__value">{summary?.dueToday ?? 0}</span>
-          <span className="follow-up-summary__label">
+      <div className="ops-kpis">
+        <div className="ops-kpi is-due">
+          <span className="ops-kpi-label">
             {isToday
               ? t('followUp.summary.dueToday')
               : t('followUp.summary.dueOnDate', { date: formatDateDisplay(selectedDate, language) })}
           </span>
+          <span className="ops-kpi-value">{summary?.dueToday ?? 0}</span>
         </div>
-        <div className="follow-up-summary__card follow-up-summary__card--warn">
-          <span className="follow-up-summary__value">{summary?.overdue ?? 0}</span>
-          <span className="follow-up-summary__label">{t('followUp.summary.overdue')}</span>
+        <div className="ops-kpi is-overdue">
+          <span className="ops-kpi-label">{t('followUp.summary.overdue')}</span>
+          <span className="ops-kpi-value">{summary?.overdue ?? 0}</span>
         </div>
-        <div className="follow-up-summary__card">
-          <span className="follow-up-summary__value">{summary?.completed ?? 0}</span>
-          <span className="follow-up-summary__label">{t('followUp.summary.completed')}</span>
+        <div className="ops-kpi is-ok">
+          <span className="ops-kpi-label">{t('followUp.summary.completed')}</span>
+          <span className="ops-kpi-value">{summary?.completed ?? 0}</span>
         </div>
-        <div className="follow-up-summary__card">
-          <span className="follow-up-summary__value">{summary?.clinical ?? 0}</span>
-          <span className="follow-up-summary__label">{t('followUp.summary.clinical')}</span>
+        <div className="ops-kpi">
+          <span className="ops-kpi-label">{t('followUp.summary.clinical')}</span>
+          <span className="ops-kpi-value">{summary?.clinical ?? 0}</span>
         </div>
-        <div className="follow-up-summary__card">
-          <span className="follow-up-summary__value">{summary?.financial ?? 0}</span>
-          <span className="follow-up-summary__label">{t('followUp.summary.financial')}</span>
+        <div className="ops-kpi">
+          <span className="ops-kpi-label">{t('followUp.summary.financial')}</span>
+          <span className="ops-kpi-value">{summary?.financial ?? 0}</span>
         </div>
       </div>
 
       {addingClinical && (
-        <div className="follow-up-add-form">
-          <label className="form-field">
-            <span className="form-field__label">{t('receipt.patient')}</span>
-            <input
-              value={newPatient ? newPatient.fullName : newPatientQuery}
-              onChange={(e) => {
-                setNewPatient(null);
-                setNewPatientQuery(e.target.value);
-              }}
-              placeholder={t('common.searchPlaceholder') ?? ''}
-            />
-          </label>
+        <div className="ops-panel">
+          <h3>{t('followUp.addClinical')}</h3>
+          <div className="ops-form-grid">
+            <label className="ops-field">
+              <span>{t('receipt.patient')}</span>
+              <input
+                value={newPatient ? newPatient.fullName : newPatientQuery}
+                onChange={(e) => {
+                  setNewPatient(null);
+                  setNewPatientQuery(e.target.value);
+                }}
+                placeholder={t('common.searchPlaceholder') ?? ''}
+              />
+            </label>
+            <label className="ops-field">
+              <span>{t('followUp.columns.reason')}</span>
+              <input value={newReason} onChange={(e) => setNewReason(e.target.value)} />
+            </label>
+            <label className="ops-field">
+              <span>{t('followUp.columns.date')}</span>
+              <DateField value={newDate} onChange={setNewDate} />
+            </label>
+            <div className="ops-row-actions">
+              <button type="button" className="btn btn--ghost btn--small" onClick={() => setAddingClinical(false)}>
+                {t('common.cancel')}
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary btn--small"
+                disabled={!newPatient || !newReason.trim() || createMutation.isPending}
+                onClick={() =>
+                  newPatient &&
+                  createMutation.mutate({
+                    patientId: newPatient.id,
+                    type: 'CLINICAL',
+                    reason: newReason.trim(),
+                    followUpDate: newDate,
+                  })
+                }
+              >
+                {t('common.save')}
+              </button>
+            </div>
+          </div>
           {!newPatient && patientSearch.length > 0 && newPatientQuery.length >= 2 && (
-            <ul className="patient-search-dropdown">
+            <ul className="ops-suggest-list">
               {patientSearch.slice(0, 6).map((p) => (
                 <li key={p.id}>
                   <button
@@ -247,49 +278,48 @@ export function FollowUpPage() {
               ))}
             </ul>
           )}
-          <label className="form-field">
-            <span className="form-field__label">{t('followUp.columns.reason')}</span>
-            <input value={newReason} onChange={(e) => setNewReason(e.target.value)} />
-          </label>
-          <label className="form-field">
-            <span className="form-field__label">{t('followUp.columns.date')}</span>
-            <DateField value={newDate} onChange={setNewDate} />
-          </label>
-          <div className="form-actions">
-            <button type="button" className="btn btn--ghost btn--small" onClick={() => setAddingClinical(false)}>
-              {t('common.cancel')}
-            </button>
-            <button
-              type="button"
-              className="btn btn--primary btn--small"
-              disabled={!newPatient || !newReason.trim() || createMutation.isPending}
-              onClick={() =>
-                newPatient &&
-                createMutation.mutate({
-                  patientId: newPatient.id,
-                  type: 'CLINICAL',
-                  reason: newReason.trim(),
-                  followUpDate: newDate,
-                })
-              }
-            >
-              {t('common.save')}
-            </button>
-          </div>
         </div>
       )}
 
-      <div className="follow-up-filters">
-        {(['ALL', 'CLINICAL', 'FINANCIAL'] as FilterType[]).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={filter === f ? 'day-toggle-btn day-toggle-btn--active' : 'day-toggle-btn'}
-            onClick={() => setFilter(f)}
-          >
-            {t(`followUp.filters.${f}`)}
-          </button>
-        ))}
+      <div className="ops-toolbar">
+        <div className="ops-datebar">
+          <label htmlFor="follow-up-selected-date">{t('followUp.selectDate')}</label>
+          <DateField
+            id="follow-up-selected-date"
+            value={selectedDate}
+            onChange={(value) => {
+              setSelectedDate(value);
+              setExpandedId(null);
+              setError(null);
+            }}
+          />
+          {!isToday && (
+            <button type="button" className="link-btn" onClick={() => setSelectedDate(todayIso())}>
+              {t('followUp.backToToday')}
+            </button>
+          )}
+        </div>
+        <div className="ops-seg" role="tablist">
+          {(['ALL', 'CLINICAL', 'FINANCIAL'] as FilterType[]).map((f) => (
+            <button
+              key={f}
+              type="button"
+              aria-pressed={filter === f}
+              className={filter === f ? 'active' : undefined}
+              onClick={() => setFilter(f)}
+            >
+              {t(`followUp.filters.${f}`)}
+            </button>
+          ))}
+        </div>
+        <label className="ops-search">
+          <input
+            type="search"
+            value={listQuery}
+            onChange={(e) => setListQuery(e.target.value)}
+            placeholder={t('followUp.searchPlaceholder') ?? ''}
+          />
+        </label>
         {patientFilter && (
           <button type="button" className="link-btn" onClick={() => setSearchParams({})}>
             {t('followUp.clearPatientFilter')}
@@ -297,98 +327,104 @@ export function FollowUpPage() {
         )}
       </div>
 
-      {error && <div className="form-error-banner">{error}</div>}
+      {error && <div className="ops-banner is-warn">{error}</div>}
 
       {isLoading ? (
         <p className="muted">{t('common.loading')}</p>
-      ) : filteredItems.length === 0 ? (
-        <p className="muted">{t('followUp.emptyForDate', { date: formatDateDisplay(selectedDate, language) })}</p>
+      ) : visibleItems.length === 0 ? (
+        <div className="ops-empty">
+          <strong>{t('followUp.emptyForDate', { date: formatDateDisplay(selectedDate, language) })}</strong>
+          <p>{t('followUp.emptyHint')}</p>
+          <button type="button" className="btn btn--primary btn--small" onClick={() => setAddingClinical(true)}>
+            <Plus size={14} /> {t('followUp.addClinical')}
+          </button>
+        </div>
       ) : (
-        <div className="follow-up-table-wrap">
-          <table className="payment-history-table follow-up-table">
-            <thead>
-              <tr>
-                <th>{t('followUp.columns.patient')}</th>
-                <th>{t('followUp.columns.type')}</th>
-                <th>{t('followUp.columns.reason')}</th>
-                <th>{t('followUp.columns.date')}</th>
-                <th>{t('followUp.columns.details')}</th>
-                <th>{t('followUp.columns.status')}</th>
-                <th>{t('common.actions')}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredItems.map((fu) => (
-                <Fragment key={fu.id}>
-                  <tr
-                    className={[
-                      expandedId === fu.id ? 'follow-up-table__row--selected' : '',
-                      fu.status === 'COMPLETED' ? 'follow-up-table__row--completed' : '',
-                    ]
-                      .filter(Boolean)
-                      .join(' ')}
-                    onClick={() => toggleRow(fu.id)}
-                  >
-                    <td>
-                      <span>{fu.patientName}</span>
-                      <span className="muted follow-up-table__file">{fu.patientFileNumber}</span>
-                    </td>
-                    <td>{t(`followUp.types.${fu.type}`)}</td>
-                    <td>{fu.reason}</td>
-                    <td>{formatDateDisplay(fu.followUpDate, language)}</td>
-                    <td className="follow-up-table__details">
-                      {fu.type === 'FINANCIAL' ? (
-                        <>
-                          <span>{formatMoney(fu.remainingCents ?? 0)}</span>
-                          {fu.lastPaymentDate && (
-                            <span className="muted">
-                              {t('followUp.lastPayment')}: {formatDateDisplay(fu.lastPaymentDate, language)}
-                            </span>
-                          )}
-                        </>
-                      ) : (
-                        fu.details || fu.note || '—'
+        <div className="ops-worklist">
+          <div className="ops-worklist-head fu-cols">
+            <span>{t('followUp.columns.patient')}</span>
+            <span>{t('followUp.columns.type')}</span>
+            <span>{t('followUp.columns.reason')}</span>
+            <span>{t('followUp.columns.date')}</span>
+            <span>{t('followUp.columns.details')}</span>
+            <span>{t('followUp.columns.status')}</span>
+            <span>{t('common.actions')}</span>
+          </div>
+          {visibleItems.map((fu) => (
+            <div key={fu.id} className={expandedId === fu.id ? 'ops-work-block is-open' : 'ops-work-block'}>
+              <div
+                className={[
+                  'ops-work-row',
+                  'fu-cols',
+                  expandedId === fu.id ? 'is-open' : '',
+                  fu.status === 'COMPLETED' ? 'is-done-row' : '',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
+                onClick={() => toggleRow(fu.id)}
+              >
+                <div className="ops-id" data-label={t('followUp.columns.patient')}>
+                  <strong>{fu.patientName}</strong>
+                  <span>#{fu.patientFileNumber}</span>
+                </div>
+                <span data-label={t('followUp.columns.type')}>
+                  <span className={`ops-status ${fu.type === 'FINANCIAL' ? 'is-financial' : 'is-clinical'}`}>
+                    {t(`followUp.types.${fu.type}`)}
+                  </span>
+                </span>
+                <span className="ops-meta" data-label={t('followUp.columns.reason')}>
+                  {fu.reason}
+                </span>
+                <span data-label={t('followUp.columns.date')}>{formatDateDisplay(fu.followUpDate, language)}</span>
+                <div className="ops-id" data-label={t('followUp.columns.details')}>
+                  {fu.type === 'FINANCIAL' ? (
+                    <>
+                      <strong className="ops-money is-out">{formatMoney(fu.remainingCents ?? 0)}</strong>
+                      {fu.lastPaymentDate && (
+                        <span>
+                          {t('followUp.lastPayment')}: {formatDateDisplay(fu.lastPaymentDate, language)}
+                        </span>
                       )}
-                    </td>
-                    <td>
-                      <span className={statusClass(fu.displayStatus)}>
-                        {fu.status === 'COMPLETED'
-                          ? `${t('followUp.completedToday')} ✓`
-                          : t(`followUp.statuses.${fu.displayStatus}`)}
-                      </span>
-                    </td>
-                    <td className="follow-up-table__actions" onClick={(e) => e.stopPropagation()}>
-                      <button type="button" className="icon-btn btn--whatsapp" onClick={() => handleWhatsApp(fu)} title={t('followUp.actions.whatsapp')}>
-                        <MessageCircle size={14} />
-                      </button>
-                      <button type="button" className="btn btn--ghost btn--small" onClick={() => toggleRow(fu.id)}>
-                        {t('followUp.actions.open')}
-                      </button>
-                    </td>
-                  </tr>
-                  {expandedId === fu.id && (
-                    <tr className="follow-up-table__expand-row">
-                      <td colSpan={7}>
-                        <FollowUpExpandedPanel
-                          fu={fu}
-                          latestHistory={historyByFollowUpId.get(fu.id)}
-                          onDone={() => setExpandedId(null)}
-                          onWhatsApp={handleWhatsApp}
-                        />
-                      </td>
-                    </tr>
+                    </>
+                  ) : (
+                    <span>{fu.details || fu.note || '—'}</span>
                   )}
-                </Fragment>
-              ))}
-            </tbody>
-          </table>
+                </div>
+                <span data-label={t('followUp.columns.status')}>
+                  <span className={statusOpsClass(fu.displayStatus)}>
+                    {fu.status === 'COMPLETED'
+                      ? `${t('followUp.completedToday')} ✓`
+                      : t(`followUp.statuses.${fu.displayStatus}`)}
+                  </span>
+                </span>
+                <div className="ops-row-actions" data-label={t('common.actions')} onClick={(e) => e.stopPropagation()}>
+                  <button type="button" className="btn btn--ghost btn--small btn--whatsapp" onClick={() => handleWhatsApp(fu)}>
+                    <MessageCircle size={14} /> {t('followUp.actions.whatsapp')}
+                  </button>
+                  <button type="button" className="btn btn--ghost btn--small" onClick={() => toggleRow(fu.id)}>
+                    {t('followUp.actions.open')}
+                  </button>
+                </div>
+              </div>
+              {expandedId === fu.id && (
+                <div className="ops-expanded">
+                  <FollowUpExpandedPanel
+                    fu={fu}
+                    latestHistory={historyByFollowUpId.get(fu.id)}
+                    onDone={() => setExpandedId(null)}
+                    onWhatsApp={handleWhatsApp}
+                  />
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
-      <section className="follow-up-history-section">
+      <section className="ops-history">
         <button
           type="button"
-          className="btn btn--ghost btn--small follow-up-history-toggle"
+          className="btn btn--ghost btn--small"
           onClick={() => setShowHistory((v) => !v)}
         >
           {showHistory ? t('followUp.hideHistory') : t('followUp.showHistory')}
@@ -399,38 +435,40 @@ export function FollowUpPage() {
             {history.length === 0 ? (
               <p className="muted">{t('followUp.historyEmpty')}</p>
             ) : (
-              <table className="payment-history-table">
-                <thead>
-                  <tr>
-                    <th>{t('common.date')}</th>
-                    <th>{t('followUp.columns.patient')}</th>
-                    <th>{t('followUp.columns.type')}</th>
-                    <th>{t('followUp.columns.reason')}</th>
-                    <th>{t('followUp.columns.result')}</th>
-                    <th>{t('common.note')}</th>
-                    <th>{t('followUp.performedBy')}</th>
-                    <th>{t('followUp.actions.nextDate')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {history.map((h) => (
-                    <tr key={h.id}>
-                      <td>{formatDateDisplay(h.createdAt.slice(0, 10), language)}</td>
-                      <td>{h.patientName}</td>
-                      <td>{t(`followUp.types.${h.type}`)}</td>
-                      <td>{h.reason}</td>
-                      <td>{h.result ? t(`followUp.results.${h.result}`) : '—'}</td>
-                      <td className="muted">
-                        {[h.note, h.appointmentSummary, h.paymentAmountCents != null ? formatMoney(h.paymentAmountCents) : null]
-                          .filter(Boolean)
-                          .join(' · ') || '—'}
-                      </td>
-                      <td>{h.performedByName || '—'}</td>
-                      <td>{h.nextFollowUpDate ? formatDateDisplay(h.nextFollowUpDate, language) : '—'}</td>
+              <div className="ops-table-wrap">
+                <table className="ops-table">
+                  <thead>
+                    <tr>
+                      <th>{t('common.date')}</th>
+                      <th>{t('followUp.columns.patient')}</th>
+                      <th>{t('followUp.columns.type')}</th>
+                      <th>{t('followUp.columns.reason')}</th>
+                      <th>{t('followUp.columns.result')}</th>
+                      <th>{t('common.note')}</th>
+                      <th>{t('followUp.performedBy')}</th>
+                      <th>{t('followUp.actions.nextDate')}</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {history.map((h) => (
+                      <tr key={h.id}>
+                        <td>{formatDateDisplay(h.createdAt.slice(0, 10), language)}</td>
+                        <td>{h.patientName}</td>
+                        <td>{t(`followUp.types.${h.type}`)}</td>
+                        <td>{h.reason}</td>
+                        <td>{h.result ? t(`followUp.results.${h.result}`) : '—'}</td>
+                        <td className="ops-meta">
+                          {[h.note, h.appointmentSummary, h.paymentAmountCents != null ? formatMoney(h.paymentAmountCents) : null]
+                            .filter(Boolean)
+                            .join(' · ') || '—'}
+                        </td>
+                        <td>{h.performedByName || '—'}</td>
+                        <td>{h.nextFollowUpDate ? formatDateDisplay(h.nextFollowUpDate, language) : '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </>
         )}

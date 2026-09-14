@@ -57,6 +57,8 @@
    * producing a blank report body.
    */
   .top-nav,
+  .bottom-nav,
+  .pwa-install-banner,
   .app-shell__content,
   .app-shell__footer,
   .modal-overlay,

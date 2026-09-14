@@ -242,8 +242,9 @@ export class PatientTreatmentsRepository {
          JOIN treatment_types tt ON tt.id = pt.treatment_type_id
          JOIN patients p ON p.id = pt.patient_id
          LEFT JOIN users u ON u.id = pt.doctor_id
-         WHERE date(pt.created_at) BETWEEN date(?) AND date(?)
-         ORDER BY pt.created_at DESC, pt.id DESC`,
+         WHERE date(COALESCE(pt.treatment_date, date(pt.created_at))) BETWEEN date(?) AND date(?)
+           AND pt.status = 'COMPLETED'
+         ORDER BY COALESCE(pt.treatment_date, date(pt.created_at)) DESC, pt.id DESC`,
       )
       .all(fromIso, toIso) as Record<string, unknown>[];
     return rows.map(mapDetailsRow) as PatientTreatmentReportRow[];
@@ -276,8 +277,8 @@ export class PatientTreatmentsRepository {
            COALESCE(SUM(discount_cents), 0) as discountCents,
            COALESCE(SUM(final_amount_cents), 0) as finalCents
          FROM patient_treatments
-         WHERE date(created_at) BETWEEN date(?) AND date(?)
-           AND status != 'VOID'`,
+         WHERE date(COALESCE(treatment_date, date(created_at))) BETWEEN date(?) AND date(?)
+           AND status = 'COMPLETED'`,
       )
       .get(fromIso, toIso) as { baseCents: number; discountCents: number; finalCents: number };
     return row;

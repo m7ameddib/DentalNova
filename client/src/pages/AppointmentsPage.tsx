@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, MessageCircle, Plus, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, MessageCircle, Plus, SlidersHorizontal, X } from 'lucide-react';
 import { isAxiosError } from 'axios';
 import { appointmentsApi, CreateAppointmentPayload, UpdateAppointmentPayload } from '@/api/appointments.api';
 import { patientsApi } from '@/api/patients.api';
@@ -27,6 +27,7 @@ import {
   CALENDAR_MOBILE_BREAKPOINT,
 } from '@/components/appointments/constants';
 import { MonthCalendar } from '@/components/appointments/MonthCalendar';
+import { MobileDayAgenda } from '@/components/appointments/MobileDayAgenda';
 import { usePermission } from '@/hooks/usePermission';
 import { useMediaQuery } from '@/hooks/useMediaQuery';
 import { PERMISSIONS } from '@/constants/permissions';
@@ -37,7 +38,7 @@ import { currentTimeRounded, formatDateDisplay, formatTimeDisplay, localAddDaysI
 import { DateField } from '@/components/common/DateField';
 import { buildWeekDays, expandSlotTimes, startOfWeekIso, timeToMinutes, trimTimesFromWorkingDayStart, weekRangeLabel } from '@/utils/calendar';
 import { getErrorMessage } from '@/utils/errors';
-import { openWhatsApp, openWhatsAppDesktop } from '@/utils/whatsapp';
+import { openWhatsApp, openWhatsAppPreferred } from '@/utils/whatsapp';
 import { buildAppointmentReminderMessage, resolveWhatsAppMessageLanguage } from '@/utils/whatsappTemplates';
 import { AppointmentStatus, AppointmentWithPatient, DaySchedule, Patient } from '@/types/domain';
 /** Fallback slot times shown while the first day's schedule is still loading. */
@@ -86,6 +87,7 @@ export function AppointmentsPage() {
   const [focusDate, setFocusDate] = useState(initialDate);
   const [slotStepMin, setSlotStepMin] = useState<15 | 30>(30);
   const [calendarView, setCalendarView] = useState<CalendarViewMode>('week');
+  const [calendarOptionsOpen, setCalendarOptionsOpen] = useState(false);
   const [draggingEmergency, setDraggingEmergency] = useState<AppointmentWithPatient | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<SelectedSlot | null>(null);
   const [convertingEmergency, setConvertingEmergency] = useState<AppointmentWithPatient | null>(null);
@@ -350,7 +352,7 @@ export function AppointmentsPage() {
       appointmentTime: managingAppt.time,
       appointmentReason: managingAppt.reason,
     });
-    if (!openWhatsAppDesktop(phone, message)) return;
+    if (!openWhatsAppPreferred(phone, message)) return;
     reminderMutation.mutate(managingAppt.id);
   }
 
@@ -644,15 +646,32 @@ export function AppointmentsPage() {
     const id = Number(manageAppointmentId);
     if (!id) return;
     let cancelled = false;
-    appointmentsApi.daySchedule(initialDate).then((day) => {
-      if (cancelled) return;
-      const found = day.appointments.find((a) => a.id === id);
-      if (found) handleAppointmentOpen(found);
-    });
+
+    const openFromId = () =>
+      appointmentsApi.getById(id).then((appt) => {
+        if (cancelled || !appt) return;
+        setFocusDate(appt.date);
+        setWeekStart(startOfWeekIso(appt.date, language));
+        handleAppointmentOpen(appt);
+      });
+
+    appointmentsApi
+      .daySchedule(initialDate)
+      .then((day) => {
+        if (cancelled) return;
+        const found = day.appointments.find((a) => a.id === id);
+        if (found) {
+          handleAppointmentOpen(found);
+          return;
+        }
+        return openFromId();
+      })
+      .catch(() => openFromId())
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };
-  }, [manageAppointmentId, initialDate]);
+  }, [manageAppointmentId, initialDate, language]);
 
   function handleFabClick() {
     if (!canCreate) return;
@@ -791,10 +810,28 @@ export function AppointmentsPage() {
               <button type="button" className="btn btn--ghost btn--small" onClick={openTodayBrief}>
                 {t('common.today')}
               </button>
+              {isMobileWeek && (
+                <button
+                  type="button"
+                  className="btn btn--ghost btn--small calendar-options-btn"
+                  onClick={() => setCalendarOptionsOpen(true)}
+                >
+                  <SlidersHorizontal size={14} /> {t('appointmentsPage.calendarOptions')}
+                </button>
+              )}
             </div>
           </div>
 
-          {calendarView === 'week' ? (
+          {isMobileWeek && calendarView === 'week' ? (
+            <MobileDayAgenda
+              date={focusDate}
+              language={language}
+              days={dayColumns}
+              appointments={dayColumns.find((d) => d.iso === focusDate)?.schedule?.appointments ?? []}
+              onDaySelect={handleFocusDateChange}
+              onAppointmentOpen={handleAppointmentOpen}
+            />
+          ) : calendarView === 'week' ? (
             <WeekCalendar
               dayColumns={dayColumns}
               times={times}
@@ -824,23 +861,37 @@ export function AppointmentsPage() {
           )}
         </div>
 
-        <AgendaSidebar
-          language={language}
-          focusDate={focusDate}
-          calendarView={calendarView}
-          onCalendarViewChange={setCalendarView}
-          slotStepMin={slotStepMin}
-          onFocusDateChange={handleFocusDateChange}
-          onSlotStepChange={setSlotStepMin}
-          onOpenPatient={(id) => navigate(`/patients/${id}`)}
-          onManageEmergency={(appt) => {
-            setManagingAppt(appt);
-            setEditMode(false);
-          }}
-          draggingEmergency={draggingEmergency}
-          onEmergencyDragStart={setDraggingEmergency}
-          onEmergencyDragEnd={() => setDraggingEmergency(null)}
-        />
+        {isMobileWeek && calendarOptionsOpen && (
+          <button
+            type="button"
+            className="agenda-options-backdrop"
+            aria-label={t('common.close')}
+            onClick={() => setCalendarOptionsOpen(false)}
+          />
+        )}
+        <div className={isMobileWeek ? (calendarOptionsOpen ? 'agenda-options-panel agenda-options-panel--open' : 'agenda-options-panel') : undefined}>
+          <AgendaSidebar
+            language={language}
+            focusDate={focusDate}
+            calendarView={calendarView}
+            onCalendarViewChange={(view) => {
+              setCalendarView(view);
+              setCalendarOptionsOpen(false);
+            }}
+            slotStepMin={slotStepMin}
+            onFocusDateChange={handleFocusDateChange}
+            onSlotStepChange={setSlotStepMin}
+            onOpenPatient={(id) => navigate(`/patients/${id}`)}
+            onManageEmergency={(appt) => {
+              setManagingAppt(appt);
+              setEditMode(false);
+              setCalendarOptionsOpen(false);
+            }}
+            draggingEmergency={draggingEmergency}
+            onEmergencyDragStart={setDraggingEmergency}
+            onEmergencyDragEnd={() => setDraggingEmergency(null)}
+          />
+        </div>
       </div>
 
       {canCreate && (
