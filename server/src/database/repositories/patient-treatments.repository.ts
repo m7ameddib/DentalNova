@@ -250,20 +250,23 @@ export class PatientTreatmentsRepository {
     return rows.map(mapDetailsRow) as PatientTreatmentReportRow[];
   }
 
-  /** Sum of COMPLETED treatment amounts — feeds the patient account total. */
+  /**
+   * Sum of added (non-VOID) treatment amounts — feeds the patient account total.
+   * Due is charged when a treatment is added; completing the same row must not add it again.
+   */
   totalCostForPatient(patientId: number): number {
     const row = this.db.connection
       .prepare(
-        `SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE patient_id = ? AND status = 'COMPLETED'`,
+        `SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE patient_id = ? AND status != 'VOID'`,
       )
       .get(patientId) as { total: number };
     return row.total;
   }
 
-  /** Clinic-wide sum of final amounts across all patients (all time) — used for the Reports outstanding balance. */
+  /** Clinic-wide sum of added (non-VOID) treatment amounts — used for the Reports outstanding balance. */
   totalFinalAmountAll(): number {
     const row = this.db.connection
-      .prepare(`SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE status = 'COMPLETED'`)
+      .prepare(`SELECT COALESCE(SUM(final_amount_cents), 0) as total FROM patient_treatments WHERE status != 'VOID'`)
       .get() as { total: number };
     return row.total;
   }

@@ -11,7 +11,7 @@ import {
 } from '@/components/common/PrintLayout';
 import { DailyReport } from '@/types/domain';
 import { ClinicPrintInfo } from '@/utils/clinicPrintInfo';
-import { formatDateDisplay, formatDateTimeDisplay } from '@/utils/date';
+import { formatDateDisplay, formatDateTimeDisplay, formatClockTime } from '@/utils/date';
 import { formatMoney } from '@/utils/money';
 
 export function DailyReportPrintable({
@@ -217,7 +217,7 @@ export function DailyReportPrintable({
             ) : (
               report.todayAppointments.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.time}</td>
+                  <td>{formatClockTime(a.time, language)}</td>
                   <td>{a.patientName}</td>
                   <td>{a.reason || '—'}</td>
                   <td>{t('appointmentsPage.durationMinutes', { count: a.durationMin })}</td>
@@ -249,7 +249,7 @@ export function DailyReportPrintable({
             ) : (
               report.tomorrowAppointments.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.time}</td>
+                  <td>{formatClockTime(a.time, language)}</td>
                   <td>{a.patientName}</td>
                   <td>{a.reason || '—'}</td>
                   <td>{t('appointmentsPage.durationMinutes', { count: a.durationMin })}</td>

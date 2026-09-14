@@ -87,12 +87,7 @@ export function minutesToTime(totalMinutes: number): string {
   return `${h}:${m}`;
 }
 
-/** Formats a 24h "HH:mm" clock value for display. */
-export function formatClockTime(time: string, locale: string): string {
-  const [h, m] = time.split(':').map(Number);
-  const d = new Date(2000, 0, 1, h, m);
-  return d.toLocaleTimeString(locale, { hour: 'numeric', minute: '2-digit' });
-}
+export { formatClockTime } from './date';
 
 /** Expands 30-minute slot labels to 15-minute steps when needed. */
 export function expandSlotTimes(times: string[], slotStepMin: 15 | 30): string[] {

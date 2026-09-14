@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { Camera, ImagePlus, Loader2, Mic, Send } from 'lucide-react';
 import { aiAssistantApi, AiImageAnalysis, AiProposedAction } from '@/api/ai-assistant.api';
+import { formatDisplayTimeValue } from '@/utils/date';
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { useAuthStore } from '@/store/auth.store';
@@ -61,12 +62,14 @@ function ConfirmationCard({
   onCancel,
   isPending,
   t,
+  language,
 }: {
   action: AiProposedAction;
   onConfirm: () => void;
   onCancel: () => void;
   isPending: boolean;
   t: (k: string) => string;
+  language: string;
 }) {
   return (
     <div className="ops-ai-card ops-ai-confirm">
@@ -75,7 +78,7 @@ function ConfirmationCard({
         {Object.entries(action.display).map(([key, value]) => (
           <div key={key} className="ops-ai-kv">
             <dt>{key}</dt>
-            <dd>{value}</dd>
+            <dd>{formatDisplayTimeValue(value, language)}</dd>
           </div>
         ))}
       </dl>
@@ -285,6 +288,7 @@ export function AiAssistantPage() {
                 onCancel={() => setActiveConfirmation(null)}
                 isPending={executeMutation.isPending}
                 t={t}
+                language={language}
               />
             )}
 

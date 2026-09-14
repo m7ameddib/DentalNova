@@ -56,12 +56,40 @@ export function calculateAge(dateOfBirthIso: string): number {
   return age;
 }
 
+/** Shared Intl options so every user-visible clock uses 12-hour AM/PM (ص/م in Arabic). */
+export const TIME_DISPLAY_OPTIONS: Intl.DateTimeFormatOptions = {
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+};
+
+const CLOCK_TIME_RE = /^(\d{1,2}):(\d{2})(?::\d{2})?$/;
+
+/** True when a value is a stored 24h clock string such as "16:00" or "9:15". */
+export function isStoredClockTime(value: string): boolean {
+  return CLOCK_TIME_RE.test(value.trim());
+}
+
+/** Formats a stored 24h "HH:mm" clock value for display (12-hour AM/PM). */
+export function formatClockTime(time: string, locale: string): string {
+  const match = CLOCK_TIME_RE.exec(time.trim());
+  if (!match) return time;
+  const hours = Number(match[1]);
+  const minutes = Number(match[2]);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes) || hours > 23 || minutes > 59) {
+    return time;
+  }
+  return new Date(2000, 0, 1, hours, minutes).toLocaleTimeString(locale, TIME_DISPLAY_OPTIONS);
+}
+
+/** Formats HH:mm values in AI/assistant display maps; leaves other strings unchanged. */
+export function formatDisplayTimeValue(value: string, locale: string): string {
+  return isStoredClockTime(value) ? formatClockTime(value, locale) : value;
+}
+
 export function formatTimeDisplay(isoTimestamp: string, locale: string): string {
   try {
-    return new Date(isoTimestamp.replace(' ', 'T') + 'Z').toLocaleTimeString(locale, {
-      hour: '2-digit',
-      minute: '2-digit',
-    });
+    return new Date(isoTimestamp.replace(' ', 'T') + 'Z').toLocaleTimeString(locale, TIME_DISPLAY_OPTIONS);
   } catch {
     return isoTimestamp;
   }
@@ -90,7 +118,6 @@ export function formatDateTimeDisplay(isoTimestamp: string, locale: string): str
     year: 'numeric',
     month: 'short',
     day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
+    ...TIME_DISPLAY_OPTIONS,
   });
 }

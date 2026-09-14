@@ -11,7 +11,7 @@ import {
 import { AppointmentWithPatient } from '@/types/domain';
 import { formatClockTime, minutesToTime, timeToMinutes } from '@/utils/calendar';
 import { ClinicPrintInfo } from '@/utils/clinicPrintInfo';
-import { formatDateDisplay } from '@/utils/date';
+import { formatDateDisplay, formatDateTimeDisplay } from '@/utils/date';
 import { formatMoney } from '@/utils/money';
 import { PatientPrintSummary } from './printHelpers';
 
@@ -144,7 +144,7 @@ export function AppointmentsPrintView({
         meta={
           <PrintMetaRow>
             <PrintMetaItem label={t('common.date')} value={dateLabel} />
-            <PrintMetaItem label={t('reports.print.printedOn')} value={new Date().toLocaleString(language)} />
+            <PrintMetaItem label={t('reports.print.printedOn')} value={formatDateTimeDisplay(new Date().toISOString(), language)} />
           </PrintMetaRow>
         }
       />

@@ -614,7 +614,7 @@ export function applyMutationToCaches(
           writeCache(key, upsertArrayItem(entry.data, result));
         }
       }
-      if (String(result.status ?? '') === 'COMPLETED') {
+      if (String(result.status ?? '') !== 'VOID') {
         patchAccountSummaryCache(next, writeCache, Number(result.patientId), {
           costCents: Number(result.finalAmountCents ?? 0),
         });

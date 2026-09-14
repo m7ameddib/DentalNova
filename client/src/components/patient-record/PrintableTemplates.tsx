@@ -12,7 +12,7 @@ import {
   PrintTotals,
 } from '@/components/common/PrintLayout';
 import { formatMoney, centsToAmount } from '@/utils/money';
-import { todayIso, formatDateDisplay, formatDateTimeDisplay, calculateAge } from '@/utils/date';
+import { todayIso, formatDateDisplay, formatDateTimeDisplay, formatClockTime, calculateAge } from '@/utils/date';
 import { ClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import {
   AccountDiscount,
@@ -375,7 +375,7 @@ export function PatientFilePrintable({
               {appointments.map((a) => (
                 <tr key={a.id}>
                   <td>{formatDateDisplay(a.date, language)}</td>
-                  <td>{a.time}</td>
+                  <td>{formatClockTime(a.time, language)}</td>
                   <td>{t(`appointmentsPage.status.${a.status}`)}</td>
                 </tr>
               ))}
@@ -782,7 +782,7 @@ export function PatientRecordPrintable({
               {appointments.map((appt) => (
                 <tr key={appt.id}>
                   <td>{formatDateDisplay(appt.date, language)}</td>
-                  <td>{appt.time}</td>
+                  <td>{formatClockTime(appt.time, language)}</td>
                   <td>{t(`appointmentsPage.status.${appt.status}`)}</td>
                   <td>{appt.reason || appt.appointmentType}</td>
                 </tr>

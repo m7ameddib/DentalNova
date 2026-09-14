@@ -8,7 +8,7 @@ import { DailyReportPrintable } from '@/components/daily-report/DailyReportPrint
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
-import { formatDateDisplay, formatDateTimeDisplay, localTodayIso } from '@/utils/date';
+import { formatDateDisplay, formatDateTimeDisplay, formatClockTime, localTodayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { formatMoney } from '@/utils/money';
 import { openWhatsApp } from '@/utils/whatsapp';
@@ -76,7 +76,7 @@ export function DailyReportPage() {
         ? report.todayAppointments
             .map(
               (a) =>
-                `- ${a.time} ${a.patientName}${a.reason ? ` — ${a.reason}` : ''} (${t(`appointmentsPage.status.${a.status}`)})`,
+                `- ${formatClockTime(a.time, language)} ${a.patientName}${a.reason ? ` — ${a.reason}` : ''} (${t(`appointmentsPage.status.${a.status}`)})`,
             )
             .join('\n')
         : t('dailyReport.noTodayAppointments'),
@@ -84,7 +84,7 @@ export function DailyReportPage() {
       t('dailyReport.sections.tomorrowAppointments'),
       report.tomorrowAppointments.length
         ? report.tomorrowAppointments
-            .map((a) => `- ${a.time} ${a.patientName}${a.reason ? ` — ${a.reason}` : ''}`)
+            .map((a) => `- ${formatClockTime(a.time, language)} ${a.patientName}${a.reason ? ` — ${a.reason}` : ''}`)
             .join('\n')
         : t('dailyReport.noTomorrowAppointments'),
     ];
@@ -388,7 +388,7 @@ export function DailyReportPage() {
             <tbody>
               {report.todayAppointments.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.time}</td>
+                  <td>{formatClockTime(a.time, language)}</td>
                   <td>{a.patientName}</td>
                   <td>{a.reason || '—'}</td>
                   <td>{t('appointmentsPage.durationMinutes', { count: a.durationMin })}</td>
@@ -420,7 +420,7 @@ export function DailyReportPage() {
             <tbody>
               {report.tomorrowAppointments.map((a) => (
                 <tr key={a.id}>
-                  <td>{a.time}</td>
+                  <td>{formatClockTime(a.time, language)}</td>
                   <td>{a.patientName}</td>
                   <td>{a.reason || '—'}</td>
                   <td>{t('appointmentsPage.durationMinutes', { count: a.durationMin })}</td>

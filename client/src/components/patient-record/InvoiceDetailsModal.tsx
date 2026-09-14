@@ -71,7 +71,7 @@ export function InvoiceDetailsModal({ patient, onClose }: { patient: Patient; on
   });
 
   const billedTreatments = useMemo(
-    () => treatments.filter((treatment) => treatment.status === 'COMPLETED'),
+    () => treatments.filter((treatment) => treatment.status !== 'VOID'),
     [treatments],
   );
   const displayRows = useMemo(() => expandTreatmentDisplayRows(billedTreatments), [billedTreatments]);

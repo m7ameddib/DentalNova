@@ -28,7 +28,7 @@ import { getErrorMessage } from '@/utils/errors';
 import { usePrintStore } from '@/store/print.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { useUiStore } from '@/store/ui.store';
-import { todayIso } from '@/utils/date';
+import { todayIso, formatDateTimeDisplay } from '@/utils/date';
 import { formatMoney } from '@/utils/money';
 import { AdminPaymentReceiptPrintable, OperatingContractPrintable } from '@/components/admin/AdminPrintables';
 import { WhatsAppIcon } from '@/components/common/WhatsAppIcon';
@@ -47,10 +47,9 @@ const ADMIN_STATUS_OPTIONS = [
   'CANCELLED',
 ] as const;
 
-function formatDate(iso: string | null): string {
+function formatDate(iso: string | null, locale: string): string {
   if (!iso) return '—';
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
+  return formatDateTimeDisplay(iso, locale) || iso;
 }
 
 export function DibNovaAdminPage() {
@@ -447,12 +446,12 @@ export function DibNovaAdminPage() {
                             <td>{clinic.doctorName || '—'}</td>
                             <td>{clinic.clinicName}</td>
                             <td>{clinic.clinicPhone || '—'}</td>
-                            <td>{formatDate(clinic.createdAt)}</td>
+                            <td>{formatDate(clinic.createdAt, language)}</td>
                             <td>
                               <SubscriptionStatusBadge status={clinic.subscription.status} />
                             </td>
-                            <td>{formatDate(clinic.subscription.startedAt)}</td>
-                            <td>{formatDate(clinic.subscription.expiresAt)}</td>
+                            <td>{formatDate(clinic.subscription.startedAt, language)}</td>
+                            <td>{formatDate(clinic.subscription.expiresAt, language)}</td>
                             <td>
                               {clinic.trialType
                                 ? t(`dibnovaAdmin.trialType.${clinic.trialType}`)
@@ -646,11 +645,11 @@ export function DibNovaAdminPage() {
                           </tr>
                           <tr>
                             <th>{t('dibnovaAdmin.startDate')}</th>
-                            <td>{formatDate(selectedClinic?.subscription.startedAt ?? data.subscription.startedAt)}</td>
+                            <td>{formatDate(selectedClinic?.subscription.startedAt ?? data.subscription.startedAt, language)}</td>
                           </tr>
                           <tr>
                             <th>{t('dibnovaAdmin.expiryDate')}</th>
-                            <td>{formatDate(selectedClinic?.subscription.expiresAt ?? data.subscription.expiresAt)}</td>
+                            <td>{formatDate(selectedClinic?.subscription.expiresAt ?? data.subscription.expiresAt, language)}</td>
                           </tr>
                         </>
                       )}
@@ -669,7 +668,7 @@ export function DibNovaAdminPage() {
                       <>
                         {' '}
                         ({t('dibnovaAdmin.activatedAt', {
-                          date: formatDate(data.offlineLicense.activatedAt),
+                          date: formatDate(data.offlineLicense.activatedAt, language),
                         })})
                       </>
                     )}

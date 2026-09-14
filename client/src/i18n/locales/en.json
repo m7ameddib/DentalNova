@@ -71,14 +71,14 @@
       "title": "Ask the clinic. Get an answer.",
       "text": "The assistant reads the clinic language — patients, plans, and daily work — in Arabic and English.",
       "q": "Who is coming after 11?",
-      "a": "Two patients after 11:00. One crown, one follow-up."
+      "a": "Two patients after 11:00 AM. One crown, one follow-up."
     },
     "wa": {
       "kicker": "WhatsApp",
       "title": "Reminders that patients actually open.",
       "text": "Send appointment and follow-up messages from the same record. Review the text, then send.",
       "previewTitle": "Appointment reminder",
-      "previewText": "Your visit is tomorrow at 10:00. Reply if you need to move it."
+      "previewText": "Your visit is tomorrow at 10:00 AM. Reply if you need to move it."
     },
     "mobile": {
       "kicker": "Dental Nova on the phone",

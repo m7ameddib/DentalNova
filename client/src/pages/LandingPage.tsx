@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { installationApi } from '@/api/installation.api';
 import { useUiStore } from '@/store/ui.store';
+import { formatClockTime } from '@/utils/date';
 
 const CAPABILITIES = [
   'landing.cap.patients',
@@ -145,10 +146,10 @@ export function LandingPage() {
           </div>
           <div className="dn-agenda-mock">
             <aside>
-              <b>09:00</b>
-              <b>10:00</b>
-              <b>11:00</b>
-              <b>12:00</b>
+              <b>{formatClockTime('09:00', language)}</b>
+              <b>{formatClockTime('10:00', language)}</b>
+              <b>{formatClockTime('11:00', language)}</b>
+              <b>{formatClockTime('12:00', language)}</b>
             </aside>
             <div>
               <i className="dn-agenda-mock__apt">{t('landing.agenda.slot1')}</i>
@@ -199,8 +200,8 @@ export function LandingPage() {
           <PhoneFrame title={t('landing.mobile.phoneAppts')}>
             <div className="dn-phone-ui dn-phone-ui--appts">
               <small>Today</small>
-              <b>10:00 · Dib</b>
-              <b>10:30 · Mohoha</b>
+              <b>{formatClockTime('10:00', language)} · Dib</b>
+              <b>{formatClockTime('10:30', language)} · Mohoha</b>
               <b className="dn-phone-ui--er">Emergency</b>
             </div>
           </PhoneFrame>

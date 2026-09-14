@@ -8,7 +8,7 @@ import { labCasesApi } from '@/api/lab-cases.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { useUiStore } from '@/store/ui.store';
-import { formatDateDisplay } from '@/utils/date';
+import { formatDateDisplay, formatClockTime } from '@/utils/date';
 
 export function AppointmentsSection({ patientId }: { patientId: number }) {
   const { t } = useTranslation();
@@ -66,7 +66,7 @@ export function AppointmentsSection({ patientId }: { patientId: number }) {
                 <span className="compact-appointment-list__date">
                   {formatDateDisplay(a.date, language)}
                 </span>
-                <span className="compact-appointment-list__time">{a.time}</span>
+                <span className="compact-appointment-list__time">{formatClockTime(a.time, language)}</span>
                 <span className="compact-appointment-list__reason">{a.reason || a.appointmentType}</span>
               </button>
             </li>

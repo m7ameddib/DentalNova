@@ -4,6 +4,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2 } from 'lucide-react';
 import { workingScheduleApi, WeeklyDaySchedule, WorkingPeriod, ScheduleException } from '@/api/working-schedule.api';
 import { getErrorMessage } from '@/utils/errors';
+import { formatClockTime } from '@/utils/date';
+import { useUiStore } from '@/store/ui.store';
 
 const DAYS = [0, 1, 2, 3, 4, 5, 6];
 
@@ -17,6 +19,7 @@ function defaultDay(dayOfWeek: number): WeeklyDaySchedule {
 
 export function WorkingHoursSection() {
   const { t } = useTranslation();
+  const { language } = useUiStore();
   const queryClient = useQueryClient();
   const [days, setDays] = useState<WeeklyDaySchedule[]>(DAYS.map(defaultDay));
   const [error, setError] = useState<string | null>(null);
@@ -216,7 +219,7 @@ export function WorkingHoursSection() {
                 <strong>{ex.exceptionDate}</strong>
                 {ex.isClosed
                   ? ` — ${t('settings.workingHours.closedAllDay')}`
-                  : ` — ${ex.periods.map((p) => `${p.startTime}–${p.endTime}`).join(', ')}`}
+                  : ` — ${ex.periods.map((p) => `${formatClockTime(p.startTime, language)}–${formatClockTime(p.endTime, language)}`).join(', ')}`}
                 {ex.note ? ` (${ex.note})` : ''}
               </span>
               <button type="button" className="link-btn link-btn--danger" onClick={() => deleteExceptionMutation.mutate(ex.id)}>

@@ -10,7 +10,7 @@ import { PERMISSIONS } from '@/constants/permissions';
 import { useUiStore } from '@/store/ui.store';
 import { usePrintStore } from '@/store/print.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
-import { formatDateDisplay, formatDateTimeDisplay } from '@/utils/date';
+import { formatDateDisplay, formatDateTimeDisplay, formatClockTime } from '@/utils/date';
 import { centsToAmount, formatMoney } from '@/utils/money';
 import { expandTreatmentDisplayRows } from '@/utils/treatment-display';
 import { getErrorMessage } from '@/utils/errors';
@@ -323,7 +323,7 @@ export function ReportDetailModal({ detail, from, to, periodLabel, financial, on
     const data = appointmentsQuery.data ?? [];
     rows = data.map((a) => [
       formatDateDisplay(a.date, language),
-      a.time,
+      formatClockTime(a.time, language),
       t('appointmentsPage.durationMinutes', { count: a.durationMin }),
       a.patientName,
       a.reason || t(`appointmentsPage.appointmentTypes.${a.appointmentType}`),

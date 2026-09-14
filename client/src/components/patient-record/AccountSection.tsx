@@ -184,7 +184,7 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
     print(
       <AccountStatementPrintable
         patient={patient}
-        treatments={treatments.filter((treatment) => treatment.status === 'COMPLETED')}
+        treatments={treatments.filter((treatment) => treatment.status !== 'VOID')}
         payments={payments}
         totals={summary}
         clinic={clinic}

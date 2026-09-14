@@ -34,7 +34,7 @@ import { PERMISSIONS } from '@/constants/permissions';
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
-import { currentTimeRounded, formatDateDisplay, formatTimeDisplay, localAddDaysIso, todayIso } from '@/utils/date';
+import { currentTimeRounded, formatDateDisplay, formatClockTime, formatTimeDisplay, localAddDaysIso, todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { buildWeekDays, expandSlotTimes, startOfWeekIso, timeToMinutes, trimTimesFromWorkingDayStart, weekRangeLabel } from '@/utils/calendar';
 import { getErrorMessage } from '@/utils/errors';
@@ -349,7 +349,7 @@ export function AppointmentsPage() {
       clinicName: clinicSettings.clinicName?.trim() || t('app.name'),
       patientName: managingAppt.patientName,
       appointmentDate: formatDateDisplay(managingAppt.date, msgLocale),
-      appointmentTime: managingAppt.time,
+      appointmentTime: formatClockTime(managingAppt.time, msgLocale),
       appointmentReason: managingAppt.reason,
     });
     if (!openWhatsAppPreferred(phone, message)) return;
@@ -407,7 +407,9 @@ export function AppointmentsPage() {
       date: formatDateDisplay(printDate, language),
     });
     const lines = sendApptActiveAppointments.map((a) =>
-      a.reason ? `${a.time} - ${a.patientName} - ${a.reason}` : `${a.time} - ${a.patientName}`,
+      a.reason
+        ? `${formatClockTime(a.time, language)} - ${a.patientName} - ${a.reason}`
+        : `${formatClockTime(a.time, language)} - ${a.patientName}`,
     );
     openWhatsApp(doctorPhone, [header, ...lines].join('\n'));
   }
@@ -913,7 +915,7 @@ export function AppointmentsPage() {
                 {convertingEmergency
                   ? t('appointmentsPage.emergency.convertToRegular')
                   : t('appointmentsPage.newAppointment')}{' '}
-                · {formatDateDisplay(selectedSlot.date, language)} · {selectedSlot.time}
+                · {formatDateDisplay(selectedSlot.date, language)} · {formatClockTime(selectedSlot.time, language)}
               </h3>
               <button className="icon-btn" onClick={resetBookingForm}>
                 <X size={16} />
@@ -1111,7 +1113,7 @@ export function AppointmentsPage() {
               <h3>
                 {editMode
                   ? t('appointmentsPage.editAppointment')
-                  : `${managingAppt.patientName} · ${formatDateDisplay(managingAppt.date, language)} · ${managingAppt.time}`}
+                  : `${managingAppt.patientName} · ${formatDateDisplay(managingAppt.date, language)} · ${formatClockTime(managingAppt.time, language)}`}
               </h3>
               <button className="icon-btn" onClick={closeManagePanel}>
                 <X size={16} />
@@ -1295,7 +1297,7 @@ export function AppointmentsPage() {
                   </div>
                   <div className="appointment-manage-details__row">
                     <span className="appointment-manage-details__label">{t('common.time')}</span>
-                    <span>{managingAppt.time}</span>
+                    <span>{formatClockTime(managingAppt.time, language)}</span>
                   </div>
                   <div className="appointment-manage-details__row">
                     <span className="appointment-manage-details__label">{t('appointmentsPage.duration')}</span>

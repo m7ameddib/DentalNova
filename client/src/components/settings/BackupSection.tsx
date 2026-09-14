@@ -5,6 +5,8 @@ import { Download, HardDriveDownload, HardDriveUpload, ShieldCheck } from 'lucid
 import { backupApi } from '@/api/backup.api';
 import { getErrorMessage } from '@/utils/errors';
 import { useAuthStore } from '@/store/auth.store';
+import { useUiStore } from '@/store/ui.store';
+import { formatDateTimeDisplay } from '@/utils/date';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -15,6 +17,7 @@ function formatBytes(bytes: number): string {
 export function BackupSection() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
+  const { language } = useUiStore();
   const token = useAuthStore((s) => s.token);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
@@ -107,7 +110,7 @@ export function BackupSection() {
           <tbody>
             {backups.map((b) => (
               <tr key={b.id}>
-                <td>{new Date(b.createdAt).toLocaleString()}</td>
+                <td>{formatDateTimeDisplay(b.createdAt, language)}</td>
                 <td>{formatBytes(b.sizeBytes)}</td>
                 <td>
                   <button type="button" className="btn btn--ghost btn--small" onClick={() => handleDownload(b.filename)}>

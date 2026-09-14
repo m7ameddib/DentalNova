@@ -6,10 +6,11 @@ import { followUpsApi } from '@/api/follow-ups.api';
 import { paymentMethodsApi } from '@/api/settings.api';
 import { FormField } from '@/components/common/FormField';
 import { FollowUpHistoryEntry, FollowUpResult, FollowUpWithPatient } from '@/types/domain';
-import { todayIso } from '@/utils/date';
+import { todayIso, formatClockTime } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
 import { formatMoney } from '@/utils/money';
+import { useUiStore } from '@/store/ui.store';
 
 const CLINICAL_RESULTS: FollowUpResult[] = ['FINE', 'PAIN', 'SWELLING', 'NEEDS_APPOINTMENT', 'NO_ANSWER'];
 const FINANCIAL_RESULTS: FollowUpResult[] = [
@@ -31,6 +32,7 @@ type Props = {
 
 export function FollowUpExpandedPanel({ fu, latestHistory, onDone, onWhatsApp }: Props) {
   const { t } = useTranslation();
+  const { language } = useUiStore();
   const queryClient = useQueryClient();
   const isCompleted = fu.status === 'COMPLETED';
 
@@ -98,7 +100,7 @@ export function FollowUpExpandedPanel({ fu, latestHistory, onDone, onWhatsApp }:
     const now = new Date();
     const hh = String(now.getHours()).padStart(2, '0');
     const mm = String(now.getMinutes()).padStart(2, '0');
-    setSavedAt(`${hh}:${mm}`);
+    setSavedAt(formatClockTime(`${hh}:${mm}`, language));
   };
 
   const completeMutation = useMutation({

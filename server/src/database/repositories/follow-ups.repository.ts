@@ -42,8 +42,8 @@ function todayIso(): string {
   return localTodayIso();
 }
 
-/** Completed treatment value (gross) — invoice total is net after discounts, matching account summary. */
-const PATIENT_GROSS_COST_SQL = `COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0)`;
+/** Added (non-VOID) treatment value (gross) — invoice total is net after discounts, matching account summary. */
+const PATIENT_GROSS_COST_SQL = `COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status != 'VOID'), 0)`;
 const PATIENT_DISCOUNT_SQL = `COALESCE((SELECT SUM(ad.amount_cents) FROM account_discounts ad WHERE ad.patient_id = p.id AND COALESCE(ad.status, 'ACTIVE') != 'VOID'), 0)`;
 
 function applyFinancialTotals<T extends {

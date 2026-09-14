@@ -273,6 +273,77 @@ test('offline payment seeds a missing account-summary so the chart is not blank'
   assert.equal(summary.lastPayments[0]?.id, -11);
 });
 
+test('offline add treatment increases account due immediately', () => {
+  const result = {
+    id: -20,
+    patientId: 4,
+    status: 'PLANNED',
+    finalAmountCents: 15000,
+  };
+  const next = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: { totalCostCents: 0, totalPaidCents: 0, remainingCents: 0, subtotalCents: 0 },
+        cachedAt: '',
+      },
+    },
+    { method: 'POST', url: '/treatments', body: { patientId: 4, status: 'PLANNED' }, result, tempId: -20 },
+  );
+  const summary = next['GET /patients/4/account-summary'].data as {
+    totalCostCents: number;
+    remainingCents: number;
+  };
+  assert.equal(summary.totalCostCents, 15000);
+  assert.equal(summary.remainingCents, 15000);
+});
+
+test('offline complete treatment does not double-count amount due', () => {
+  const added = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: { totalCostCents: 0, totalPaidCents: 2000, remainingCents: 0, subtotalCents: 0 },
+        cachedAt: '',
+      },
+      'GET /patients/4/treatments': {
+        key: 'GET /patients/4/treatments',
+        status: 200,
+        data: [],
+        cachedAt: '',
+      },
+    },
+    {
+      method: 'POST',
+      url: '/treatments',
+      body: { patientId: 4, status: 'PLANNED' },
+      result: { id: -21, patientId: 4, status: 'PLANNED', finalAmountCents: 8000 },
+      tempId: -21,
+    },
+  );
+  const afterAdd = added['GET /patients/4/account-summary'].data as {
+    totalCostCents: number;
+    remainingCents: number;
+  };
+  assert.equal(afterAdd.totalCostCents, 8000);
+  assert.equal(afterAdd.remainingCents, 6000);
+
+  const afterComplete = applyMutationToCaches(added, {
+    method: 'PATCH',
+    url: '/treatments/-21/status',
+    body: { status: 'COMPLETED' },
+    result: { id: -21, patientId: 4, status: 'COMPLETED', finalAmountCents: 8000 },
+  });
+  const summary = afterComplete['GET /patients/4/account-summary'].data as {
+    totalCostCents: number;
+    remainingCents: number;
+  };
+  assert.equal(summary.totalCostCents, 8000);
+  assert.equal(summary.remainingCents, 6000);
+});
+
 test('pending count ignores finished conflicts', () => {
   assert.equal(
     pendingCount([
