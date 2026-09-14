@@ -189,7 +189,8 @@
     "from": "From",
     "to": "To",
     "copy": "Copy",
-    "copied": "Copied"
+    "copied": "Copied",
+    "refresh": "Refresh"
   },
   "auth": {
     "title": "Sign in",
