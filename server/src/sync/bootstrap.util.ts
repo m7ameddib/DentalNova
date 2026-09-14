@@ -7,7 +7,7 @@ export function bootstrapSnapshotFinished(page: {
   hasMore?: boolean;
   pageSize?: number;
 }): boolean {
-  if (page.changesLength === 0) return true;
+  if (page.changesLength === 0) return page.hasMore !== true;
   if (page.hasMore === false) return true;
   const size = page.pageSize ?? BOOTSTRAP_PAGE_SIZE;
   if (page.hasMore !== true && page.changesLength < size) return true;

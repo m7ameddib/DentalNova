@@ -379,7 +379,45 @@ test('offline edit updates the existing cached charge; delete removes it', () =>
   assert.equal(accountSummary(afterDelete).remainingCents, 0);
 });
 
-test('pending count ignores finished conflicts', () => {
+test('offline add treatment uses catalog price when the server result is missing', () => {
+  const rec = buildOptimisticRecord(
+    'POST',
+    '/treatments',
+    { patientId: 4, treatmentTypeId: 9, teeth: [26], status: 'PLANNED', discount: 0 },
+    -21,
+    [{ id: 9, defaultPriceCents: 15000, label: 'Filling' }],
+  );
+  assert.equal(rec.finalAmountCents, 15000);
+  assert.equal(rec.treatmentLabel, 'Filling');
+});
+
+test('offline void payment reverses the cached paid amount', () => {
+  const afterPay = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: { subtotalCents: 20000, totalCostCents: 20000, totalPaidCents: 0, remainingCents: 20000 },
+        cachedAt: '',
+      },
+    },
+    {
+      method: 'POST',
+      url: '/payments',
+      body: { patientId: 4, amount: 50 },
+      result: { id: 3, patientId: 4, amountCents: 5000, status: 'ACTIVE' },
+    },
+  );
+  assert.equal(accountSummary(afterPay).totalPaidCents, 5000);
+  const afterVoid = applyMutationToCaches(afterPay, {
+    method: 'PATCH',
+    url: '/payments/3/void',
+    body: { status: 'VOID' },
+    result: { id: 3, patientId: 4, amountCents: 5000, status: 'VOID' },
+  });
+  assert.equal(accountSummary(afterVoid).totalPaidCents, 0);
+  assert.equal(accountSummary(afterVoid).remainingCents, 20000);
+});
   assert.equal(
     pendingCount([
       { status: 'pending' } as never,

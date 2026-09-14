@@ -1,5 +1,7 @@
 -- DNT Dental — installation & license metadata (production delivery)
--- Safe additive migration. Existing dev databases with users are backfilled as ready.
+-- Safe additive migration. Existing databases with users are marked setup-complete
+-- so they skip the first-run wizard. A signed license is still required in
+-- production Offline (see installation.service isLicenseExpired).
 
 PRAGMA foreign_keys = ON;
 
@@ -17,13 +19,10 @@ CREATE TABLE IF NOT EXISTS app_installation (
 INSERT OR IGNORE INTO app_installation (id, installation_id)
 VALUES (1, lower(hex(randomblob(16))));
 
--- Existing dev/production DBs that already have users: mark as setup-complete
--- so development workflow is not interrupted.
+-- Existing DBs that already have users: skip the first-setup wizard.
+-- Do NOT invent a fake license payload — production Offline verifies signatures.
 UPDATE app_installation
-SET
-  license_activated_at = COALESCE(license_activated_at, datetime('now')),
-  setup_completed_at = COALESCE(setup_completed_at, datetime('now')),
-  license_payload = COALESCE(license_payload, '{"legacyDev":true,"product":"DNT Dental"}')
+SET setup_completed_at = COALESCE(setup_completed_at, datetime('now'))
 WHERE id = 1
   AND setup_completed_at IS NULL
   AND EXISTS (SELECT 1 FROM users LIMIT 1);

@@ -16,7 +16,20 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
   { name: 'expense_categories', table: 'expense_categories', fks: {}, conflict: 'lww-safe' },
   { name: 'treatment_types', table: 'treatment_types', fks: {}, conflict: 'lww-safe' },
   { name: 'lab_names', table: 'lab_names', fks: {}, conflict: 'lww-safe' },
+  { name: 'lab_work_types', table: 'lab_work_types', fks: {}, conflict: 'lww-safe' },
+  {
+    name: 'lab_service_costs',
+    table: 'lab_service_costs',
+    fks: { lab_name_id: 'lab_names' },
+    conflict: 'lww-safe',
+  },
   { name: 'guarantors', table: 'guarantors', fks: {}, conflict: 'lww-safe' },
+  {
+    name: 'guarantor_treatment_prices',
+    table: 'guarantor_treatment_prices',
+    fks: { guarantor_id: 'guarantors', treatment_type_id: 'treatment_types' },
+    conflict: 'lww-safe',
+  },
   { name: 'disease_catalog', table: 'disease_catalog', fks: {}, conflict: 'lww-safe' },
   { name: 'medication_catalog', table: 'medication_catalog', fks: {}, conflict: 'lww-safe' },
   {
@@ -52,7 +65,12 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
   {
     name: 'patient_treatments',
     table: 'patient_treatments',
-    fks: { patient_id: 'patients', treatment_type_id: 'treatment_types', doctor_id: 'users' },
+    fks: {
+      patient_id: 'patients',
+      treatment_type_id: 'treatment_types',
+      doctor_id: 'users',
+      completed_by_id: 'users',
+    },
     conflict: 'review',
   },
   {
@@ -61,7 +79,12 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
     fks: { treatment_id: 'patient_treatments' },
     conflict: 'lww-safe',
   },
-  { name: 'account_discounts', table: 'account_discounts', fks: { patient_id: 'patients' }, conflict: 'review' },
+  {
+    name: 'account_discounts',
+    table: 'account_discounts',
+    fks: { patient_id: 'patients', recorded_by_id: 'users', voided_by_id: 'users' },
+    conflict: 'review',
+  },
   {
     name: 'payments',
     table: 'payments',
@@ -77,7 +100,13 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
   {
     name: 'follow_up_history',
     table: 'follow_up_history',
-    fks: { follow_up_id: 'follow_ups', patient_id: 'patients', payment_id: 'payments', performed_by_id: 'users' },
+    fks: {
+      follow_up_id: 'follow_ups',
+      patient_id: 'patients',
+      payment_id: 'payments',
+      performed_by_id: 'users',
+      appointment_id: 'appointments',
+    },
     conflict: 'immutable',
   },
   {
@@ -137,7 +166,12 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
   {
     name: 'medical_alerts',
     table: 'medical_alerts',
-    fks: { patient_id: 'patients', created_by_id: 'users', deactivated_by_id: 'users' },
+    fks: {
+      patient_id: 'patients',
+      created_by_id: 'users',
+      deactivated_by_id: 'users',
+      disease_catalog_id: 'disease_catalog',
+    },
     conflict: 'review',
   },
   {
@@ -150,6 +184,12 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
       clinical_visit_note_id: 'clinical_visit_notes',
     },
     conflict: 'review',
+  },
+  {
+    name: 'patient_attachment_teeth',
+    table: 'patient_attachment_teeth',
+    fks: { attachment_id: 'patient_attachments' },
+    conflict: 'lww-safe',
   },
 ];
 

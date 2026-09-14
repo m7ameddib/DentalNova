@@ -14,7 +14,9 @@ test('incomplete snapshot pages must not be marked bootstrapped', () => {
 });
 
 test('empty, short, or final snapshot page completes bootstrap', () => {
-  assert.equal(bootstrapSnapshotFinished({ changesLength: 0, hasMore: true }), true);
+  assert.equal(bootstrapSnapshotFinished({ changesLength: 0, hasMore: true }), false);
+  assert.equal(bootstrapSnapshotFinished({ changesLength: 0, hasMore: false }), true);
+  assert.equal(bootstrapSnapshotFinished({ changesLength: 0 }), true);
   assert.equal(bootstrapSnapshotFinished({ changesLength: 12, hasMore: false }), true);
   assert.equal(bootstrapSnapshotFinished({ changesLength: 12 }), true);
   assert.equal(shouldFinalizeBootstrap(true), true);

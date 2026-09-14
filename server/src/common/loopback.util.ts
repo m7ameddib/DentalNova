@@ -13,17 +13,18 @@ export function isLoopbackAddress(ip: string | undefined | null): boolean {
   return false;
 }
 
+/**
+ * Client IP for rate limits. Uses Express `req.ip` (honours `trust proxy`) then the
+ * socket. Does **not** read `X-Forwarded-For` directly — that header is spoofable
+ * when the Node process is reachable without a trusted reverse proxy.
+ */
 export function requestClientIp(req: {
   ip?: string;
   socket?: { remoteAddress?: string };
   connection?: { remoteAddress?: string };
   headers?: Record<string, string | string[] | undefined>;
 }): string {
-  const forwarded = req.headers?.['x-forwarded-for'];
-  const forwardedFirst = Array.isArray(forwarded) ? forwarded[0] : forwarded?.split(',')[0];
-  return normalizeIp(
-    req.ip || forwardedFirst?.trim() || req.socket?.remoteAddress || req.connection?.remoteAddress || '',
-  );
+  return normalizeIp(req.ip || req.socket?.remoteAddress || req.connection?.remoteAddress || '');
 }
 
 export function isLoopbackRequest(req: Pick<Request, 'ip' | 'socket'> & {

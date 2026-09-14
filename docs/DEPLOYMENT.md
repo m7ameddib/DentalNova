@@ -200,7 +200,7 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `SERVE_CLIENT` | `1` | `1` | Serve React UI from API |
 | `CORS_ORIGINS` | — | domain URL | Allowed browser origins |
 | `DOMAIN` | — | `dentalnova.dibnova.com` | Caddy HTTPS domain |
-| `GEMINI_API_KEY` | optional | optional | AI assistant. If set Online, `AI_SERVICE_SECRET` must be a unique non-default value. Leave empty if you do not need AI yet |
+| `GEMINI_API_KEY` | optional | optional | AI assistant. Chat, images, and clinic context go to Google Gemini. If set Online, `AI_SERVICE_SECRET` must be a unique non-default value. Leave empty if you do not need AI yet |
 | `AI_SERVICE_URL` | empty unless set | — | Offline AI proxy origin. **Must be set explicitly** to enable; omitting it no longer defaults to production Online |
 | `ONLINE_CLINIC_SIGNUP` | — | `open` / `invite` / `disabled` | Production Online defaults to **invite**. Create tokens via DibNova admin `POST /dibnova-admin/signup-invite` |
 | `ALLOW_DEMO_USERS` | `1` to seed demo logins | refused when `NODE_ENV=production` | Demo `doctor` / `employee` accounts |
@@ -212,7 +212,7 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `R2_REGION` | optional | optional | Default `auto` |
 | `R2_PREFIX` | optional | optional | Optional key prefix inside the bucket |
 | `PUBLIC_ONLINE_URL` | — | optional | Public URL returned in pairing payloads |
-| `PLATFORM_SECRETS_KEY` | — | optional | Encrypts trial passwords in platform.db (falls back to `JWT_SECRET`) |
+| `PLATFORM_SECRETS_KEY` | — | **required** in production | Encrypts trial passwords in platform.db. Must be unique and **not** `JWT_SECRET` |
 | `DIBNOVA_ADMIN_USERNAME` | optional | **required** | DibNova admin sign-in username |
 | `DIBNOVA_ADMIN_PASSWORD` | optional | **required** | DibNova admin sign-in password (server-side only) |
 | `DIBNOVA_ADMIN_API_KEY` | — | optional | Automation/scripts only — not used in the browser UI |
@@ -306,9 +306,41 @@ Offline licensing is unchanged — use the existing `tools/dibnova-license-gener
 
 In **offline desktop mode**, open **Settings → Updates** to check [GitHub Releases](https://github.com/m7ameddib/DentalNova/releases) for `DNT-Dental-Main-Clinic-Setup-v*.exe`.
 
-Each release **must** also publish `DNT-Dental-Main-Clinic-Setup-v*.exe.sha256`. The app refuses to install an update that has no checksum sidecar (it does not skip verification).
+Each release **must** also publish `DNT-Dental-Main-Clinic-Setup-v*.exe.sha256`. The app refuses to install an update that has no checksum sidecar (it does not skip verification). On Windows the installer must also pass Authenticode (`Get-AuthenticodeSignature` Status = Valid). Optional: set `UPDATE_AUTHENTICODE_PUBLISHER` to pin the expected publisher string. `ALLOW_UNSIGNED_UPDATES=1` is ignored on Windows and in `NODE_ENV=production`.
 
 Updates download to `ProgramData\DibNova\DNTDental\downloads\` and launch the existing Inno Setup installer. Choose **Update Existing Installation** — clinic data at `ProgramData\DibNova\DNTDental\data\clinic.db` is never deleted.
+
+### Authenticode (external — not in this repository)
+
+This environment cannot buy or install a code-signing certificate. Before selling Offline Windows:
+
+1. Obtain an Authenticode certificate (EV preferred) in the DibNova / publisher name.
+2. Sign `DNT-Dental-Main-Clinic-Setup-v*.exe` before attaching it to the GitHub Release.
+3. Publish the matching `.exe.sha256` sidecar.
+4. Set `UPDATE_AUTHENTICODE_PUBLISHER` on clinic PCs once you know the signed Subject string.
+
+Until those exist, the updater **correctly refuses** unsigned EXEs on Windows. That is a release-ops blocker, not an application-logic hole.
+
+### Live Windows clinic drill (must be run on a real PC — not claimed here)
+
+This Linux/cloud agent cannot run a headed Windows pairing drill. Before the first paying clinic, an operator should:
+
+1. Fresh Offline install on Windows (empty `clinic.db`).
+2. Activate with a **signed** license (not a hand-edited `license_payload`).
+3. Complete first setup; create a patient on Online only.
+4. Pair: Online creates a code → Offline Settings → Connect to Online → confirm clinic name/ID → first snapshot finishes (`bootstrapped_at` set) **before** anyone books locally.
+5. Add a treatment + payment on Offline, wait for auto-sync, confirm the same rows on Online.
+6. Settings → Updates: download a signed release, confirm SHA-256 + Authenticode, Update Existing Installation, reopen, data intact.
+7. Backup → restore on the same clinic; confirm patients return.
+8. Negative: a populated Offline must be blocked from pairing.
+
+### Rate limits
+
+Login, pairing, licensing, and admin API-key limits persist to `{DNT_DATA_DIR}/config/auth-rate-limit.json` so a process restart does not reset brute-force windows. They are **single-process**. Do not run multiple Online app instances without a reverse-proxy limit in front. There is no Redis in this stack.
+
+### Pairing empty-clinic attestation
+
+Online `/api/sync/pairing/complete` requires `emptyClinic: true` plus a zero census. The official Offline server fills that census from SQLite. A **custom client** can still lie. Residual risk: only a modified/unofficial Offline talking to Online. Shipped Offline Nest blocks populated pairing and incremental sync until bootstrap completes.
 
 ---
 

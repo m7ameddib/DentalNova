@@ -6,7 +6,6 @@ import { SyncEngineService } from './sync-engine.service';
 import { SyncSchedulerService } from './sync-scheduler.service';
 import { DeviceAuthGuard } from './device-auth.guard';
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
-import { AuthRateLimitService } from '../auth/auth-rate-limit.service';
 import { AuthModule } from '../auth/auth.module';
 import { InstallationModule } from '../installation/installation.module';
 
@@ -19,7 +18,6 @@ import { InstallationModule } from '../installation/installation.module';
     SyncSchedulerService,
     DeviceAuthGuard,
     ClinicSettingsRepository,
-    AuthRateLimitService,
   ],
   exports: [SyncEngineService, SyncPairingService],
 })

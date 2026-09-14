@@ -20,7 +20,13 @@ import { ClinicSettingsRepository } from '../database/repositories/clinic-settin
 import { SYNC_DEVICE_JWT_ISSUER } from '../auth/jwt-payload.util';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { getTenantClinicId } from '../platform/tenant-context';
-import { clinicOperationalCensus, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
+import {
+  censusAttestationFromClinic,
+  clinicOperationalCensus,
+  isEmptyCensusAttestation,
+  POPULATED_OFFLINE_CODE,
+  populatedOfflineMessage,
+} from './clinic-census.util';
 import {
   compactPairingCode,
   INVALID_ONLINE_URL,
@@ -129,7 +135,13 @@ export class SyncPairingService {
     };
   }
 
-  completeFromOnline(input: { code: string; deviceName: string; installationId?: string; emptyClinic: boolean }): {
+  completeFromOnline(input: {
+    code: string;
+    deviceName: string;
+    installationId?: string;
+    emptyClinic: boolean;
+    census?: { patients: number; payments: number; treatments: number; appointments: number; total: number };
+  }): {
     deviceId: string;
     deviceSecret: string;
     clinicId: string;
@@ -139,9 +151,9 @@ export class SyncPairingService {
     if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
       throw new BadRequestException('Pairing must be completed against the Online server.');
     }
-    if (input.emptyClinic !== true) {
+    if (input.emptyClinic !== true || !isEmptyCensusAttestation(input.census)) {
       throw new BadRequestException(
-        'Automatic pairing requires an empty Offline clinic. Two populated databases cannot be merged.',
+        'Automatic pairing requires an empty Offline clinic (emptyClinic + zero census). Two populated databases cannot be merged. Online cannot inspect the Offline disk — the official Offline app attests this from SQLite.',
       );
     }
     let clinicId: string;
@@ -179,6 +191,7 @@ export class SyncPairingService {
     this.assertEmptyOffline();
     const base = this.requireOnlineUrl(input.onlineUrl);
     const installationId = this.installation.get().installationId;
+    const census = censusAttestationFromClinic(clinicOperationalCensus(this.db.connection));
     const res = await fetch(`${base}/api/sync/pairing/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -187,6 +200,7 @@ export class SyncPairingService {
         deviceName: input.deviceName?.trim() || this.clinicSettings.get()?.clinicName || 'Offline clinic',
         installationId,
         emptyClinic: true,
+        census,
       }),
       signal: AbortSignal.timeout(20_000),
     });

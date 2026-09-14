@@ -1,4 +1,38 @@
-import { Equals, IsArray, IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
+import { Type } from 'class-transformer';
+import {
+  Equals,
+  IsArray,
+  IsBoolean,
+  IsInt,
+  IsObject,
+  IsOptional,
+  IsString,
+  Min,
+  MinLength,
+  ValidateNested,
+} from 'class-validator';
+
+export class PairingCensusDto {
+  @IsInt()
+  @Min(0)
+  patients!: number;
+
+  @IsInt()
+  @Min(0)
+  payments!: number;
+
+  @IsInt()
+  @Min(0)
+  treatments!: number;
+
+  @IsInt()
+  @Min(0)
+  appointments!: number;
+
+  @IsInt()
+  @Min(0)
+  total!: number;
+}
 
 export class PairingPreviewDto {
   @IsString()
@@ -25,6 +59,16 @@ export class PairingCompleteDto {
       'Automatic pairing requires an empty Offline clinic (emptyClinic: true). Two populated databases cannot be merged.',
   })
   emptyClinic!: true;
+
+  /**
+   * Self-attested operational census from the Offline Nest process.
+   * Online cannot inspect the Offline DB; a custom client can still lie.
+   * Official Offline always sends the live SQLite census.
+   */
+  @IsObject()
+  @ValidateNested()
+  @Type(() => PairingCensusDto)
+  census!: PairingCensusDto;
 }
 
 export class ConnectOnlineDto {

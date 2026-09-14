@@ -4,6 +4,7 @@ import {
   buildOptimisticRecord,
   cachedAppointmentById,
   cachedPatientDetail,
+  collectCachedTreatmentTypes,
   isNetworkError,
   isQueueableWrite,
   isReadMethod,
@@ -185,7 +186,7 @@ export function installOfflineFallback(api: AxiosInstance): void {
         const tempId = method === 'POST' ? await allocateTempId() : undefined;
         const result =
           method === 'POST' && tempId != null
-            ? buildOptimisticRecord(method, url, queuedBody, tempId)
+            ? buildOptimisticRecord(method, url, queuedBody, tempId, collectCachedTreatmentTypes(await getCaches()))
             : { ...(typeof queuedBody === 'object' && queuedBody ? queuedBody : {}) };
         const itemId = newOutboxId();
         const user = useAuthStore.getState().user;

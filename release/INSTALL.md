@@ -24,7 +24,7 @@
 
 ### AI Assistant
 
-Offline DentalNova uses the Dental Nova Online AI service (Gemini 3.5 Lite). Clinic data stays on this computer; only chat messages and images are sent.
+Offline DentalNova uses the Dental Nova Online AI service (Gemini). Clinic data stays on this computer except the chat text, attached images, and the clinic context the assistant needs to answer — those are sent to Google Gemini when AI is enabled. The in-app assistant shows this warning. Leave `AI_SERVICE_URL` empty to disable the assistant.
 
 No local Gemini API key is required. Optional override in `server/.env`:
 

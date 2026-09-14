@@ -211,12 +211,26 @@ async function main() {
       body: { onlineUrl: 'https://dentalnova.dibnova.com', pairingCode: pairing.data.code },
     });
     assert(connectOnOnline.status === 400, `Online server must not accept Offline connect (got ${connectOnOnline.status})`);
+    const emptyCensus = { patients: 0, payments: 0, treatments: 0, appointments: 0, total: 0 };
     const refusePopulated = await request('POST', '/sync/pairing/complete', {
       body: { code: pairing.data.code, deviceName: 'Test PC', emptyClinic: false },
     });
     assert(refusePopulated.status === 400, `emptyClinic:false must be rejected (got ${refusePopulated.status})`);
+    const refuseNoCensus = await request('POST', '/sync/pairing/complete', {
+      body: { code: pairing.data.code, deviceName: 'Test PC', emptyClinic: true },
+    });
+    assert(refuseNoCensus.status === 400, `pairing without census must be rejected (got ${refuseNoCensus.status})`);
+    const refuseNonZeroCensus = await request('POST', '/sync/pairing/complete', {
+      body: {
+        code: pairing.data.code,
+        deviceName: 'Test PC',
+        emptyClinic: true,
+        census: { patients: 2, payments: 0, treatments: 0, appointments: 0, total: 2 },
+      },
+    });
+    assert(refuseNonZeroCensus.status === 400, `non-zero census must be rejected (got ${refuseNonZeroCensus.status})`);
     const complete = await request('POST', '/sync/pairing/complete', {
-      body: { code: pairing.data.code, deviceName: 'Test PC', installationId: 'inst-a', emptyClinic: true },
+      body: { code: pairing.data.code, deviceName: 'Test PC', installationId: 'inst-a', emptyClinic: true, census: emptyCensus },
       expected: [200, 201],
     });
     assert(complete.data.deviceId && complete.data.deviceSecret, 'device credentials missing');
@@ -267,7 +281,12 @@ async function main() {
 
     const pairingB = await request('POST', '/sync/pairing/start', { token: tokenB, expected: [200, 201] });
     const completeB = await request('POST', '/sync/pairing/complete', {
-      body: { code: pairingB.data.code, deviceName: 'PC B', emptyClinic: true },
+      body: {
+        code: pairingB.data.code,
+        deviceName: 'PC B',
+        emptyClinic: true,
+        census: { patients: 0, payments: 0, treatments: 0, appointments: 0, total: 0 },
+      },
       expected: [200, 201],
     });
     const tokB = await request('POST', '/sync/token', {

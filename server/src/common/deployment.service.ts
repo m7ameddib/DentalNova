@@ -100,6 +100,12 @@ export class DeploymentService implements OnModuleInit {
             'These are server-side credentials for /dibnova-admin — they are never entered as an API key in the browser.',
         );
       }
+      const platformSecrets = this.config.get<string>('PLATFORM_SECRETS_KEY')?.trim();
+      if (!platformSecrets) {
+        throw new Error(
+          'Online production requires PLATFORM_SECRETS_KEY (a unique secret, not JWT_SECRET) to encrypt trial passwords in platform.db.',
+        );
+      }
     }
   }
 }

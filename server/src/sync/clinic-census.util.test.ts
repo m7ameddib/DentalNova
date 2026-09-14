@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { clinicOperationalCensus } from './clinic-census.util';
+import { censusAttestationFromClinic, clinicOperationalCensus, isEmptyCensusAttestation } from './clinic-census.util';
 
 test('empty clinic with only catalogs is not populated', () => {
   const db = new Database(':memory:');
@@ -35,5 +35,22 @@ test('archived-only patients do not count as populated', () => {
     INSERT INTO patients (full_name, archived_at) VALUES ('Old', datetime('now'));
   `);
   assert.equal(clinicOperationalCensus(db).populated, false);
+  db.close();
+});
+
+test('pairing census attestation is empty only when every operational count is zero', () => {
+  assert.equal(isEmptyCensusAttestation(undefined), false);
+  assert.equal(
+    isEmptyCensusAttestation({ patients: 0, payments: 0, treatments: 0, appointments: 0, total: 0 }),
+    true,
+  );
+  assert.equal(
+    isEmptyCensusAttestation({ patients: 1, payments: 0, treatments: 0, appointments: 0, total: 1 }),
+    false,
+  );
+  const db = new Database(':memory:');
+  db.exec(`CREATE TABLE patients (id INTEGER PRIMARY KEY, full_name TEXT, archived_at TEXT);`);
+  const attestation = censusAttestationFromClinic(clinicOperationalCensus(db));
+  assert.equal(attestation.total, 0);
   db.close();
 });

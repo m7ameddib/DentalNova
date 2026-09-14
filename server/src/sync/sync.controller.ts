@@ -96,7 +96,14 @@ export class SyncController {
   token(@Body() dto: DeviceTokenDto, @Req() req: Request) {
     const key = `sync-token:${requestClientIp(req)}:${dto.deviceId}`;
     this.rateLimit.assertAllowed(key, 20, 15 * 60 * 1000);
-    return this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret);
+    try {
+      const result = this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, 15 * 60 * 1000);
+      throw err;
+    }
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)

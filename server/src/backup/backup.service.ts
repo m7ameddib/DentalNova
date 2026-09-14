@@ -19,15 +19,17 @@ import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { safeExtractZip } from '../common/safe-unzip.util';
 import { ObjectStorageService } from '../storage/object-storage.service';
+import {
+  BACKUP_MANIFEST_VERSION,
+  backupClinicMismatch,
+  backupHashMismatch,
+  BackupManifestIdentity,
+  sha256Buffer,
+} from './backup-manifest.util';
 
-const BACKUP_VERSION = 2;
+const BACKUP_VERSION = BACKUP_MANIFEST_VERSION;
 
-export interface BackupManifest {
-  version: number;
-  createdAt: string;
-  appVersion: string;
-  includes: string[];
-}
+export type BackupManifest = BackupManifestIdentity;
 
 export interface BackupInfo {
   id: string;
@@ -140,8 +142,37 @@ export class BackupService {
     }
   }
 
+  private currentBackupIdentity(): { clinicId: string | null; installationId: string | null } {
+    const clinicId = getTenantClinicId() || null;
+    let installationId: string | null = null;
+    try {
+      const row = this.db.connection
+        .prepare(`SELECT installation_id AS installationId FROM app_installation WHERE id = 1`)
+        .get() as { installationId?: string } | undefined;
+      installationId = row?.installationId ?? null;
+    } catch {
+      installationId = null;
+    }
+    return { clinicId, installationId };
+  }
+
+  private assertRestoreIdentity(manifest: BackupManifest, dbPath: string): void {
+    const identity = this.currentBackupIdentity();
+    if (backupClinicMismatch(manifest.clinicId, identity.clinicId)) {
+      throw new BadRequestException(
+        'This backup belongs to a different Online clinic. Restore it only on that clinic.',
+      );
+    }
+    if (manifest.dbSha256) {
+      const actual = sha256Buffer(fs.readFileSync(dbPath));
+      if (backupHashMismatch(manifest.dbSha256, actual)) {
+        throw new BadRequestException('Backup clinic.db does not match its SHA-256 manifest hash. The archive may be corrupt.');
+      }
+    }
+  }
+
   private validateManifest(manifest: BackupManifest): void {
-    if (manifest.version !== 1 && manifest.version !== 2) {
+    if (manifest.version !== 1 && manifest.version !== 2 && manifest.version !== 3) {
       throw new BadRequestException('Unsupported backup version');
     }
     if (!manifest.includes.includes('clinic.db')) {
@@ -165,6 +196,7 @@ export class BackupService {
     if (!fs.existsSync(dbPath)) {
       throw new BadRequestException('Backup is missing clinic.db');
     }
+    this.assertRestoreIdentity(manifest, dbPath);
     return manifest;
   }
 
@@ -193,11 +225,16 @@ export class BackupService {
       const uploadsDest = path.join(workDir, 'uploads');
       await this.copyDirRecursive(uploadsSrc, uploadsDest);
 
+      const identity = this.currentBackupIdentity();
+      const dbSha256 = sha256Buffer(fs.readFileSync(dbBackupPath));
       const manifest: BackupManifest = {
         version: BACKUP_VERSION,
         createdAt: new Date().toISOString(),
         appVersion: APP_VERSION,
         includes: ['clinic.db', 'uploads/'],
+        clinicId: identity.clinicId,
+        installationId: identity.installationId,
+        dbSha256,
       };
       fs.writeFileSync(path.join(workDir, 'manifest.json'), JSON.stringify(manifest, null, 2));
 

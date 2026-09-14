@@ -21,8 +21,9 @@ import {
 import { SyncChangePayload } from './sync.entities';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { getTenantClinicId } from '../platform/tenant-context';
-import { clinicOperationalCensus, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
+import { clinicOperationalCensus, OPERATIONAL_TABLES, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
 import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished } from './bootstrap.util';
+import { SYNC_ENTITY_BY_NAME } from './sync.entities';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
@@ -130,8 +131,13 @@ export class SyncEngineService {
     if (this.running) return { pushed: 0, pulled: 0, conflicts: unresolvedConflictCount(this.db.connection) };
     const peer = this.pairing.readPeerConfig();
     if (!peer) return { pushed: 0, pulled: 0, conflicts: 0, error: 'not-paired' };
-    if (this.readPeerValue('bootstrap_in_progress') === '1' && !this.readPeerValue('bootstrapped_at')) {
-      return { pushed: 0, pulled: 0, conflicts: unresolvedConflictCount(this.db.connection), error: 'bootstrap-in-progress' };
+    if (!this.readPeerValue('bootstrapped_at')) {
+      return {
+        pushed: 0,
+        pulled: 0,
+        conflicts: unresolvedConflictCount(this.db.connection),
+        error: this.readPeerValue('bootstrap_in_progress') === '1' ? 'bootstrap-in-progress' : 'bootstrap-required',
+      };
     }
     this.running = true;
     this.writePeerValue('last_error', '');
@@ -220,6 +226,11 @@ export class SyncEngineService {
       let afterId: number | undefined = Number(this.readPeerValue('bootstrap_after_id') || 0) || undefined;
       let complete = false;
       for (let i = 0; i < MAX_BOOTSTRAP_PAGES; i += 1) {
+        if (this.hasLocalOperationalPending()) {
+          throw new BadRequestException(
+            'Local clinic records were saved during the first download. Use an empty Offline install and pair again — two databases are never merged.',
+          );
+        }
         const qs = new URLSearchParams();
         if (afterEntity) qs.set('afterEntity', afterEntity);
         if (afterId != null) qs.set('afterId', String(afterId));
@@ -410,6 +421,15 @@ export class SyncEngineService {
         ...(init.headers || {}),
       },
       signal: AbortSignal.timeout(45_000),
+    });
+  }
+
+  /** Local operational writes during bootstrap mean the Offline DB is no longer an empty snapshot target. */
+  private hasLocalOperationalPending(): boolean {
+    const operational = new Set<string>(OPERATIONAL_TABLES);
+    return pendingOutbound(this.db.connection, 80).some((change) => {
+      const table = SYNC_ENTITY_BY_NAME[change.entity]?.table;
+      return Boolean(table && operational.has(table));
     });
   }
 
