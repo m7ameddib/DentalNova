@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, OnModuleInit, BadRequestException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import Database from 'better-sqlite3';
 import * as crypto from 'crypto';
@@ -186,7 +186,7 @@ export class PlatformService implements OnModuleInit {
   requireClinic(clinicId: string): PlatformClinic {
     const clinic = this.findClinic(clinicId);
     if (!clinic) {
-      throw new Error(`Unknown clinic ${clinicId}`);
+      throw new NotFoundException('Unknown clinic');
     }
     return clinic;
   }
@@ -450,6 +450,82 @@ export class PlatformService implements OnModuleInit {
       .run(clinicId, eventType, details ?? null);
   }
 
+  recordAdminAudit(input: {
+    actor: string;
+    action: string;
+    clinicId?: string | null;
+    target?: string | null;
+    details?: string | null;
+    ip?: string | null;
+  }): void {
+    if (!this.isEnabled()) {
+      this.logger.log(`admin-audit ${input.action} actor=${input.actor}`);
+      return;
+    }
+    this.db
+      .prepare(
+        `INSERT INTO admin_audit_events (actor, action, clinic_id, target, details, ip)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        input.actor.slice(0, 120),
+        input.action.slice(0, 160),
+        input.clinicId ?? null,
+        input.target ?? null,
+        input.details ?? null,
+        input.ip ?? null,
+      );
+  }
+
+  listAdminAudit(clinicId?: string, limit = 100) {
+    if (!this.isEnabled()) return [];
+    const cap = Math.min(Math.max(limit, 1), 200);
+    const rows = clinicId
+      ? this.db
+          .prepare(
+            `SELECT id, actor, action, clinic_id AS clinicId, target, details, ip, created_at AS createdAt
+             FROM admin_audit_events WHERE clinic_id = ? ORDER BY id DESC LIMIT ?`,
+          )
+          .all(clinicId, cap)
+      : this.db
+          .prepare(
+            `SELECT id, actor, action, clinic_id AS clinicId, target, details, ip, created_at AS createdAt
+             FROM admin_audit_events ORDER BY id DESC LIMIT ?`,
+          )
+          .all(cap);
+    return rows as Array<{
+      id: number;
+      actor: string;
+      action: string;
+      clinicId: string | null;
+      target: string | null;
+      details: string | null;
+      ip: string | null;
+      createdAt: string;
+    }>;
+  }
+
+  ping(): boolean {
+    if (!this.isEnabled()) return false;
+    this.db.prepare('SELECT 1 AS ok').get();
+    return true;
+  }
+
+  syncSummary() {
+    if (!this.isEnabled()) return { registeredDevices: 0, activeDevices: 0 };
+    const row = this.db
+      .prepare(
+        `SELECT COUNT(*) AS registered,
+                COALESCE(SUM(CASE WHEN revoked_at IS NULL THEN 1 ELSE 0 END), 0) AS active
+         FROM sync_registered_devices`,
+      )
+      .get() as { registered: number; active: number };
+    return {
+      registeredDevices: Number(row?.registered ?? 0),
+      activeDevices: Number(row?.active ?? 0),
+    };
+  }
+
   listEvents(clinicId?: string) {
     this.assertEnabled();
     const rows = clinicId
@@ -597,11 +673,77 @@ export class PlatformService implements OnModuleInit {
       const result = clinicDb
         .prepare(`UPDATE users SET password_hash = ?, updated_at = datetime('now') WHERE id = ?`)
         .run(passwordHash, userId);
-      if (result.changes === 0) throw new Error('User not found');
+      if (result.changes === 0) throw new NotFoundException('User not found');
     } finally {
       clinicDb.close();
     }
     this.logEvent(clinicId, 'PASSWORD_RESET', `user ${userId}`);
+  }
+
+  setClinicUserActive(clinicId: string, userId: number, isActive: boolean): { id: number; isActive: boolean } {
+    const clinic = this.requireClinic(clinicId);
+    const clinicDb = new Database(clinic.dbPath, { fileMustExist: true });
+    try {
+      const user = clinicDb
+        .prepare(
+          `SELECT u.id, u.is_active AS isActive, r.name AS roleName
+           FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = ?`,
+        )
+        .get(userId) as { id: number; isActive: number; roleName?: string } | undefined;
+      if (!user) throw new NotFoundException('User not found');
+      if (!isActive && user.roleName === 'doctor') {
+        const remaining = clinicDb
+          .prepare(
+            `SELECT COUNT(*) AS c FROM users u
+             JOIN roles r ON r.id = u.role_id
+             WHERE r.name = 'doctor' AND u.is_active = 1 AND u.id != ?`,
+          )
+          .get(userId) as { c: number };
+        if (Number(remaining?.c ?? 0) < 1) {
+          throw new BadRequestException('Cannot deactivate the last active doctor for this clinic.');
+        }
+      }
+      clinicDb.prepare(`UPDATE users SET is_active = ?, updated_at = datetime('now') WHERE id = ?`).run(isActive ? 1 : 0, userId);
+    } finally {
+      clinicDb.close();
+    }
+    this.logEvent(clinicId, isActive ? 'USER_ACTIVATE' : 'USER_DEACTIVATE', `user ${userId}`);
+    return { id: userId, isActive };
+  }
+
+  setClinicUserRole(clinicId: string, userId: number, roleName: 'doctor' | 'employee') {
+    const clinic = this.requireClinic(clinicId);
+    const clinicDb = new Database(clinic.dbPath, { fileMustExist: true });
+    try {
+      const role = clinicDb.prepare(`SELECT id FROM roles WHERE name = ?`).get(roleName) as { id: number } | undefined;
+      if (!role) throw new BadRequestException(`Unknown role "${roleName}"`);
+      const existing = clinicDb
+        .prepare(
+          `SELECT u.id, r.name AS roleName FROM users u LEFT JOIN roles r ON r.id = u.role_id WHERE u.id = ?`,
+        )
+        .get(userId) as { id: number; roleName?: string } | undefined;
+      if (!existing) throw new NotFoundException('User not found');
+      if (existing.roleName === 'doctor' && roleName !== 'doctor') {
+        const remaining = clinicDb
+          .prepare(
+            `SELECT COUNT(*) AS c FROM users u
+             JOIN roles r ON r.id = u.role_id
+             WHERE r.name = 'doctor' AND u.is_active = 1 AND u.id != ?`,
+          )
+          .get(userId) as { c: number };
+        if (Number(remaining?.c ?? 0) < 1) {
+          throw new BadRequestException('Cannot change the last active doctor role.');
+        }
+      }
+      const result = clinicDb
+        .prepare(`UPDATE users SET role_id = ?, updated_at = datetime('now') WHERE id = ?`)
+        .run(role.id, userId);
+      if (result.changes === 0) throw new NotFoundException('User not found');
+    } finally {
+      clinicDb.close();
+    }
+    this.logEvent(clinicId, 'USER_ROLE', `user ${userId} -> ${roleName}`);
+    return { id: userId, roleName };
   }
 
   findUsersByPhone(phoneNormalized: string): { clinicId: string; username: string }[] {
@@ -743,6 +885,16 @@ export class PlatformService implements OnModuleInit {
         duration_ms INTEGER,
         rounds INTEGER,
         has_image INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS admin_audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        actor TEXT NOT NULL,
+        action TEXT NOT NULL,
+        clinic_id TEXT,
+        target TEXT,
+        details TEXT,
+        ip TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
     `);

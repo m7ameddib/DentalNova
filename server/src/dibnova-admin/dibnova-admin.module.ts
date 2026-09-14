@@ -3,6 +3,8 @@ import { JwtModule } from '@nestjs/jwt';
 import { DibNovaAdminController } from './dibnova-admin.controller';
 import { DibNovaAdminAuthController } from './dibnova-admin-auth.controller';
 import { DibNovaAdminGuard } from './dibnova-admin.guard';
+import { AdminSessionService } from './admin-session.service';
+import { AdminAuditInterceptor } from './admin-audit.interceptor';
 import { SubscriptionModule } from '../subscription/subscription.module';
 import { OfflineLicensingModule } from '../offline-licensing/offline-licensing.module';
 import { AuthModule } from '../auth/auth.module';
@@ -11,6 +13,6 @@ import { InstallationModule } from '../installation/installation.module';
 @Module({
   imports: [SubscriptionModule, OfflineLicensingModule, AuthModule, InstallationModule, JwtModule.register({})],
   controllers: [DibNovaAdminController, DibNovaAdminAuthController],
-  providers: [DibNovaAdminGuard],
+  providers: [DibNovaAdminGuard, AdminSessionService, AdminAuditInterceptor],
 })
 export class DibNovaAdminModule {}

@@ -46,6 +46,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.db;
   }
 
+  ping(): boolean {
+    this.db.prepare('SELECT 1 AS ok').get();
+    return true;
+  }
+
   getDbPath(): string {
     const clinicId = getTenantClinicId();
     if (clinicId && this.platform.isEnabled()) {

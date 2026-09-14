@@ -29,6 +29,11 @@ export class JwtSecretService {
     return createHash('sha256').update(`${this.getSecret()}|sync-device`).digest('hex');
   }
 
+  /** Derived secret so clinic/doctor JWTs cannot be verified as DibNova admin sessions. */
+  getAdminSecret(): string {
+    return createHash('sha256').update(`${this.getSecret()}|dibnova-admin`).digest('hex');
+  }
+
   isInsecureDevSecret(): boolean {
     return isInsecureDevSecret(this.secret);
   }

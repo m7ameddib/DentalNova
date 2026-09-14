@@ -267,17 +267,23 @@ While subscription is not active, the clinic sees **Awaiting activation** at `/s
 
 ### Admin API
 
-**Browser UI:** `POST /api/dibnova-admin/auth/login` with `{ "username", "password" }` → use returned JWT as `Authorization: Bearer <token>`.
+**Browser UI:** `POST /api/dibnova-admin/auth/login` with `{ "username", "password" }` → use returned JWT as `Authorization: Bearer <token>`. Admin JWTs use a dedicated issuer (`dentalnova-admin`), audience (`dibnova-admin`), purpose (`dibnova_admin`), and derived signing secret — clinic/doctor JWTs cannot access Admin APIs, and Admin JWTs cannot be used as clinic sessions.
 
-**Automation (optional):** header `X-DibNova-Admin-Key: <DIBNOVA_ADMIN_API_KEY>`.
+**Automation (optional):** header `X-DibNova-Admin-Key: <DIBNOVA_ADMIN_API_KEY>` (minimum 16 characters). Not used by the browser UI.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| POST | `/api/dibnova-admin/auth/login` | Admin sign-in |
+| POST | `/api/dibnova-admin/auth/logout` | End Admin session (revokes JWT `jti`) |
+| GET | `/api/dibnova-admin/auth/me` | Current Admin identity |
 | GET | `/api/dibnova-admin/installation` | Clinic + subscription/license info |
-| POST | `/api/dibnova-admin/subscription/activate` | PENDING → ACTIVE (1 year) |
-| POST | `/api/dibnova-admin/subscription/extend` | Extend active subscription by 1 year |
+| GET | `/api/dibnova-admin/clinics` | List/search managed clinics (no stored passwords) |
+| POST | `/api/dibnova-admin/subscription/activate` | PENDING → ACTIVE |
+| POST | `/api/dibnova-admin/subscription/extend` | Extend active subscription |
 | POST | `/api/dibnova-admin/subscription/suspend` | Suspend clinic (`{ "reason": "..." }`) |
-| POST | `/api/dibnova-admin/subscription/reactivate` | SUSPENDED/EXPIRED → ACTIVE (1 year) |
+| POST | `/api/dibnova-admin/subscription/reactivate` | SUSPENDED/EXPIRED → ACTIVE |
+| GET | `/api/dibnova-admin/ops/health` | API / database / storage / R2 / sync status |
+| GET | `/api/dibnova-admin/audit` | Admin audit log (no secrets) |
 
 Offline licensing is unchanged — use the existing `tools/dibnova-license-generator` (separate from online subscriptions).
 

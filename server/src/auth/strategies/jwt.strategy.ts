@@ -9,7 +9,7 @@ import { DeploymentService } from '../../common/deployment.service';
 import { PlatformService } from '../../platform/platform.service';
 import { bindTenant, runInTenant } from '../../platform/tenant-context';
 import { isLoopbackRequest } from '../../common/loopback.util';
-import { isSessionJwtPayload, SESSION_JWT_ISSUER } from '../jwt-payload.util';
+import { isAdminJwtPayload, isSessionJwtPayload, SESSION_JWT_ISSUER } from '../jwt-payload.util';
 
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
@@ -35,14 +35,16 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
   }
 
   validate(req: Request, payload: JwtPayload) {
-    if (!isSessionJwtPayload(payload) || (payload as { purpose?: string }).purpose === 'password_reset') {
+    if (
+      !isSessionJwtPayload(payload) ||
+      isAdminJwtPayload(payload) ||
+      payload.dibnovaAdmin ||
+      (payload as { purpose?: string }).purpose === 'password_reset'
+    ) {
       throw new UnauthorizedException();
     }
     if (this.jwtSecret.isInsecureDevSecret() && !isLoopbackRequest(req)) {
       throw new UnauthorizedException();
-    }
-    if (payload.dibnovaAdmin) {
-      return this.authService.toDibNovaAdminUser(payload.username);
     }
     try {
       if (this.deployment.isOnline()) {

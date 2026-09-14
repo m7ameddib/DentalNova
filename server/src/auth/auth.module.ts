@@ -43,6 +43,6 @@ import { InstallationModule } from '../installation/installation.module';
     OnlineClinicAccountsRepository,
   ],
   controllers: [AuthController],
-  exports: [AuthService, PermissionsGuard, JwtSecretService, PasswordResetService],
+  exports: [AuthService, PermissionsGuard, JwtSecretService, PasswordResetService, AuthRateLimitService],
 })
 export class AuthModule {}

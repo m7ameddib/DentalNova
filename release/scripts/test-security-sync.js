@@ -313,6 +313,15 @@ async function main() {
     const clinicJwtAdmin = await request('GET', '/dibnova-admin/clinics', { token: tokenA });
     assert(clinicJwtAdmin.status === 401, `clinic session must not access Admin (got ${clinicJwtAdmin.status})`);
 
+    const adminAsClinic = await request('GET', '/auth/me', { token: adminToken });
+    assert(adminAsClinic.status === 401, `admin JWT must not work as clinic session (got ${adminAsClinic.status})`);
+
+    const listed = await request('GET', '/dibnova-admin/clinics', { token: adminToken, expected: 200 });
+    assert(
+      !(listed.data || []).some((clinic) => clinic.passwordPlain),
+      'Admin clinic list must not include stored passwords',
+    );
+
     const health = await request('GET', '/dibnova-admin/ops/health', { token: adminToken, expected: 200 });
     assert(health.data.ok === true, 'admin health must be ok');
     assert(health.data.r2Configured === false || typeof health.data.r2Configured === 'boolean', 'r2Configured flag missing');

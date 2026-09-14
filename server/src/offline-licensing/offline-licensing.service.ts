@@ -108,6 +108,27 @@ export class OfflineLicensingService {
     }));
   }
 
+  revokeSlot(id: number): { id: number; status: 'revoked' } {
+    if (!this.license.canSign()) {
+      throw new ServiceUnavailableException(
+        'Offline license issuance is not configured on this server.',
+      );
+    }
+    const slot = this.repo.findById(id);
+    if (!slot) {
+      throw new BadRequestException('Unknown offline license slot.');
+    }
+    if (slot.status === 'redeemed') {
+      throw new BadRequestException('Redeemed activation codes cannot be revoked from Admin.');
+    }
+    if (slot.status === 'revoked') {
+      return { id: slot.id, status: 'revoked' };
+    }
+    this.repo.markRevoked(id);
+    this.logger.log(`Revoked offline license slot ${id} for clinic ${slot.clinicId}`);
+    return { id, status: 'revoked' };
+  }
+
   redeem(dto: OfflineActivateDto): OfflineActivateResponse {
     if (!this.license.canSign()) {
       throw new ServiceUnavailableException(

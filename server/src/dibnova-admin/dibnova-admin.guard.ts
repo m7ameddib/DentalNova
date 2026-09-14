@@ -9,9 +9,20 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
-import { JwtPayload } from '../auth/auth.types';
 import { JwtSecretService } from '../auth/jwt-secret.service';
-import { isSessionJwtPayload, SESSION_JWT_ISSUER } from '../auth/jwt-payload.util';
+import {
+  ADMIN_JWT_AUDIENCE,
+  ADMIN_JWT_ISSUER,
+  isValidAdminJwtPayload,
+} from '../auth/jwt-payload.util';
+import { AdminSessionService } from './admin-session.service';
+
+export type AdminAuthMethod = 'jwt' | 'api-key';
+
+export type AdminRequest = Request & {
+  user?: unknown;
+  adminAuthMethod?: AdminAuthMethod;
+};
 
 @Injectable()
 export class DibNovaAdminGuard implements CanActivate {
@@ -20,31 +31,40 @@ export class DibNovaAdminGuard implements CanActivate {
     private readonly jwtService: JwtService,
     private readonly jwtSecret: JwtSecretService,
     private readonly authService: AuthService,
+    private readonly sessions: AdminSessionService,
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
-    const req = context.switchToHttp().getRequest<Request & { user?: unknown }>();
+    const req = context.switchToHttp().getRequest<AdminRequest>();
 
-    const expectedKey = this.config.get<string>('DIBNOVA_ADMIN_API_KEY');
-    if (expectedKey?.trim()) {
-      const providedKey = req.headers['x-dibnova-admin-key'] as string | undefined;
-      if (providedKey && this.timingSafeEqual(providedKey, expectedKey)) {
+    const expectedKey = this.configuredApiKey();
+    if (expectedKey) {
+      const providedKey = req.headers['x-dibnova-admin-key'];
+      const provided = Array.isArray(providedKey) ? providedKey[0] : providedKey;
+      if (provided && this.timingSafeEqual(provided, expectedKey)) {
+        req.user = this.authService.toDibNovaAdminUser('api-key');
+        req.adminAuthMethod = 'api-key';
         return true;
       }
     }
 
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
+      const token = authHeader.slice(7).trim();
       try {
-        const payload = this.jwtService.verify<JwtPayload>(token, {
-          secret: this.jwtSecret.getSecret(),
-          issuer: SESSION_JWT_ISSUER,
+        const payload = this.jwtService.verify(token, {
+          secret: this.jwtSecret.getAdminSecret(),
+          issuer: ADMIN_JWT_ISSUER,
+          audience: ADMIN_JWT_AUDIENCE,
         });
-        if (!isSessionJwtPayload(payload) || !payload.dibnovaAdmin) {
+        if (!isValidAdminJwtPayload(payload)) {
           throw new UnauthorizedException('DibNova admin authentication required.');
         }
-        req.user = this.authService.toDibNovaAdminUser(payload.username);
+        if (this.sessions.isRevoked(payload.jti)) {
+          throw new UnauthorizedException('DibNova admin session has ended.');
+        }
+        req.user = this.authService.toDibNovaAdminUser(String(payload.username));
+        req.adminAuthMethod = 'jwt';
         return true;
       } catch (err) {
         if (err instanceof UnauthorizedException) throw err;
@@ -52,6 +72,12 @@ export class DibNovaAdminGuard implements CanActivate {
     }
 
     throw new UnauthorizedException('DibNova admin authentication required.');
+  }
+
+  private configuredApiKey(): string | null {
+    const key = this.config.get<string>('DIBNOVA_ADMIN_API_KEY')?.trim() || '';
+    if (key.length < 16) return null;
+    return key;
   }
 
   private timingSafeEqual(a: string, b: string): boolean {
