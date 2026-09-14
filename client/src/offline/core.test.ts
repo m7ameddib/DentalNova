@@ -418,6 +418,8 @@ test('offline void payment reverses the cached paid amount', () => {
   assert.equal(accountSummary(afterVoid).totalPaidCents, 0);
   assert.equal(accountSummary(afterVoid).remainingCents, 20000);
 });
+
+test('pending count ignores finished conflicts', () => {
   assert.equal(
     pendingCount([
       { status: 'pending' } as never,

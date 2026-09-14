@@ -1,4 +1,4 @@
-import { priceMultiplier, TreatmentScope } from '@/utils/teeth';
+import { priceMultiplier, TreatmentScope } from '../utils/teeth';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
