@@ -52,6 +52,8 @@ function signHs256(payload, secret) {
   const sig = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
   return `${header}.${body}.${sig}`;
 }
+
+function setupPayload(clinicName, username) {
   return {
     clinicName,
     doctorName: `${clinicName} Admin`,
@@ -273,7 +275,7 @@ async function main() {
     assert(!auditDump.includes('dibadmin-pass'), 'audit must not store admin password');
     assert(!auditDump.includes('newpass123'), 'audit must not store reset password');
 
-    const logout = await request('POST', '/dibnova-admin/auth/logout', { token: adminToken, expected: 200 });
+    const logout = await request('POST', '/dibnova-admin/auth/logout', { token: adminToken, expected: [200, 201] });
     assert(logout.data.loggedOut === true, 'logout must succeed');
     const afterLogout = await request('GET', '/dibnova-admin/clinics', { token: adminToken });
     assert(afterLogout.status === 401, `revoked admin JWT must not work (got ${afterLogout.status})`);

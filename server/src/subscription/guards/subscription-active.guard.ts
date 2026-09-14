@@ -3,12 +3,14 @@ import {
   ExecutionContext,
   ForbiddenException,
   Injectable,
+  UnauthorizedException,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import { SubscriptionService } from '../subscription.service';
 import { DeploymentService } from '../../common/deployment.service';
 import { getTenantClinicId } from '../../platform/tenant-context';
 import { PlatformService } from '../../platform/platform.service';
+import { isAdminJwtPayload } from '../../auth/jwt-payload.util';
 
 export const SKIP_SUBSCRIPTION_GUARD = 'skipSubscriptionGuard';
 
@@ -32,10 +34,14 @@ export class SubscriptionActiveGuard implements CanActivate {
       const req = context.switchToHttp().getRequest<{
         path?: string;
         url?: string;
+        headers?: { authorization?: string };
         user?: { clinicId?: string };
       }>();
       const path = req.path ?? req.url ?? '';
       if (this.isPublicPath(path)) return true;
+      if (this.isAdminBearer(req)) {
+        throw new UnauthorizedException('DibNova admin tokens cannot access clinic APIs.');
+      }
       const clinicId = getTenantClinicId() || req.user?.clinicId?.trim();
       if (!clinicId) {
         throw new ForbiddenException({
@@ -103,5 +109,19 @@ export class SubscriptionActiveGuard implements CanActivate {
       '/sync/token',
     ];
     return prefixes.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
+  }
+
+  private isAdminBearer(req: { headers?: { authorization?: string } }): boolean {
+    const header = req.headers?.authorization;
+    if (!header?.startsWith('Bearer ')) return false;
+    const token = header.slice(7).trim();
+    const parts = token.split('.');
+    if (parts.length < 2) return false;
+    try {
+      const json = Buffer.from(parts[1], 'base64url').toString('utf8');
+      return isAdminJwtPayload(JSON.parse(json));
+    } catch {
+      return false;
+    }
   }
 }

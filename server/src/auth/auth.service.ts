@@ -138,7 +138,6 @@ export class AuthService {
         expiresIn: this.config.get<string>('DIBNOVA_ADMIN_JWT_EXPIRES_IN') || '8h',
         issuer: ADMIN_JWT_ISSUER,
         audience: ADMIN_JWT_AUDIENCE,
-        jwtid: jti,
       }),
       user: authUser,
     };
