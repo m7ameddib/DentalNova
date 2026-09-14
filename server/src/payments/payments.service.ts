@@ -8,6 +8,8 @@ import { CreatePaymentDto } from './dto/create-payment.dto';
 import { UpdatePaymentDto } from './dto/update-payment.dto';
 import { VoidPaymentDto } from './dto/void-payment.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { DatabaseService } from '../database/database.service';
+import { localTodayIso } from '../common/local-date.util';
 
 @Injectable()
 export class PaymentsService {
@@ -17,6 +19,7 @@ export class PaymentsService {
     private readonly paymentMethodsRepo: PaymentMethodsRepository,
     private readonly followUpsService: FollowUpsService,
     private readonly audit: AuditService,
+    private readonly db: DatabaseService,
   ) {}
 
   create(dto: CreatePaymentDto, currentUser: AuthenticatedUser) {
@@ -27,23 +30,26 @@ export class PaymentsService {
     if (!method || !method.isActive) {
       throw new BadRequestException('Select a valid payment method');
     }
-    const payment = this.paymentsRepo.create({
-      patientId: dto.patientId,
-      amountCents: Math.round(dto.amount * 100),
-      method: dto.method,
-      date: dto.date ?? new Date().toISOString().slice(0, 10),
-      note: dto.note ?? null,
-      recordedById: currentUser.id,
-    });
-    this.followUpsService.onPaymentChanged(dto.patientId);
-    this.audit.log({
-      action: 'PAYMENT_RECORDED',
-      entityType: 'payment',
-      entityId: payment.id,
-      patientId: dto.patientId,
-      description: `Payment recorded: ${(payment.amountCents / 100).toFixed(2)}`,
-      userId: currentUser.id,
-    });
+    const payment = this.db.connection.transaction(() => {
+      const created = this.paymentsRepo.create({
+        patientId: dto.patientId,
+        amountCents: Math.round(dto.amount * 100),
+        method: dto.method,
+        date: dto.date ?? localTodayIso(),
+        note: dto.note ?? null,
+        recordedById: currentUser.id,
+      });
+      this.followUpsService.onPaymentChanged(dto.patientId);
+      this.audit.log({
+        action: 'PAYMENT_RECORDED',
+        entityType: 'payment',
+        entityId: created.id,
+        patientId: dto.patientId,
+        description: `Payment recorded: ${(created.amountCents / 100).toFixed(2)}`,
+        userId: currentUser.id,
+      });
+      return created;
+    })();
     return payment;
   }
 
@@ -59,22 +65,25 @@ export class PaymentsService {
         throw new BadRequestException('Select a valid payment method');
       }
     }
-    const updated = this.paymentsRepo.update(id, {
-      amountCents: dto.amount !== undefined ? Math.round(dto.amount * 100) : undefined,
-      method: dto.method,
-      date: dto.date,
-      note: dto.note !== undefined ? dto.note.trim() || null : undefined,
-    });
-    if (!updated) throw new BadRequestException('Payment could not be updated');
-    this.followUpsService.onPaymentChanged(existing.patientId);
-    this.audit.log({
-      action: 'PAYMENT_UPDATED',
-      entityType: 'payment',
-      entityId: id,
-      patientId: existing.patientId,
-      description: `Payment updated: ${(updated.amountCents / 100).toFixed(2)}`,
-      userId: currentUser.id,
-    });
+    const updated = this.db.connection.transaction(() => {
+      const next = this.paymentsRepo.update(id, {
+        amountCents: dto.amount !== undefined ? Math.round(dto.amount * 100) : undefined,
+        method: dto.method,
+        date: dto.date,
+        note: dto.note !== undefined ? dto.note.trim() || null : undefined,
+      });
+      if (!next) throw new BadRequestException('Payment could not be updated');
+      this.followUpsService.onPaymentChanged(existing.patientId);
+      this.audit.log({
+        action: 'PAYMENT_UPDATED',
+        entityType: 'payment',
+        entityId: id,
+        patientId: existing.patientId,
+        description: `Payment updated: ${(next.amountCents / 100).toFixed(2)}`,
+        userId: currentUser.id,
+      });
+      return next;
+    })();
     return updated;
   }
 
@@ -84,17 +93,20 @@ export class PaymentsService {
     if (existing.status === 'VOID') {
       throw new BadRequestException('Payment is already voided');
     }
-    const voided = this.paymentsRepo.void(id, currentUser.id, dto.reason.trim());
-    if (!voided) throw new BadRequestException('Payment could not be voided');
-    this.followUpsService.onPaymentChanged(existing.patientId);
-    this.audit.log({
-      action: 'PAYMENT_VOIDED',
-      entityType: 'payment',
-      entityId: id,
-      patientId: existing.patientId,
-      description: `Payment voided: ${dto.reason.trim()}`,
-      userId: currentUser.id,
-    });
+    const voided = this.db.connection.transaction(() => {
+      const next = this.paymentsRepo.void(id, currentUser.id, dto.reason.trim());
+      if (!next) throw new BadRequestException('Payment could not be voided');
+      this.followUpsService.onPaymentChanged(existing.patientId);
+      this.audit.log({
+        action: 'PAYMENT_VOIDED',
+        entityType: 'payment',
+        entityId: id,
+        patientId: existing.patientId,
+        description: `Payment voided: ${dto.reason.trim()}`,
+        userId: currentUser.id,
+      });
+      return next;
+    })();
     return voided;
   }
 

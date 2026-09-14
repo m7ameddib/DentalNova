@@ -1,4 +1,4 @@
-import { IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
+import { IsDateString, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min } from 'class-validator';
 
 export class CreatePaymentDto {
   @IsInt()
@@ -15,7 +15,7 @@ export class CreatePaymentDto {
 
   /** ISO date string (YYYY-MM-DD). Defaults to today when omitted. */
   @IsOptional()
-  @IsString()
+  @IsDateString()
   date?: string;
 
   @IsOptional()

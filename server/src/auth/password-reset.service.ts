@@ -14,6 +14,7 @@ import { isValidPhone, maskPhone, normalizePhone } from '../common/phone.util';
 import { JwtSecretService } from './jwt-secret.service';
 import { SmsService } from './sms.service';
 import { PasswordResetJwtPayload } from './auth.types';
+import { PASSWORD_RESET_JWT_ISSUER } from './jwt-payload.util';
 import { PlatformService } from '../platform/platform.service';
 import { runInTenant } from '../platform/tenant-context';
 
@@ -73,7 +74,11 @@ export class PasswordResetService {
         purpose: 'password_reset',
         clinicId: directory?.clinicId,
       } satisfies PasswordResetJwtPayload,
-      { secret: this.jwtSecret.getSecret(), expiresIn: RESET_TOKEN_TTL },
+      {
+        secret: this.jwtSecret.getResetSecret(),
+        expiresIn: RESET_TOKEN_TTL,
+        issuer: PASSWORD_RESET_JWT_ISSUER,
+      },
     );
     return { resetToken };
   }
@@ -191,8 +196,9 @@ export class PasswordResetService {
     };
 
     const resetToken = this.jwtService.sign(payload, {
-      secret: this.jwtSecret.getSecret(),
+      secret: this.jwtSecret.getResetSecret(),
       expiresIn: RESET_TOKEN_TTL,
+      issuer: PASSWORD_RESET_JWT_ISSUER,
     });
 
     return { resetToken };
@@ -207,7 +213,8 @@ export class PasswordResetService {
     let payload: PasswordResetJwtPayload;
     try {
       payload = this.jwtService.verify<PasswordResetJwtPayload>(resetToken, {
-        secret: this.jwtSecret.getSecret(),
+        secret: this.jwtSecret.getResetSecret(),
+        issuer: PASSWORD_RESET_JWT_ISSUER,
       });
     } catch {
       throw new UnauthorizedException('Password reset link has expired. Start again.');

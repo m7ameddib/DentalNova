@@ -34,7 +34,7 @@ export class ExpensesController {
 
   @RequirePermissions(PERMISSIONS.EXPENSES_MANAGE)
   @Delete(':id')
-  remove(@Param('id', ParseIntPipe) id: number) {
-    return this.expensesService.remove(id);
+  remove(@Param('id', ParseIntPipe) id: number, @CurrentUser() user: AuthenticatedUser) {
+    return this.expensesService.remove(id, user.id, 'Voided from clinic expenses');
   }
 }

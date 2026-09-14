@@ -1,7 +1,7 @@
 import { ReactNode, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { Archive, Building2, Clock, CreditCard, FlaskConical, HardDrive, History, MapPin, MessageCircle, Settings as SettingsIcon, Stethoscope, Users, HeartPulse, Shield, Receipt, Download } from 'lucide-react';
+import { Archive, Building2, Clock, CreditCard, FlaskConical, HardDrive, History, MapPin, MessageCircle, Settings as SettingsIcon, Stethoscope, Users, HeartPulse, Shield, Receipt, Download, RefreshCw } from 'lucide-react';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { useUiStore } from '@/store/ui.store';
@@ -21,6 +21,7 @@ import { GuarantorsSection } from '@/components/settings/GuarantorsSection';
 import { ExpenseCategoriesSection } from '@/components/settings/ExpenseCategoriesSection';
 import { LaboratoriesSection } from '@/components/settings/LaboratoriesSection';
 import { UpdatesSection } from '@/components/settings/UpdatesSection';
+import { ClinicSyncSection } from '@/components/settings/ClinicSyncSection';
 import { installationApi } from '@/api/installation.api';
 
 interface NavItem {
@@ -123,6 +124,12 @@ export function SettingsPage() {
         label: t('settings.backup.title'),
         icon: <HardDrive size={15} />,
         content: <BackupSection />,
+      });
+      list.push({
+        id: 'clinicSync',
+        label: t('settings.clinicSync.title'),
+        icon: <RefreshCw size={15} />,
+        content: <ClinicSyncSection mode={isOfflineMode ? 'offline' : 'online'} />,
       });
       if (isOfflineMode) {
         list.push({

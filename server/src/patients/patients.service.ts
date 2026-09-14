@@ -9,7 +9,7 @@ import { AuditService } from '../audit/audit.service';
 import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
-import { remainingCents } from '../common/money.util';
+import { remainingCents, creditCents } from '../common/money.util';
 
 @Injectable()
 export class PatientsService {
@@ -150,6 +150,7 @@ export class PatientsService {
       totalCostCents,
       totalPaidCents,
       remainingCents: remainingCents(totalCostCents, totalPaidCents),
+      creditCents: creditCents(totalCostCents, totalPaidCents),
       lastPayments,
       lastDiscounts,
     };

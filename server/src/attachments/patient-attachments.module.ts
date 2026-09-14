@@ -17,5 +17,6 @@ import { UploadsService } from '../common/uploads.service';
     ClinicalVisitNotesRepository,
     UploadsService,
   ],
+  exports: [PatientAttachmentsService],
 })
 export class PatientAttachmentsModule {}

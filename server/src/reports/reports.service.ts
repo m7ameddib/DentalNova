@@ -83,12 +83,9 @@ export class ReportsService {
     if (includeFinancial) {
       const treatmentTotals = this.treatmentsRepo.sumForPeriod(from, to);
       const collectedForPeriod = this.paymentsRepo.totalForPeriod(from, to);
-      const outstandingBalanceCents = Math.max(
-        0,
-        this.treatmentsRepo.totalFinalAmountAll() -
-          this.patientsRepo.totalAccountDiscountAll() -
-          this.paymentsRepo.totalPaidAll(),
-      );
+      const outstandingBalanceCents = this.patientsRepo
+        .findOutstanding()
+        .reduce((sum, p) => sum + p.remainingCents, 0);
       const totalExpensesCents = this.expensesRepo.totalForPeriod(from, to);
       summary.financial = {
         totalTreatmentValueCents: treatmentTotals.baseCents,
@@ -144,7 +141,7 @@ export class ReportsService {
 
   getPatientsDetail(query: ReportPeriodDto, onlyNew: boolean) {
     const { from, to } = this.resolvePeriod(query);
-    return onlyNew ? this.patientsRepo.findCreatedForPeriod(from, to) : this.patientsRepo.findAll(100000);
+    return onlyNew ? this.patientsRepo.findCreatedForPeriod(from, to) : this.patientsRepo.findAll(2000);
   }
 
   getDailyReport(date?: string) {

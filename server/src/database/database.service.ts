@@ -7,6 +7,7 @@ import { ensureRolesAndPermissions, seedReferenceData } from './reference-seed';
 import { seedComprehensiveTreatmentCatalog } from './seed-comprehensive-catalog';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { PlatformService } from '../platform/platform.service';
+import { ensureSyncInfrastructure } from '../sync/sync-schema';
 
 /**
  * Owns the single SQLite connection (persistence layer) and applies SQL
@@ -156,6 +157,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     db.pragma('busy_timeout = 5000');
     this.runMigrationsOn(db);
     this.ensureReferenceDataOn(db);
+    try {
+      ensureSyncInfrastructure(db);
+    } catch (err) {
+      this.logger.warn(`Sync infrastructure setup skipped: ${(err as Error).message}`);
+    }
     const catalogCount = (
       db.prepare(`SELECT COUNT(*) AS c FROM treatment_types`).get() as { c: number } | undefined
     )?.c ?? 0;

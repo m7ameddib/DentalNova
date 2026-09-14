@@ -7,6 +7,9 @@ import { isGuestHomePath, isPublicEntryPath } from '@/routes/public-entry-routes
 import { queryClient } from '@/queryClient';
 import { useOfflineStatusStore } from '@/offline/status.store';
 import { useAuthStore } from '@/store/auth.store';
+import { isCachedSubscriptionUsable } from '@/utils/subscription';
+
+const OFFLINE_SUBSCRIPTION_GRACE_MS = 48 * 60 * 60 * 1000;
 
 export function SubscriptionGate({ children }: { children: ReactNode }) {
   const location = useLocation();
@@ -38,12 +41,20 @@ export function SubscriptionGate({ children }: { children: ReactNode }) {
   }
 
   if ((isLoading || !isFetched) && !subStatus) {
-    const cached = queryClient.getQueryData<{ canUseSystem?: boolean }>(['subscription-status']);
-    if (cached?.canUseSystem) {
+    const cached = queryClient.getQueryData<{
+      canUseSystem?: boolean;
+      expiresAt?: string | null;
+      status?: string;
+    }>(['subscription-status']);
+    const offline = useOfflineStatusStore.getState().enabled && useOfflineStatusStore.getState().connection !== 'online';
+    if (isCachedSubscriptionUsable(cached, { offline, graceMs: OFFLINE_SUBSCRIPTION_GRACE_MS })) {
       return <>{children}</>;
     }
-    if (useOfflineStatusStore.getState().enabled && useOfflineStatusStore.getState().connection !== 'online') {
-      return <>{children}</>;
+    if (cached && cached.canUseSystem === false) {
+      return <Navigate to="/subscription-status" replace />;
+    }
+    if (offline) {
+      return <Navigate to="/subscription-status" replace />;
     }
     return <div className="page-loading" />;
   }

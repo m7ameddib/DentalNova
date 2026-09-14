@@ -1,0 +1,268 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import Database from 'better-sqlite3';
+import { ensureSyncInfrastructure } from './sync-schema';
+import { applyChanges, pendingOutbound, snapshotRow, clinicSnapshot } from './sync-apply.util';
+import { paymentFingerprint, rowsDiffer } from './sync.entities';
+
+function memoryClinic(): Database.Database {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT,
+      phone TEXT,
+      updated_at TEXT
+    );
+    CREATE TABLE payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER,
+      amount_cents INTEGER,
+      method TEXT,
+      date TEXT,
+      note TEXT,
+      status TEXT DEFAULT 'ACTIVE'
+    );
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  return db;
+}
+
+function fsRead038(): string {
+  const fs = require('fs') as typeof import('fs');
+  const path = require('path') as typeof import('path');
+  const file = path.join(__dirname, '..', '..', '..', 'database', 'migrations', '038_clinic_sync.sql');
+  return fs.readFileSync(file, 'utf-8');
+}
+
+test('local patient insert is captured and not marked synced until ack', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('A', '1')`).run();
+  const pending = pendingOutbound(db);
+  assert.equal(pending.length >= 1, true);
+  assert.equal(pending.some((c) => c.entity === 'patients'), true);
+  assert.equal(pending[0].op, 'upsert');
+  db.close();
+});
+
+test('payments are append-only: differing same uid becomes a conflict', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('A')`).run();
+  const patientSnap = snapshotRow(db, 'patients', 1);
+  applyChanges(
+    db,
+    [
+      {
+        changeId: 'pay-1',
+        entity: 'payments',
+        recordUid: 'pay-uid-1',
+        op: 'upsert',
+        row: { patientUid: patientSnap?.recordUid, amountCents: 1000, method: 'CASH', date: '2026-01-01', note: null },
+      },
+    ],
+    'device-a',
+  );
+  const second = applyChanges(
+    db,
+    [
+      {
+        changeId: 'pay-2',
+        entity: 'payments',
+        recordUid: 'pay-uid-1',
+        op: 'upsert',
+        row: { patientUid: patientSnap?.recordUid, amountCents: 5000, method: 'CASH', date: '2026-01-01', note: null },
+      },
+    ],
+    'device-b',
+  );
+  assert.equal(second.conflicts.length, 1);
+  db.close();
+});
+
+test('remote apply preserves record uid and does not enqueue a local outbound copy', () => {
+  const db = memoryClinic();
+  const applied = applyChanges(
+    db,
+    [
+      {
+        changeId: 'chg-patient-1',
+        entity: 'patients',
+        recordUid: 'fixed-patient-uid',
+        op: 'upsert',
+        row: { fullName: 'Remote', phone: '079' },
+      },
+    ],
+    'device-a',
+  );
+  assert.equal(applied.accepted.includes('chg-patient-1'), true);
+  const mapped = db.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'patients'`).get() as { uid: string };
+  assert.equal(mapped.uid, 'fixed-patient-uid');
+  const pending = pendingOutbound(db).filter((c) => c.entity === 'patients');
+  assert.equal(pending.length, 0);
+  db.close();
+});
+
+test('snapshot pages by local id so records are not skipped', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('A', '1')`).run();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('B', '2')`).run();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('C', '3')`).run();
+  const page1 = clinicSnapshot(db, undefined, 0, 2);
+  assert.equal(page1.changes.length, 2);
+  const page2 = clinicSnapshot(db, page1.nextAfterEntity, page1.nextAfterId, 2);
+  assert.equal(page2.changes.length, 1);
+  const names = [...page1.changes, ...page2.changes].map((c) => String(c.row?.fullName));
+  assert.deepEqual(names.sort(), ['A', 'B', 'C']);
+  db.close();
+});
+
+test('duplicate payment fingerprint is flagged rather than inserted twice', () => {
+  const row = { patientUid: 'p1', amountCents: 2500, date: '2026-02-01', method: 'CASH', note: '' };
+  assert.equal(paymentFingerprint(row), paymentFingerprint({ ...row }));
+  assert.equal(rowsDiffer({ amountCents: 1 }, { amountCents: 2 }), true);
+});
+
+test('user apply links by username and never writes password_hash or role_id', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role_id INTEGER NOT NULL,
+      full_name TEXT
+    );
+    CREATE TABLE patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT, phone TEXT);
+    CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER, amount_cents INTEGER, method TEXT, date TEXT, note TEXT, status TEXT DEFAULT 'ACTIVE');
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  db.prepare(`INSERT INTO users (username, password_hash, role_id, full_name) VALUES ('doc', 'LOCAL-HASH', 1, 'Local Doctor')`).run();
+  const result = applyChanges(
+    db,
+    [
+      {
+        changeId: 'user-1',
+        entity: 'users',
+        recordUid: 'user-uid-online',
+        op: 'upsert',
+        row: { username: 'doc', passwordHash: 'REMOTE-HASH', roleId: 99, fullName: 'Remote Doctor' },
+      },
+    ],
+    'device-a',
+  );
+  assert.equal(result.accepted.includes('user-1'), true);
+  const user = db.prepare(`SELECT password_hash AS hash, role_id AS roleId, full_name AS name FROM users WHERE username = 'doc'`).get() as {
+    hash: string;
+    roleId: number;
+    name: string;
+  };
+  assert.equal(user.hash, 'LOCAL-HASH');
+  assert.equal(user.roleId, 1);
+  assert.equal(user.name, 'Local Doctor');
+  const mapped = db.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'users' AND local_id = 1`).get() as { uid: string };
+  assert.equal(mapped.uid, 'user-uid-online');
+  db.close();
+});
+
+test('unknown remote usernames are not inserted', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role_id INTEGER NOT NULL
+    );
+    CREATE TABLE patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT);
+    CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER);
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  const result = applyChanges(
+    db,
+    [
+      {
+        changeId: 'user-new',
+        entity: 'users',
+        recordUid: 'user-uid-new',
+        op: 'upsert',
+        row: { username: 'stranger', passwordHash: 'x', roleId: 1, fullName: 'Stranger' },
+      },
+    ],
+    'device-a',
+  );
+  assert.equal(result.conflicts.some((c) => c.reason === 'user-unlinked'), true);
+  const count = db.prepare(`SELECT COUNT(*) AS c FROM users`).get() as { c: number };
+  assert.equal(count.c, 0);
+  db.close();
+});
+
+test('file_number collision remints instead of failing UNIQUE', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT,
+      phone TEXT,
+      file_number TEXT UNIQUE
+    );
+    CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER);
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  db.prepare(`INSERT INTO patients (full_name, phone, file_number) VALUES ('Local', '1', 'P-000007')`).run();
+  const result = applyChanges(
+    db,
+    [
+      {
+        changeId: 'p-collide',
+        entity: 'patients',
+        recordUid: 'patient-uid-b',
+        op: 'upsert',
+        row: { fullName: 'Remote', phone: '2', fileNumber: 'P-000007' },
+      },
+    ],
+    'device-a',
+  );
+  assert.equal(result.conflicts.some((c) => c.reason === 'file-number-collision'), true);
+  const files = db.prepare(`SELECT file_number AS n FROM patients ORDER BY id`).all() as { n: string }[];
+  assert.deepEqual(files.map((r) => r.n).sort(), ['P-000007', 'P-000008']);
+  db.close();
+});
+
+test('tombstoned records are not resurrected by a later upsert', () => {
+  const db = memoryClinic();
+  applyChanges(
+    db,
+    [
+      {
+        changeId: 'del-1',
+        entity: 'patients',
+        recordUid: 'gone-uid',
+        op: 'delete',
+        row: null,
+      },
+    ],
+    'device-a',
+  );
+  const resurrect = applyChanges(
+    db,
+    [
+      {
+        changeId: 'up-1',
+        entity: 'patients',
+        recordUid: 'gone-uid',
+        op: 'upsert',
+        row: { fullName: 'Zombie', phone: '000' },
+      },
+    ],
+    'device-a',
+  );
+  assert.equal(resurrect.conflicts.some((c) => c.reason === 'tombstone-block'), true);
+  const count = db.prepare(`SELECT COUNT(*) AS c FROM patients`).get() as { c: number };
+  assert.equal(count.c, 0);
+  db.close();
+});
+

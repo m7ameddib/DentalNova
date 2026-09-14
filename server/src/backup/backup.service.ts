@@ -11,13 +11,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createReadStream } from 'fs';
 import archiver, { ArchiverError } from 'archiver';
-import AdmZip from 'adm-zip';
 import yauzl from 'yauzl';
 import { DatabaseService } from '../database/database.service';
 import { UploadsService } from '../common/uploads.service';
 import { APP_VERSION } from '../common/version';
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { safeExtractZip } from '../common/safe-unzip.util';
+import { ObjectStorageService } from '../storage/object-storage.service';
 
 const BACKUP_VERSION = 2;
 
@@ -33,6 +34,7 @@ export interface BackupInfo {
   filename: string;
   createdAt: string;
   sizeBytes: number;
+  r2Uploaded?: boolean;
 }
 
 @Injectable()
@@ -45,6 +47,7 @@ export class BackupService {
     private readonly uploads: UploadsService,
     private readonly config: ConfigService,
     private readonly platform: PlatformService,
+    private readonly objectStorage: ObjectStorageService,
   ) {}
 
   private backupsDir(): string {
@@ -119,9 +122,7 @@ export class BackupService {
   }
 
   private async unzipArchive(zipPath: string, destDir: string): Promise<void> {
-    fs.mkdirSync(destDir, { recursive: true });
-    const zip = new AdmZip(zipPath);
-    zip.extractAllTo(destDir, true);
+    await safeExtractZip(zipPath, destDir);
   }
 
   private async assertBackupZipValid(zipPath: string): Promise<void> {
@@ -205,12 +206,22 @@ export class BackupService {
       await this.assertBackupZipValid(zipPath);
 
       const stat = fs.statSync(zipPath);
-      this.logger.log(`Backup created: ${id}.zip (${stat.size} bytes)`);
+      let r2Uploaded = false;
+      if (this.objectStorage.usesR2()) {
+        try {
+          const zipBytes = fs.readFileSync(zipPath);
+          r2Uploaded = await this.objectStorage.putRemoteObject(`backups/${id}.zip`, zipBytes, 'application/zip');
+        } catch (err) {
+          this.logger.warn(`R2 backup copy failed; local zip kept: ${(err as Error).message}`);
+        }
+      }
+      this.logger.log(`Backup created: ${id}.zip (${stat.size} bytes)${r2Uploaded ? ' + R2' : ''}`);
       return {
         id,
         filename: `${id}.zip`,
         createdAt: manifest.createdAt,
         sizeBytes: stat.size,
+        r2Uploaded,
       };
     } catch (err) {
       if (zipPath && fs.existsSync(zipPath)) {

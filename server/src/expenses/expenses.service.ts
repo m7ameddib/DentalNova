@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { ClinicExpensesRepository } from '../database/repositories/clinic-expenses.repository';
 import { ExpenseCategoriesRepository } from '../database/repositories/expense-categories.repository';
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
@@ -62,11 +62,15 @@ export class ExpensesService {
     });
   }
 
-  remove(id: number) {
+  remove(id: number, voidedById?: number, reason?: string) {
     const existing = this.expensesRepo.findById(id);
     if (!existing) throw new NotFoundException('Expense not found');
-    this.expensesRepo.delete(id);
-    return { id };
+    if (existing.status === 'VOID') {
+      throw new BadRequestException('Expense is already voided');
+    }
+    const voided = this.expensesRepo.void(id, voidedById ?? 0, reason?.trim() || 'Voided from clinic expenses');
+    if (!voided) throw new BadRequestException('Expense could not be voided');
+    return voided;
   }
 
   private resolveCategory(expenseCategoryId?: number, legacyCode?: string) {

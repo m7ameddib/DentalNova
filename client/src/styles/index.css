@@ -204,6 +204,11 @@ h4 {
   color: #1d4ed8;
   border-color: #bfdbfe;
 }
+.connection-status-chip--conflict {
+  background: #fffbeb;
+  color: #b45309;
+  border-color: #fde68a;
+}
 .brand-logo {
   display: block;
   object-fit: contain;

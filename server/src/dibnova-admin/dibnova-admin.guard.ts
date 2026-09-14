@@ -11,7 +11,7 @@ import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
 import { JwtPayload } from '../auth/auth.types';
 import { JwtSecretService } from '../auth/jwt-secret.service';
-import { PERMISSIONS } from '../common/rbac.constants';
+import { isSessionJwtPayload, SESSION_JWT_ISSUER } from '../auth/jwt-payload.util';
 
 @Injectable()
 export class DibNovaAdminGuard implements CanActivate {
@@ -39,18 +39,15 @@ export class DibNovaAdminGuard implements CanActivate {
       try {
         const payload = this.jwtService.verify<JwtPayload>(token, {
           secret: this.jwtSecret.getSecret(),
+          issuer: SESSION_JWT_ISSUER,
         });
-        if (payload.dibnovaAdmin) {
-          req.user = this.authService.toDibNovaAdminUser(payload.username);
-          return true;
+        if (!isSessionJwtPayload(payload) || !payload.dibnovaAdmin) {
+          throw new UnauthorizedException('DibNova admin authentication required.');
         }
-        const user = this.authService.toAuthenticatedUser(payload.sub);
-        if (user.permissions.includes(PERMISSIONS.DIBNOVA_ADMIN)) {
-          req.user = user;
-          return true;
-        }
-      } catch {
-        // fall through to unauthorized
+        req.user = this.authService.toDibNovaAdminUser(payload.username);
+        return true;
+      } catch (err) {
+        if (err instanceof UnauthorizedException) throw err;
       }
     }
 

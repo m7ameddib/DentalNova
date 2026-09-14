@@ -89,12 +89,18 @@ export class SubscriptionActiveGuard implements CanActivate {
       '/auth/login',
       '/api/auth/forgot-password',
       '/auth/forgot-password',
+      '/api/auth/recover-username',
+      '/auth/recover-username',
       '/api/auth/verify-reset-otp',
       '/auth/verify-reset-otp',
       '/api/auth/reset-password',
       '/auth/reset-password',
       '/api/ai-provider',
       '/ai-provider',
+      '/api/sync/pairing/complete',
+      '/sync/pairing/complete',
+      '/api/sync/token',
+      '/sync/token',
     ];
     return prefixes.some((prefix) => normalized === prefix || normalized.startsWith(`${prefix}/`));
   }

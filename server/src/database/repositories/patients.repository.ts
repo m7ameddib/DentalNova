@@ -4,6 +4,7 @@ import { toCamel, toCamelList } from '../row-mapper.util';
 import { localDayUtcBounds } from '../../common/local-date.util';
 import { remainingCents } from '../../common/money.util';
 import { FamilyGroup, Patient } from '../../common/types';
+import { nextPatientFileNumber } from '../../patients/file-number.util';
 
 export interface CreatePatientInput {
   fullName: string;
@@ -127,16 +128,31 @@ export class PatientsRepository {
   findOutstanding(): (Patient & { totalCostCents: number; totalPaidCents: number; remainingCents: number })[] {
     const rows = this.db.connection
       .prepare(
-        `SELECT * FROM (
-           SELECT p.*,
-             COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0)
-               - COALESCE((SELECT SUM(ad.amount_cents) FROM account_discounts ad WHERE ad.patient_id = p.id AND COALESCE(ad.status, 'ACTIVE') != 'VOID'), 0) as total_cost_cents,
-             COALESCE((SELECT SUM(pay.amount_cents) FROM payments pay WHERE pay.patient_id = p.id AND COALESCE(pay.status, 'ACTIVE') != 'VOID'), 0) as total_paid_cents
-           FROM patients p
-           WHERE p.archived_at IS NULL
-         ) t
-         WHERE (t.total_cost_cents - t.total_paid_cents) > 0
-         ORDER BY (t.total_cost_cents - t.total_paid_cents) DESC`,
+        `SELECT p.*,
+           COALESCE(t.cost_cents, 0) - COALESCE(d.discount_cents, 0) AS total_cost_cents,
+           COALESCE(pay.paid_cents, 0) AS total_paid_cents
+         FROM patients p
+         LEFT JOIN (
+           SELECT patient_id, SUM(final_amount_cents) AS cost_cents
+           FROM patient_treatments
+           WHERE status = 'COMPLETED'
+           GROUP BY patient_id
+         ) t ON t.patient_id = p.id
+         LEFT JOIN (
+           SELECT patient_id, SUM(amount_cents) AS discount_cents
+           FROM account_discounts
+           WHERE COALESCE(status, 'ACTIVE') != 'VOID'
+           GROUP BY patient_id
+         ) d ON d.patient_id = p.id
+         LEFT JOIN (
+           SELECT patient_id, SUM(amount_cents) AS paid_cents
+           FROM payments
+           WHERE COALESCE(status, 'ACTIVE') != 'VOID'
+           GROUP BY patient_id
+         ) pay ON pay.patient_id = p.id
+         WHERE p.archived_at IS NULL
+           AND (COALESCE(t.cost_cents, 0) - COALESCE(d.discount_cents, 0) - COALESCE(pay.paid_cents, 0)) > 0
+         ORDER BY (COALESCE(t.cost_cents, 0) - COALESCE(d.discount_cents, 0) - COALESCE(pay.paid_cents, 0)) DESC`,
       )
       .all() as Record<string, unknown>[];
     return rows.map((row) => {
@@ -156,12 +172,7 @@ export class PatientsRepository {
 
   /** Generates the next sequential file number, e.g. P-000001. */
   private generateFileNumber(): string {
-    const row = this.db.connection
-      .prepare(`SELECT file_number FROM patients ORDER BY id DESC LIMIT 1`)
-      .get() as { file_number: string } | undefined;
-    const lastSeq = row ? parseInt(row.file_number.replace(/\D/g, ''), 10) || 0 : 0;
-    const next = lastSeq + 1;
-    return `P-${String(next).padStart(6, '0')}`;
+    return nextPatientFileNumber(this.db.connection);
   }
 
   create(input: CreatePatientInput): Patient {

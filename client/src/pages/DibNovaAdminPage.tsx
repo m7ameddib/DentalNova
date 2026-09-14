@@ -64,6 +64,7 @@ export function DibNovaAdminPage() {
   const [offlineClinicName, setOfflineClinicName] = useState('');
   const [offlineInstallationId, setOfflineInstallationId] = useState('');
   const [generatedCode, setGeneratedCode] = useState<string | null>(null);
+  const [signupInvite, setSignupInvite] = useState<string | null>(null);
   const [codeCopied, setCodeCopied] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -302,6 +303,24 @@ export function DibNovaAdminPage() {
     enabled: authenticated && isOnline && Boolean(selectedClinicId),
   });
 
+  const { data: opsHealth } = useQuery({
+    queryKey: ['dibnova-admin-ops-health'],
+    queryFn: dibnovaAdminApi.opsHealth,
+    enabled: authenticated && isOnline,
+  });
+
+  const { data: clinicOps } = useQuery({
+    queryKey: ['dibnova-admin-clinic-ops', selectedClinicId],
+    queryFn: () => dibnovaAdminApi.clinicOps(selectedClinicId),
+    enabled: authenticated && isOnline && Boolean(selectedClinicId),
+  });
+
+  const { data: aiUsage = [] } = useQuery({
+    queryKey: ['dibnova-admin-ai-usage'],
+    queryFn: () => dibnovaAdminApi.aiUsage(),
+    enabled: authenticated && isOnline,
+  });
+
   const filteredClinics = onlineClinics.filter((clinic) => {
     const q = clinicQuery.trim().toLowerCase();
     const matchesQuery =
@@ -414,6 +433,35 @@ export function DibNovaAdminPage() {
                       </tbody>
                     </table>
                   </div>
+                  <div className="settings-actions" style={{ marginTop: 12 }}>
+                    <button
+                      type="button"
+                      className="btn btn--secondary btn--small"
+                      onClick={() => {
+                        void dibnovaAdminApi
+                          .createSignupInvite()
+                          .then((r) => {
+                            setSignupInvite(r.token);
+                            setSuccess(t('dibnovaAdmin.success.signupInvite'));
+                          })
+                          .catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                      }}
+                    >
+                      {t('dibnovaAdmin.signupInvite')}
+                    </button>
+                  </div>
+                  {signupInvite && (
+                    <p className="muted">
+                      {t('dibnovaAdmin.signupInviteOnce')}: <code className="mono-text">{signupInvite}</code>
+                    </p>
+                  )}
+                  {opsHealth && (
+                    <p className="muted" style={{ marginTop: 8 }}>
+                      {t('dibnovaAdmin.opsHealth')}: {opsHealth.deploymentMode} · clinics {opsHealth.clinicCount} ·{' '}
+                      {t('dibnovaAdmin.opsR2')}: {opsHealth.r2Configured ? t('dibnovaAdmin.yes') : t('dibnovaAdmin.no')} ·
+                      uptime {opsHealth.uptimeSec}s
+                    </p>
+                  )}
                 </section>
               )}
 
@@ -941,6 +989,60 @@ export function DibNovaAdminPage() {
                       </div>
                     )}
                   </section>
+
+                  {clinicOps && (
+                    <section className="admin-card">
+                      <h2 className="admin-card__title">{t('dibnovaAdmin.opsTitle')}</h2>
+                      <div className="admin-info-table-wrap">
+                        <table className="admin-info-table">
+                          <tbody>
+                            <tr>
+                              <th>{t('dibnovaAdmin.opsPatients')}</th>
+                              <td>{clinicOps.patientCount}</td>
+                            </tr>
+                            <tr>
+                              <th>{t('dibnovaAdmin.opsBackups')}</th>
+                              <td>{clinicOps.backupZipCount}</td>
+                            </tr>
+                            <tr>
+                              <th>{t('dibnovaAdmin.opsStorage')}</th>
+                              <td>{clinicOps.attachmentBytes}</td>
+                            </tr>
+                            <tr>
+                              <th>{t('dibnovaAdmin.opsDbSize')}</th>
+                              <td>{clinicOps.clinicDbBytes ?? 0}</td>
+                            </tr>
+                            <tr>
+                              <th>{t('dibnovaAdmin.opsDevices')}</th>
+                              <td>{(clinicOps.syncDevices ?? []).filter((d) => !d.revokedAt).length}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </section>
+                  )}
+
+                  {aiUsage.length > 0 && (
+                    <section className="admin-card">
+                      <h2 className="admin-card__title">{t('dibnovaAdmin.aiUsageTitle')}</h2>
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>{t('dibnovaAdmin.clinicName')}</th>
+                            <th>{t('dibnovaAdmin.aiCalls')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {aiUsage.map((row) => (
+                            <tr key={row.clinicId || 'unknown'}>
+                              <td className="mono-text">{row.clinicId || '—'}</td>
+                              <td>{row.calls}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </section>
+                  )}
 
                   <section className="admin-card">
                     <h2 className="admin-card__title">{t('dibnovaAdmin.usersTitle')}</h2>

@@ -12,6 +12,7 @@ import { PERMISSIONS } from '../common/rbac.constants';
 import { DeploymentService } from '../common/deployment.service';
 import { PlatformService } from '../platform/platform.service';
 import { bindTenant, runInTenant } from '../platform/tenant-context';
+import { SESSION_JWT_ISSUER } from './jwt-payload.util';
 
 @Injectable()
 export class AuthService {
@@ -87,6 +88,7 @@ export class AuthService {
       accessToken: this.jwtService.sign(payload, {
         secret: this.jwtSecret.getSecret(),
         expiresIn: this.config.get<string>('JWT_EXPIRES_IN') || '12h',
+        issuer: SESSION_JWT_ISSUER,
       }),
       user: authUser,
     };
@@ -123,6 +125,7 @@ export class AuthService {
       accessToken: this.jwtService.sign(payload, {
         secret: this.jwtSecret.getSecret(),
         expiresIn: this.config.get<string>('DIBNOVA_ADMIN_JWT_EXPIRES_IN') || '8h',
+        issuer: SESSION_JWT_ISSUER,
       }),
       user: authUser,
     };

@@ -13,6 +13,9 @@ export interface InstallationStatus {
   deploymentMode: 'offline' | 'online';
   onlineSubscriptionStatus?: OnlineSubscriptionStatus | null;
   canCreateClinic?: boolean;
+  clinicSignupMode?: 'open' | 'invite' | 'disabled';
+  requiresInviteToken?: boolean;
+  licenseExpired?: boolean;
 }
 
 export interface SetupCompleteResponse extends InstallationStatus {
@@ -31,6 +34,7 @@ export interface FirstSetupPayload {
   adminPassword: string;
   adminPhone: string;
   address?: string;
+  inviteToken?: string;
 }
 
 export const installationApi = {

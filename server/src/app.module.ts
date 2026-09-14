@@ -32,6 +32,7 @@ import { OfflineLicensingModule } from './offline-licensing/offline-licensing.mo
 import { PlatformModule } from './platform/platform.module';
 import { TenantMiddleware } from './platform/tenant.middleware';
 import { IdempotencyModule } from './common/idempotency.module';
+import { StorageModule } from './storage/storage.module';
 
 /** Resolve server/.env whether npm is started from repo root or server/. */
 function resolveServerEnvFile(): string {
@@ -47,6 +48,7 @@ function resolveServerEnvFile(): string {
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: resolveServerEnvFile() }),
     PlatformModule,
+    StorageModule,
     DatabaseModule,
     IdempotencyModule,
     InstallationModule,    AuditModule,

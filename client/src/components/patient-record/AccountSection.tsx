@@ -280,6 +280,12 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
             <span>{t('patientRecord.account.remaining')}</span>
             <span>{formatMoney(summary.remainingCents)}</span>
           </div>
+          {(summary.creditCents ?? 0) > 0 && (
+            <div className="account-summary__row account-summary__row--paid">
+              <span>{t('patientRecord.account.credit')}</span>
+              <span>{formatMoney(summary.creditCents ?? 0)}</span>
+            </div>
+          )}
 
           <div className="account-summary__payments">
             <span className="muted">{t('patientRecord.account.lastPayments')}</span>
