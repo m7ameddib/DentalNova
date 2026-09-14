@@ -495,6 +495,28 @@ function emptyAccountSummary(): Record<string, unknown> {
   };
 }
 
+function treatmentAccountCostCents(treatment: Record<string, unknown> | null | undefined): number {
+  if (!treatment) return 0;
+  if (String(treatment.status ?? '') === 'VOID') return 0;
+  const amount = Number(treatment.finalAmountCents ?? 0);
+  return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+}
+
+function findCachedTreatment(
+  caches: Record<string, CachedGet>,
+  id: number,
+): Record<string, unknown> | null {
+  if (!Number.isFinite(id)) return null;
+  for (const [key, entry] of Object.entries(caches)) {
+    if (!key.includes('/patients/') || !key.includes('/treatments') || !Array.isArray(entry.data)) continue;
+    for (const item of entry.data) {
+      const rec = asRecord(item);
+      if (rec && rec.id === id) return rec;
+    }
+  }
+  return null;
+}
+
 function patchAccountSummaryCache(
   caches: Record<string, CachedGet>,
   writeCache: (key: string, data: unknown) => void,
@@ -503,12 +525,17 @@ function patchAccountSummaryCache(
 ): void {
   const key = `GET /patients/${patientId}/account-summary`;
   const rec = asRecord(caches[key]?.data) ?? emptyAccountSummary();
-  const totalPaidCents = Number(rec.totalPaidCents ?? 0) + (delta.paidCents ?? 0);
-  const totalCostCents = Number(rec.totalCostCents ?? 0) + (delta.costCents ?? 0);
+  const paidDelta = delta.paidCents ?? 0;
+  const costDelta = delta.costCents ?? 0;
+  const totalPaidCents = Number(rec.totalPaidCents ?? 0) + paidDelta;
+  const subtotalCents = Number(rec.subtotalCents ?? rec.totalCostCents ?? 0) + costDelta;
+  const accountDiscountCents = Number(rec.accountDiscountCents ?? 0);
+  const totalCostCents = Math.max(0, Number(rec.totalCostCents ?? 0) + costDelta);
   const lastPayments = Array.isArray(rec.lastPayments) ? rec.lastPayments : [];
   writeCache(key, {
     ...rec,
-    subtotalCents: Number(rec.subtotalCents ?? totalCostCents),
+    subtotalCents,
+    accountDiscountCents,
     totalPaidCents,
     totalCostCents,
     remainingCents: Math.max(0, totalCostCents - totalPaidCents),
@@ -607,6 +634,7 @@ export function applyMutationToCaches(
     }
 
     if (path === '/treatments' && result.patientId != null) {
+      const priorTreatment = result.id != null ? findCachedTreatment(next, Number(result.id)) : null;
       const treatmentsKey = `GET /patients/${result.patientId}/treatments`;
       if (!next[treatmentsKey] || !Array.isArray(next[treatmentsKey].data)) {
         writeCache(treatmentsKey, [result]);
@@ -616,10 +644,9 @@ export function applyMutationToCaches(
           writeCache(key, upsertArrayItem(entry.data, result));
         }
       }
-      if (String(result.status ?? '') === 'COMPLETED') {
-        patchAccountSummaryCache(next, writeCache, Number(result.patientId), {
-          costCents: Number(result.finalAmountCents ?? 0),
-        });
+      const costDelta = treatmentAccountCostCents(result) - treatmentAccountCostCents(priorTreatment);
+      if (costDelta !== 0) {
+        patchAccountSummaryCache(next, writeCache, Number(result.patientId), { costCents: costDelta });
       }
     }
 
@@ -643,10 +670,20 @@ export function applyMutationToCaches(
   if (method === 'PATCH' || method === 'PUT') {
     const idMatch = path.match(/\/(\d+|-?\d+)(?:\/|$)/);
     const id = idMatch ? Number(idMatch[1]) : Number(result.id);
+    const treatmentMatch = path.match(/^\/treatments\/(-?\d+)(?:\/status)?$/);
+    const priorTreatment = treatmentMatch ? findCachedTreatment(next, Number(treatmentMatch[1])) : null;
     if (!Number.isNaN(id)) {
       const patch = { ...asRecord(mutation.body), ...result, id };
       for (const [key, entry] of Object.entries(next)) {
         writeCache(key, mergeById(entry.data, id, patch));
+      }
+      if (priorTreatment) {
+        const after = findCachedTreatment(next, id) ?? { ...priorTreatment, ...patch };
+        const patientId = Number(after.patientId ?? priorTreatment.patientId);
+        const costDelta = treatmentAccountCostCents(after) - treatmentAccountCostCents(priorTreatment);
+        if (patientId && costDelta !== 0) {
+          patchAccountSummaryCache(next, writeCache, patientId, { costCents: costDelta });
+        }
       }
     }
   }
@@ -654,6 +691,8 @@ export function applyMutationToCaches(
   if (method === 'DELETE') {
     const idMatch = path.match(/\/(\d+|-?\d+)(?:\/|$)/);
     const id = idMatch ? Number(idMatch[1]) : Number(result.id);
+    const treatmentMatch = path.match(/^\/treatments\/(-?\d+)$/);
+    const priorTreatment = treatmentMatch ? findCachedTreatment(next, Number(treatmentMatch[1])) : null;
     if (!Number.isNaN(id)) {
       for (const [key, entry] of Object.entries(next)) {
         if (key.endsWith(`/${id}`)) {
@@ -661,6 +700,13 @@ export function applyMutationToCaches(
           continue;
         }
         writeCache(key, removeById(entry.data, id));
+      }
+      if (priorTreatment) {
+        const patientId = Number(priorTreatment.patientId);
+        const costDelta = -treatmentAccountCostCents(priorTreatment);
+        if (patientId && costDelta !== 0) {
+          patchAccountSummaryCache(next, writeCache, patientId, { costCents: costDelta });
+        }
       }
     }
   }

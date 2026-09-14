@@ -16,7 +16,7 @@ import { usePrintStore } from '@/store/print.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { openWhatsApp } from '@/utils/whatsapp';
 import { InvoiceReceiptPrintable } from './PrintableTemplates';
-import { expandTreatmentDisplayRows } from '@/utils/treatment-display';
+import { expandTreatmentDisplayRows, isBillableTreatment } from '@/utils/treatment-display';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { AccountDiscount, Patient, Payment } from '@/types/domain';
@@ -71,7 +71,7 @@ export function InvoiceDetailsModal({ patient, onClose }: { patient: Patient; on
   });
 
   const billedTreatments = useMemo(
-    () => treatments.filter((treatment) => treatment.status === 'COMPLETED'),
+    () => treatments.filter(isBillableTreatment),
     [treatments],
   );
   const displayRows = useMemo(() => expandTreatmentDisplayRows(billedTreatments), [billedTreatments]);

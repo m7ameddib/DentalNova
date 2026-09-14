@@ -3,6 +3,7 @@ import { DatabaseService } from '../database.service';
 import { toCamel, toCamelList } from '../row-mapper.util';
 import { localDayUtcBounds, localTodayIso } from '../../common/local-date.util';
 import { remainingCents } from '../../common/money.util';
+import { billableTreatmentSql } from '../../common/treatment-account.util';
 import {
   FollowUp,
   FollowUpHistoryEntry,
@@ -42,8 +43,8 @@ function todayIso(): string {
   return localTodayIso();
 }
 
-/** Completed treatment value (gross) — invoice total is net after discounts, matching account summary. */
-const PATIENT_GROSS_COST_SQL = `COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND pt.status = 'COMPLETED'), 0)`;
+/** Billable treatment value (gross) — invoice total is net after discounts, matching account summary. */
+const PATIENT_GROSS_COST_SQL = `COALESCE((SELECT SUM(pt.final_amount_cents) FROM patient_treatments pt WHERE pt.patient_id = p.id AND ${billableTreatmentSql('pt')}), 0)`;
 const PATIENT_DISCOUNT_SQL = `COALESCE((SELECT SUM(ad.amount_cents) FROM account_discounts ad WHERE ad.patient_id = p.id AND COALESCE(ad.status, 'ACTIVE') != 'VOID'), 0)`;
 
 function applyFinancialTotals<T extends {

@@ -9,12 +9,16 @@ export interface TreatmentDisplayRow {
   finalAmountCents: number;
 }
 
+export function isBillableTreatment(treatment: { status: string }): boolean {
+  return treatment.status !== 'VOID';
+}
+
 /** Expands multi-tooth SINGLE-scope treatments into one row per tooth for display. */
 export function expandTreatmentDisplayRows(treatments: PatientTreatment[]): TreatmentDisplayRow[] {
   const rows: TreatmentDisplayRow[] = [];
 
   for (const treatment of treatments) {
-    if (treatment.status === 'VOID') continue;
+    if (!isBillableTreatment(treatment)) continue;
 
     const scope = (treatment.treatmentScope ?? 'SINGLE') as TreatmentScope;
     const teeth =
