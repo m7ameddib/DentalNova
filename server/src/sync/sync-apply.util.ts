@@ -444,18 +444,6 @@ function applyUserLinkOnly(
   const mappedUid = db
     .prepare(`SELECT record_uid AS recordUid FROM sync_id_map WHERE entity = 'users' AND local_id = ?`)
     .get(local.id) as { recordUid: string } | undefined;
-  if (mappedUid && mappedUid.recordUid !== change.recordUid) {
-    recordConflict(
-      db,
-      'users',
-      change.recordUid,
-      'user-id-mismatch',
-      { localId: local.id, existingUid: mappedUid.recordUid },
-      change.row,
-    );
-    appendRemoteLog(db, change, deviceId, local.id);
-    return 'user-id-mismatch';
-  }
   const mappedLocal = getLocalId(db, 'users', change.recordUid);
   if (mappedLocal != null && mappedLocal !== local.id) {
     recordConflict(
@@ -469,13 +457,14 @@ function applyUserLinkOnly(
     appendRemoteLog(db, change, deviceId, mappedLocal);
     return 'user-id-mismatch';
   }
-  if (!mappedUid) {
-    db.prepare('INSERT OR IGNORE INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(
-      'users',
-      local.id,
-      change.recordUid,
-    );
+  if (mappedUid && mappedUid.recordUid !== change.recordUid) {
+    db.prepare(`DELETE FROM sync_id_map WHERE entity = 'users' AND local_id = ?`).run(local.id);
   }
+  db.prepare('INSERT OR IGNORE INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(
+    'users',
+    local.id,
+    change.recordUid,
+  );
   appendRemoteLog(db, change, deviceId, local.id);
   return 'accepted';
 }
