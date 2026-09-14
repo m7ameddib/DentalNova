@@ -9,13 +9,18 @@ import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import * as crypto from 'crypto';
 import { AuthService } from '../auth/auth.service';
+import { AuthRateLimitService } from '../auth/auth-rate-limit.service';
 import { JwtSecretService } from '../auth/jwt-secret.service';
+import { requestClientIp } from '../common/loopback.util';
 import {
   ADMIN_JWT_AUDIENCE,
   ADMIN_JWT_ISSUER,
   isValidAdminJwtPayload,
 } from '../auth/jwt-payload.util';
 import { AdminSessionService } from './admin-session.service';
+
+const API_KEY_LIMIT = 8;
+const API_KEY_WINDOW_MS = 15 * 60 * 1000;
 
 export type AdminAuthMethod = 'jwt' | 'api-key';
 
@@ -32,6 +37,7 @@ export class DibNovaAdminGuard implements CanActivate {
     private readonly jwtSecret: JwtSecretService,
     private readonly authService: AuthService,
     private readonly sessions: AdminSessionService,
+    private readonly rateLimit: AuthRateLimitService,
   ) {}
 
   canActivate(context: ExecutionContext): boolean {
@@ -41,10 +47,16 @@ export class DibNovaAdminGuard implements CanActivate {
     if (expectedKey) {
       const providedKey = req.headers['x-dibnova-admin-key'];
       const provided = Array.isArray(providedKey) ? providedKey[0] : providedKey;
-      if (provided && this.timingSafeEqual(provided, expectedKey)) {
-        req.user = this.authService.toDibNovaAdminUser('api-key');
-        req.adminAuthMethod = 'api-key';
-        return true;
+      if (provided) {
+        const limitKey = `admin-api-key:${requestClientIp(req)}`;
+        this.rateLimit.assertAllowed(limitKey, API_KEY_LIMIT, API_KEY_WINDOW_MS);
+        if (this.timingSafeEqual(provided, expectedKey)) {
+          this.rateLimit.recordSuccess(limitKey);
+          req.user = this.authService.toDibNovaAdminUser('api-key');
+          req.adminAuthMethod = 'api-key';
+          return true;
+        }
+        this.rateLimit.recordFailure(limitKey, API_KEY_WINDOW_MS);
       }
     }
 

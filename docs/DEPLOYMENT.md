@@ -306,6 +306,8 @@ Offline licensing is unchanged — use the existing `tools/dibnova-license-gener
 
 In **offline desktop mode**, open **Settings → Updates** to check [GitHub Releases](https://github.com/m7ameddib/DentalNova/releases) for `DNT-Dental-Main-Clinic-Setup-v*.exe`.
 
+Each release **must** also publish `DNT-Dental-Main-Clinic-Setup-v*.exe.sha256`. The app refuses to install an update that has no checksum sidecar (it does not skip verification).
+
 Updates download to `ProgramData\DibNova\DNTDental\downloads\` and launch the existing Inno Setup installer. Choose **Update Existing Installation** — clinic data at `ProgramData\DibNova\DNTDental\data\clinic.db` is never deleted.
 
 ---

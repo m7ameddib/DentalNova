@@ -14,6 +14,7 @@ import { Readable } from 'stream';
 import { spawn } from 'child_process';
 import { APP_VERSION } from '../common/version';
 import { PathsService } from '../common/paths.service';
+import { assertInstallerChecksumPresent, missingInstallerChecksumMessage } from './installer-checksum.util';
 
 interface GitHubReleaseAsset {
   name: string;
@@ -288,9 +289,15 @@ export class UpdatesService {
   ): Promise<void> {
     const checksumAssetName = `${installerFileName}.sha256`;
     const checksumAsset = release.assets.find((a) => a.name === checksumAssetName);
+    try {
+      assertInstallerChecksumPresent(Boolean(checksumAsset), installerFileName);
+    } catch (err) {
+      throw new InternalServerErrorException(
+        (err as Error).message || missingInstallerChecksumMessage(installerFileName),
+      );
+    }
     if (!checksumAsset) {
-      this.logger.warn(`No checksum asset ${checksumAssetName} on release; skipping verification.`);
-      return;
+      throw new InternalServerErrorException(missingInstallerChecksumMessage(installerFileName));
     }
 
     const res = await fetch(checksumAsset.browser_download_url, {

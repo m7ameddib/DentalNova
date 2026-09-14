@@ -18,7 +18,7 @@ npm run dev:server          # offline mode (default)
 npm run dev:client
 
 # Online production (Docker)
-cp deploy/.env.online.example .env   # set JWT_SECRET first
+cp deploy/.env.online.example .env   # set JWT_SECRET (and unique AI_SERVICE_SECRET if GEMINI_API_KEY is set)
 npm run docker:up
 
 # Offline Windows installer

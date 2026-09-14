@@ -4,16 +4,23 @@ import {
   Headers,
   Logger,
   Post,
+  Req,
   ServiceUnavailableException,
   SetMetadata,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { timingSafeEqual } from 'crypto';
+import { Request } from 'express';
 import { SKIP_INSTALLATION_GUARD } from '../installation/guards/installation-ready.guard';
 import { SkipSubscriptionGuard } from '../subscription/decorators/skip-subscription-guard.decorator';
 import { GeminiService } from './gemini.service';
 import { AiProviderGenerateDto } from './dto/ai-provider.dto';
+import { AuthRateLimitService } from '../auth/auth-rate-limit.service';
+import { requestClientIp } from '../common/loopback.util';
+
+const AI_PROVIDER_LIMIT = 30;
+const AI_PROVIDER_WINDOW_MS = 60 * 1000;
 
 @Controller('ai-provider')
 @SetMetadata(SKIP_INSTALLATION_GUARD, true)
@@ -24,13 +31,19 @@ export class AiProviderController {
   constructor(
     private readonly gemini: GeminiService,
     private readonly config: ConfigService,
+    private readonly rateLimit: AuthRateLimitService,
   ) {}
 
   @Post('generate')
   async generate(
     @Headers('x-dentalnova-ai-key') providedKey: string | undefined,
     @Body() dto: AiProviderGenerateDto,
+    @Req() req: Request,
   ) {
+    const key = `ai-provider:${requestClientIp(req)}`;
+    this.rateLimit.assertAllowed(key, AI_PROVIDER_LIMIT, AI_PROVIDER_WINDOW_MS);
+    this.rateLimit.recordFailure(key, AI_PROVIDER_WINDOW_MS);
+
     if (!this.isOnlineMode()) {
       throw new ServiceUnavailableException('AI provider is only available in online mode');
     }
