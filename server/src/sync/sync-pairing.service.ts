@@ -21,6 +21,7 @@ import { SYNC_DEVICE_JWT_ISSUER } from '../auth/jwt-payload.util';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { clinicOperationalCensus, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
+import { normalizeOnlineBaseUrl } from './pairing-public.util';
 
 export interface StoredPeerConfig {
   deviceId: string;
@@ -112,7 +113,7 @@ export class SyncPairingService {
         code: POPULATED_OFFLINE_CODE,
       });
     }
-    const base = input.onlineUrl.replace(/\/$/, '');
+    const base = normalizeOnlineBaseUrl(input.onlineUrl);
     const installationId = this.installation.get().installationId;
     const res = await fetch(`${base}/api/sync/pairing/complete`, {
       method: 'POST',

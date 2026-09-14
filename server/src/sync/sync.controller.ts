@@ -34,6 +34,7 @@ import {
 } from './dto/sync.dto';
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { publicPeerInfo } from './pairing-public.util';
 
 @Controller('sync')
 export class SyncController {
@@ -85,8 +86,9 @@ export class SyncController {
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   @Post('connect')
-  connect(@Body() dto: ConnectOnlineDto) {
-    return this.pairing.connectOffline(dto);
+  async connect(@Body() dto: ConnectOnlineDto) {
+    const stored = await this.pairing.connectOffline(dto);
+    return publicPeerInfo(stored);
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)

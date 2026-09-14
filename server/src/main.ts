@@ -50,10 +50,14 @@ async function bootstrap() {
     app.set('trust proxy', 1);
     const origins = deployment.allowedOrigins();
     app.enableCors({
-      origin: origins.length > 0 ? origins : true,
+      origin: origins.length > 0 ? origins : false,
       credentials: true,
     });
-    logger.log(`Online mode — CORS origins: ${origins.join(', ') || '(all)'}`);
+    if (origins.length === 0) {
+      logger.warn('Online mode has no CORS origins configured; browsers will be blocked. Set CORS_ORIGINS.');
+    } else {
+      logger.log(`Online mode — CORS origins: ${origins.join(', ')}`);
+    }
   } else {
     app.enableCors({ origin: true, credentials: true });
   }

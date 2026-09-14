@@ -353,4 +353,58 @@ test('syncing a treatment then completing the same uid does not duplicate the ch
   db.close();
 });
 
+test('treatment teeth snapshot maps treatment_id to treatmentUid, not the local integer id', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT,
+      phone TEXT
+    );
+    CREATE TABLE treatment_types (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT);
+    CREATE TABLE patient_treatments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER,
+      treatment_type_id INTEGER,
+      final_amount_cents INTEGER,
+      status TEXT
+    );
+    CREATE TABLE patient_treatment_teeth (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      treatment_id INTEGER NOT NULL,
+      tooth_number INTEGER NOT NULL
+    );
+    CREATE TABLE lab_names (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
+    CREATE TABLE lab_account_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_name_id INTEGER NOT NULL,
+      amount_cents INTEGER,
+      payment_method TEXT,
+      payment_date TEXT
+    );
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('Ada')`).run();
+  db.prepare(`INSERT INTO treatment_types (label) VALUES ('Filling')`).run();
+  db.prepare(
+    `INSERT INTO patient_treatments (patient_id, treatment_type_id, final_amount_cents, status) VALUES (1, 1, 5000, 'PLANNED')`,
+  ).run();
+  db.prepare(`INSERT INTO patient_treatment_teeth (treatment_id, tooth_number) VALUES (1, 16)`).run();
+  const treatmentSnap = snapshotRow(db, 'patient_treatments', 1);
+  const toothSnap = snapshotRow(db, 'patient_treatment_teeth', 1);
+  assert.equal(toothSnap?.treatmentUid, treatmentSnap?.recordUid);
+  assert.equal(toothSnap?.treatmentId, undefined);
+
+  db.prepare(`INSERT INTO lab_names (name) VALUES ('Cairo Lab')`).run();
+  db.prepare(
+    `INSERT INTO lab_account_payments (lab_name_id, amount_cents, payment_method, payment_date) VALUES (1, 1000, 'CASH', '2026-01-01')`,
+  ).run();
+  const labSnap = snapshotRow(db, 'lab_names', 1);
+  const paySnap = snapshotRow(db, 'lab_account_payments', 1);
+  assert.equal(paySnap?.labNameUid, labSnap?.recordUid);
+  assert.equal(paySnap?.laboratoryId, undefined);
+  db.close();
+});
+
 

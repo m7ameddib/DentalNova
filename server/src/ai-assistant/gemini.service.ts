@@ -1,6 +1,7 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { AiChatMessage } from './ai-action.types';
+import { isInsecureAiServiceSecret, PUBLIC_DEFAULT_AI_SERVICE_SECRET } from '../common/ai-service-secret.util';
 
 interface GeminiContent {
   role: 'user' | 'model';
@@ -27,7 +28,7 @@ interface ProviderGenerateResponse {
 export class GeminiService {
   static readonly DEFAULT_MODEL = 'gemini-3.5-flash-lite';
   static readonly DEFAULT_AI_SERVICE_URL = 'https://dentalnova.dibnova.com';
-  static readonly DEFAULT_AI_SERVICE_SECRET = 'DentalNova.AI.Proxy.v1';
+  static readonly DEFAULT_AI_SERVICE_SECRET = PUBLIC_DEFAULT_AI_SERVICE_SECRET;
 
   private readonly logger = new Logger(GeminiService.name);
 
@@ -53,7 +54,7 @@ export class GeminiService {
 
   getAiServiceSecret(): string {
     const value = this.config.get<string>('AI_SERVICE_SECRET')?.trim() || '';
-    if (!value || value === GeminiService.DEFAULT_AI_SERVICE_SECRET) return '';
+    if (isInsecureAiServiceSecret(value)) return '';
     return value;
   }
 

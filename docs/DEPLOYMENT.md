@@ -200,8 +200,8 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `SERVE_CLIENT` | `1` | `1` | Serve React UI from API |
 | `CORS_ORIGINS` | — | domain URL | Allowed browser origins |
 | `DOMAIN` | — | `dentalnova.dibnova.com` | Caddy HTTPS domain |
-| `GEMINI_API_KEY` | optional | optional | AI assistant. If set Online, `AI_SERVICE_SECRET` must be a unique non-default value |
-| `AI_SERVICE_SECRET` | unique shared secret | unique secret | Offline proxy auth to Online `/api/ai-provider`. Never use the public default in production |
+| `GEMINI_API_KEY` | optional | optional | AI assistant. If set Online, `AI_SERVICE_SECRET` must be a unique non-default value. Leave empty if you do not need AI yet |
+| `AI_SERVICE_SECRET` | unique shared secret | unique secret | Offline proxy auth to Online `/api/ai-provider`. Never use `DentalNova.AI.Proxy.v1` or the example placeholder |
 | `ONLINE_CLINIC_SIGNUP` | — | `open` / `invite` / `disabled` | Production Online defaults to **invite**. Create tokens via DibNova admin `POST /dibnova-admin/signup-invite` |
 | `ALLOW_DEMO_USERS` | `1` to seed demo logins | refused when `NODE_ENV=production` | Demo `doctor` / `employee` accounts |
 | `R2_ACCOUNT_ID` | optional | optional | Cloudflare R2 account id (Online should set when using object storage) |
@@ -220,6 +220,19 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `GITHUB_RELEASES_REPO` | optional | — | Offline update source (default: `m7ameddib/DentalNova`) |
 
 See `server/.env.example` (offline) and `deploy/.env.online.example` (online).
+
+### Render / cloud boot: `AI_SERVICE_SECRET`
+
+If the process **exits on start** with a message that `GEMINI_API_KEY` is set but `AI_SERVICE_SECRET` is missing or not unique:
+
+1. **If you do not need the AI assistant yet** — remove `GEMINI_API_KEY` (or leave it empty). The server will boot.
+2. **If you want AI** — set `AI_SERVICE_SECRET` to a **unique** value for this deployment. It must not be empty, must not be `DentalNova.AI.Proxy.v1`, and must not be the example placeholder `REPLACE_WITH_UNIQUE_AI_PROXY_SECRET`.
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
+```
+
+Use the same unique secret on Offline Windows installs that proxy AI through this Online server (`AI_SERVICE_URL` + `AI_SERVICE_SECRET`). Do not weaken or skip this check.
 
 ---
 

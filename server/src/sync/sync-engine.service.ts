@@ -22,6 +22,7 @@ import { SyncChangePayload } from './sync.entities';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { clinicOperationalCensus, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
+import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished } from './bootstrap.util';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
@@ -117,6 +118,9 @@ export class SyncEngineService {
     if (this.running) return { pushed: 0, pulled: 0, conflicts: unresolvedConflictCount(this.db.connection) };
     const peer = this.pairing.readPeerConfig();
     if (!peer) return { pushed: 0, pulled: 0, conflicts: 0, error: 'not-paired' };
+    if (this.readPeerValue('bootstrap_in_progress') === '1' && !this.readPeerValue('bootstrapped_at')) {
+      return { pushed: 0, pulled: 0, conflicts: unresolvedConflictCount(this.db.connection), error: 'bootstrap-in-progress' };
+    }
     this.running = true;
     this.writePeerValue('last_error', '');
     try {
@@ -182,6 +186,9 @@ export class SyncEngineService {
     if (this.readPeerValue('bootstrapped_at')) {
       return { pulled: 0, alreadyBootstrapped: true };
     }
+    if (this.running) {
+      throw new BadRequestException('Sync is already running. Try bootstrap again in a moment.');
+    }
     const inProgress = this.readPeerValue('bootstrap_in_progress') === '1';
     const census = clinicOperationalCensus(this.db.connection);
     if (census.populated && !inProgress) {
@@ -191,46 +198,66 @@ export class SyncEngineService {
         code: POPULATED_OFFLINE_CODE,
       });
     }
-    const token = await this.deviceToken(peer);
-    this.writePeerValue('bootstrap_in_progress', '1');
-    let pulled = 0;
-    let afterEntity: string | undefined = this.readPeerValue('bootstrap_after_entity') || undefined;
-    let afterId: number | undefined = Number(this.readPeerValue('bootstrap_after_id') || 0) || undefined;
-    for (let i = 0; i < 50; i += 1) {
-      const qs = new URLSearchParams();
-      if (afterEntity) qs.set('afterEntity', afterEntity);
-      if (afterId != null) qs.set('afterId', String(afterId));
-      qs.set('limit', '80');
-      const res = await this.onlineFetch(peer, token, `/api/sync/snapshot?${qs.toString()}`, { method: 'GET' });
-      const data = (await res.json()) as {
-        changes?: SyncChangePayload[];
-        checkpoint?: number;
-        hasMore?: boolean;
-        nextAfterEntity?: string;
-        nextAfterId?: number;
-      };
-      if (!res.ok) throw new Error(`snapshot-failed-${res.status}`);
-      const batch = data.changes ?? [];
-      if (batch.length === 0) {
-        if (data.checkpoint != null) setCheckpoint(this.db.connection, data.checkpoint);
-        break;
+    this.running = true;
+    let onlineCheckpoint: number | undefined;
+    try {
+      const token = await this.deviceToken(peer);
+      this.writePeerValue('bootstrap_in_progress', '1');
+      let pulled = 0;
+      let afterEntity: string | undefined = this.readPeerValue('bootstrap_after_entity') || undefined;
+      let afterId: number | undefined = Number(this.readPeerValue('bootstrap_after_id') || 0) || undefined;
+      let complete = false;
+      for (let i = 0; i < MAX_BOOTSTRAP_PAGES; i += 1) {
+        const qs = new URLSearchParams();
+        if (afterEntity) qs.set('afterEntity', afterEntity);
+        if (afterId != null) qs.set('afterId', String(afterId));
+        qs.set('limit', String(BOOTSTRAP_PAGE_SIZE));
+        const res = await this.onlineFetch(peer, token, `/api/sync/snapshot?${qs.toString()}`, { method: 'GET' });
+        const data = (await res.json()) as {
+          changes?: SyncChangePayload[];
+          checkpoint?: number;
+          hasMore?: boolean;
+          nextAfterEntity?: string;
+          nextAfterId?: number;
+        };
+        if (!res.ok) throw new Error(`snapshot-failed-${res.status}`);
+        const batch = data.changes ?? [];
+        if (batch.length > 0) {
+          applyChanges(this.db.connection, batch, 'online-server');
+          pulled += batch.length;
+          afterEntity = data.nextAfterEntity;
+          afterId = data.nextAfterId;
+          if (afterEntity) this.writePeerValue('bootstrap_after_entity', afterEntity);
+          if (afterId != null) this.writePeerValue('bootstrap_after_id', String(afterId));
+        }
+        if (data.checkpoint != null) onlineCheckpoint = data.checkpoint;
+        if (
+          bootstrapSnapshotFinished({
+            changesLength: batch.length,
+            hasMore: data.hasMore,
+            pageSize: BOOTSTRAP_PAGE_SIZE,
+          })
+        ) {
+          complete = true;
+          break;
+        }
       }
-      applyChanges(this.db.connection, batch, 'online-server');
-      pulled += batch.length;
-      afterEntity = data.nextAfterEntity;
-      afterId = data.nextAfterId;
-      if (afterEntity) this.writePeerValue('bootstrap_after_entity', afterEntity);
-      if (afterId != null) this.writePeerValue('bootstrap_after_id', String(afterId));
-      if (data.checkpoint != null) setCheckpoint(this.db.connection, data.checkpoint);
-      if (!data.hasMore) break;
+      if (!complete) {
+        throw new BadRequestException(
+          `Snapshot download is not finished after ${MAX_BOOTSTRAP_PAGES} pages. Click Connect / bootstrap again — this computer is not fully synced yet.`,
+        );
+      }
+      if (onlineCheckpoint != null) setCheckpoint(this.db.connection, onlineCheckpoint);
+      await this.syncAttachmentBlobs(peer, token);
+      const checkpoint = currentCheckpoint(this.db.connection);
+      await this.reportCheckpoint(peer, token, checkpoint);
+      this.writePeerValue('last_synced_at', new Date().toISOString());
+      this.writePeerValue('bootstrapped_at', new Date().toISOString());
+      this.writePeerValue('bootstrap_in_progress', '0');
+      return { pulled };
+    } finally {
+      this.running = false;
     }
-    await this.syncAttachmentBlobs(peer, token);
-    const checkpoint = currentCheckpoint(this.db.connection);
-    await this.reportCheckpoint(peer, token, checkpoint);
-    this.writePeerValue('last_synced_at', new Date().toISOString());
-    this.writePeerValue('bootstrapped_at', new Date().toISOString());
-    this.writePeerValue('bootstrap_in_progress', '0');
-    return { pulled };
   }
 
   async putFileFromDevice(relativePath: string, bytes: Buffer, mimeType?: string) {
