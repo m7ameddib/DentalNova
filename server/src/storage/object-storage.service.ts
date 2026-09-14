@@ -47,6 +47,18 @@ export class ObjectStorageService implements OnModuleInit {
     return Boolean(this.s3);
   }
 
+  /** Safe status for Admin health. Never returns access keys or secrets. */
+  async health(): Promise<{ configured: boolean; ok: boolean | null }> {
+    if (!this.s3) return { configured: false, ok: null };
+    try {
+      const { HeadBucketCommand } = await import('@aws-sdk/client-s3');
+      await this.s3.send(new HeadBucketCommand({ Bucket: this.bucket }));
+      return { configured: true, ok: true };
+    } catch {
+      return { configured: true, ok: false };
+    }
+  }
+
   async putObject(relativePath: string, bytes: Buffer, mimeType?: string | null): Promise<void> {
     const local = this.uploads.resolveManagedPath(relativePath);
     if (!local) throw new Error('Invalid storage path');

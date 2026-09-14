@@ -36,6 +36,13 @@ export class OfflineLicensingRepository {
     return row ? this.map(row) : null;
   }
 
+  findById(id: number): OfflineLicenseSlotRow | null {
+    const row = this.db.connection
+      .prepare('SELECT * FROM offline_license_slots WHERE id = ?')
+      .get(id) as Record<string, unknown> | undefined;
+    return row ? this.map(row) : null;
+  }
+
   listRecent(limit = 50): OfflineLicenseSlotRow[] {
     const rows = this.db.connection
       .prepare(
@@ -91,6 +98,12 @@ export class OfflineLicensingRepository {
          WHERE id = ?`,
       )
       .run(installationId.trim(), id);
+  }
+
+  markRevoked(id: number): void {
+    this.db.connection
+      .prepare(`UPDATE offline_license_slots SET status = 'revoked' WHERE id = ? AND status = 'pending'`)
+      .run(id);
   }
 
   private map(row: Record<string, unknown>): OfflineLicenseSlotRow {

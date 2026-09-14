@@ -12,7 +12,14 @@ import { PERMISSIONS } from '../common/rbac.constants';
 import { DeploymentService } from '../common/deployment.service';
 import { PlatformService } from '../platform/platform.service';
 import { bindTenant, runInTenant } from '../platform/tenant-context';
-import { SESSION_JWT_ISSUER } from './jwt-payload.util';
+import {
+  ADMIN_JWT_AUDIENCE,
+  ADMIN_JWT_ISSUER,
+  ADMIN_JWT_PURPOSE,
+  ADMIN_JWT_ROLE,
+  SESSION_JWT_ISSUER,
+} from './jwt-payload.util';
+import { AdminJwtPayload } from './auth.types';
 
 @Injectable()
 export class AuthService {
@@ -101,7 +108,7 @@ export class AuthService {
       username,
       isActive: true,
       roleId: 0,
-      roleName: 'dibnova_admin',
+      roleName: ADMIN_JWT_ROLE,
       roleLabel: 'DibNova Admin',
       permissions: [PERMISSIONS.DIBNOVA_ADMIN],
     };
@@ -115,17 +122,22 @@ export class AuthService {
       throw new UnauthorizedException('Invalid username or password');
     }
     const authUser = this.toDibNovaAdminUser(username.trim());
-    const payload: JwtPayload = {
+    const jti = crypto.randomUUID();
+    const payload: AdminJwtPayload = {
       sub: 0,
       username: authUser.username,
-      roleName: authUser.roleName,
+      roleName: ADMIN_JWT_ROLE,
       dibnovaAdmin: true,
+      purpose: ADMIN_JWT_PURPOSE,
+      typ: 'dibnova-admin',
+      jti,
     };
     return {
       accessToken: this.jwtService.sign(payload, {
-        secret: this.jwtSecret.getSecret(),
+        secret: this.jwtSecret.getAdminSecret(),
         expiresIn: this.config.get<string>('DIBNOVA_ADMIN_JWT_EXPIRES_IN') || '8h',
-        issuer: SESSION_JWT_ISSUER,
+        issuer: ADMIN_JWT_ISSUER,
+        audience: ADMIN_JWT_AUDIENCE,
       }),
       user: authUser,
     };

@@ -1,8 +1,28 @@
-import { BadRequestException, Body, Controller, Get, Param, Post, Query, UseGuards } from '@nestjs/common';
+import {
+  BadRequestException,
+  Body,
+  Controller,
+  Get,
+  HttpException,
+  NotFoundException,
+  Param,
+  ParseIntPipe,
+  Post,
+  Query,
+  UseGuards,
+  UseInterceptors,
+} from '@nestjs/common';
 import { DibNovaAdminGuard } from './dibnova-admin.guard';
 import { SubscriptionService } from '../subscription/subscription.service';
 import { OfflineLicensingService } from '../offline-licensing/offline-licensing.service';
-import { AdminMarketingTrialDto, AdminNotesDto, AdminPaymentDto, AdminResetPasswordDto } from './dto/admin-notes.dto';
+import {
+  AdminMarketingTrialDto,
+  AdminNotesDto,
+  AdminPaymentDto,
+  AdminResetPasswordDto,
+  AdminUserRoleDto,
+  AdminUserStatusDto,
+} from './dto/admin-notes.dto';
 import { InstallationService } from '../installation/installation.service';
 import { CreateOfflineLicenseSlotDto } from '../offline-licensing/dto/offline-licensing.dto';
 import { SKIP_INSTALLATION_GUARD } from '../installation/guards/installation-ready.guard';
@@ -11,10 +31,16 @@ import { SetMetadata } from '@nestjs/common';
 import { PlatformService } from '../platform/platform.service';
 import * as bcrypt from 'bcryptjs';
 import * as crypto from 'crypto';
+import * as fs from 'fs';
+import * as path from 'path';
 import { DeploymentService } from '../common/deployment.service';
 import { ObjectStorageService } from '../storage/object-storage.service';
+import { DatabaseService } from '../database/database.service';
+import { APP_VERSION } from '../common/version';
+import { AdminAuditInterceptor } from './admin-audit.interceptor';
 
 @UseGuards(DibNovaAdminGuard)
+@UseInterceptors(AdminAuditInterceptor)
 @SetMetadata(SKIP_INSTALLATION_GUARD, true)
 @SetMetadata(SKIP_SUBSCRIPTION_GUARD, true)
 @Controller('dibnova-admin')
@@ -26,6 +52,7 @@ export class DibNovaAdminController {
     private readonly installation: InstallationService,
     private readonly deployment: DeploymentService,
     private readonly objectStorage: ObjectStorageService,
+    private readonly database: DatabaseService,
   ) {}
 
   /** Clinic installation info — online subscription or offline license metadata. */
@@ -52,6 +79,11 @@ export class DibNovaAdminController {
   @Get('history')
   history(@Query('clinicId') clinicId?: string) {
     return this.platform.isEnabled() ? this.platform.listEvents(clinicId) : [];
+  }
+
+  @Get('audit')
+  audit(@Query('clinicId') clinicId?: string) {
+    return this.platform.listAdminAudit(clinicId);
   }
 
   @Get('trials')
@@ -136,12 +168,14 @@ export class DibNovaAdminController {
   @Get('payments/balance')
   paymentBalance(@Query('clinicId') clinicId?: string) {
     if (!clinicId || !this.platform.isEnabled()) return { balanceCents: 0 };
+    this.platform.requireClinic(clinicId);
     return { balanceCents: this.platform.paymentBalanceCents(clinicId) };
   }
 
   @Post('payments')
   addPayment(@Body() dto: AdminPaymentDto) {
     if (!dto.clinicId) throw new BadRequestException('Clinic id is required.');
+    this.platform.requireClinic(dto.clinicId);
     return this.platform.addPayment({
       clinicId: dto.clinicId,
       amountCents: Math.round(dto.amount * 100),
@@ -167,14 +201,43 @@ export class DibNovaAdminController {
   }
 
   @Get('ops/health')
-  opsHealth() {
+  async opsHealth() {
+    const api = { ok: true };
+    let database = { ok: false as boolean };
+    try {
+      database = { ok: this.platform.isEnabled() ? this.platform.ping() : this.database.ping() };
+    } catch {
+      database = { ok: false };
+    }
+
+    let storage = { ok: false as boolean };
+    try {
+      const root = this.platform.isEnabled()
+        ? path.dirname(this.platform.platformDbPath())
+        : path.dirname(this.database.getDbPath());
+      fs.mkdirSync(root, { recursive: true });
+      fs.accessSync(root, fs.constants.R_OK | fs.constants.W_OK);
+      storage = { ok: true };
+    } catch {
+      storage = { ok: false };
+    }
+
+    const r2 = await this.objectStorage.health();
+    const sync = this.platform.syncSummary();
+    const ok = api.ok && database.ok && storage.ok && (r2.ok !== false);
     return {
-      ok: true,
+      ok,
+      version: APP_VERSION,
       deploymentMode: this.deployment.getMode(),
       platformEnabled: this.platform.isEnabled(),
       clinicCount: this.platform.isEnabled() ? this.subscription.listAdminClinics().length : 0,
-      r2Configured: this.objectStorage.usesR2(),
+      r2Configured: r2.configured,
       uptimeSec: Math.round(process.uptime()),
+      api,
+      database,
+      storage,
+      r2: { configured: r2.configured, ok: r2.ok },
+      sync,
     };
   }
 
@@ -185,8 +248,9 @@ export class DibNovaAdminController {
     }
     try {
       return this.platform.clinicOpsSummary(clinicId);
-    } catch {
-      throw new BadRequestException('Unknown clinic');
+    } catch (err) {
+      if (err instanceof HttpException) throw err;
+      throw new NotFoundException('Unknown clinic');
     }
   }
 
@@ -197,22 +261,35 @@ export class DibNovaAdminController {
 
   @Get('clinics/:clinicId/users')
   listClinicUsers(@Param('clinicId') clinicId: string) {
-    return this.platform.isEnabled() ? this.platform.listClinicUsers(clinicId) : [];
+    if (!this.platform.isEnabled()) return [];
+    this.platform.requireClinic(clinicId);
+    return this.platform.listClinicUsers(clinicId);
   }
 
   @Post('users/reset-password')
   async resetUserPassword(@Body() dto: AdminResetPasswordDto) {
-    if (dto.newPassword.length < 8) {
-      throw new BadRequestException('Password must be at least 8 characters.');
-    }
+    this.platform.requireClinic(dto.clinicId);
     const hash = await bcrypt.hash(dto.newPassword, 10);
     this.platform.updateClinicUserPassword(dto.clinicId, dto.userId, hash);
     return { reset: true };
   }
 
+  @Post('users/status')
+  setUserStatus(@Body() dto: AdminUserStatusDto) {
+    this.platform.requireClinic(dto.clinicId);
+    return this.platform.setClinicUserActive(dto.clinicId, dto.userId, dto.isActive);
+  }
+
+  @Post('users/role')
+  setUserRole(@Body() dto: AdminUserRoleDto) {
+    this.platform.requireClinic(dto.clinicId);
+    return this.platform.setClinicUserRole(dto.clinicId, dto.userId, dto.roleName);
+  }
+
   @Post('recovery-code')
   async issueRecoveryCode(@Body() dto: AdminNotesDto) {
     if (!dto.clinicId) throw new BadRequestException('Clinic id is required.');
+    this.platform.requireClinic(dto.clinicId);
     const code = `DN-${crypto.randomBytes(3).toString('hex').toUpperCase()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
     const hash = await bcrypt.hash(code, 10);
     this.platform.setRecoveryHash(dto.clinicId, hash);
@@ -234,5 +311,10 @@ export class DibNovaAdminController {
   @Get('offline-license/slots')
   listOfflineLicenseSlots() {
     return this.offlineLicensing.listSlots();
+  }
+
+  @Post('offline-license/slots/:id/revoke')
+  revokeOfflineLicenseSlot(@Param('id', ParseIntPipe) id: number) {
+    return this.offlineLicensing.revokeSlot(id);
   }
 }

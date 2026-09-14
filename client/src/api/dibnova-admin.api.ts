@@ -42,7 +42,6 @@ export interface AdminManagedClinic {
   doctorName?: string | null;
   trialType?: ClinicTrialType | null;
   username?: string | null;
-  passwordPlain?: string | null;
   subscription: SubscriptionStatus;
 }
 
@@ -121,6 +120,14 @@ export const dibnovaAdminApi = {
       )
       .then((r) => r.data),
 
+  logout: () =>
+    adminClient()
+      .post<{ loggedOut: boolean }>('/dibnova-admin/auth/logout')
+      .then((r) => r.data)
+      .catch(() => ({ loggedOut: true })),
+
+  me: () => adminClient().get<AuthenticatedUser>('/dibnova-admin/auth/me').then((r) => r.data),
+
   getInstallation: () =>
     adminClient().get<AdminClinicInfo>('/dibnova-admin/installation').then((r) => r.data),
 
@@ -192,6 +199,11 @@ export const dibnovaAdminApi = {
       .get<Record<string, unknown>[]>('/dibnova-admin/history', { params: { clinicId } })
       .then((r) => r.data),
 
+  audit: (clinicId?: string) =>
+    adminClient()
+      .get<AdminAuditEvent[]>('/dibnova-admin/audit', { params: { clinicId } })
+      .then((r) => r.data),
+
   cancel: (reason?: string, clinicId?: string) =>
     adminClient()
       .post<SubscriptionStatus>('/dibnova-admin/subscription/cancel', { reason, clinicId })
@@ -243,6 +255,16 @@ export const dibnovaAdminApi = {
       .post<{ reset: boolean }>('/dibnova-admin/users/reset-password', { clinicId, userId, newPassword })
       .then((r) => r.data),
 
+  setUserStatus: (clinicId: string, userId: number, isActive: boolean) =>
+    adminClient()
+      .post<{ id: number; isActive: boolean }>('/dibnova-admin/users/status', { clinicId, userId, isActive })
+      .then((r) => r.data),
+
+  setUserRole: (clinicId: string, userId: number, roleName: 'doctor' | 'employee') =>
+    adminClient()
+      .post<{ id: number; roleName: string }>('/dibnova-admin/users/role', { clinicId, userId, roleName })
+      .then((r) => r.data),
+
   issueRecoveryCode: (clinicId: string) =>
     adminClient()
       .post<{ recoveryCode: string }>('/dibnova-admin/recovery-code', { clinicId })
@@ -268,14 +290,7 @@ export const dibnovaAdminApi = {
 
   opsHealth: () =>
     adminClient()
-      .get<{
-        ok: boolean;
-        deploymentMode: string;
-        platformEnabled: boolean;
-        clinicCount: number;
-        r2Configured: boolean;
-        uptimeSec: number;
-      }>('/dibnova-admin/ops/health')
+      .get<AdminOpsHealth>('/dibnova-admin/ops/health')
       .then((r) => r.data),
 
   clinicOps: (clinicId: string) =>
@@ -286,6 +301,11 @@ export const dibnovaAdminApi = {
   aiUsage: (clinicId?: string) =>
     adminClient()
       .get<AdminAiUsage[]>('/dibnova-admin/ai-usage', { params: { clinicId } })
+      .then((r) => r.data),
+
+  revokeOfflineLicenseSlot: (id: number) =>
+    adminClient()
+      .post<{ id: number; status: string }>(`/dibnova-admin/offline-license/slots/${id}/revoke`)
       .then((r) => r.data),
 };
 
@@ -326,4 +346,30 @@ export interface AdminAiUsage {
   calls: number;
   durationMs: number;
   imageCalls: number;
+}
+
+export interface AdminAuditEvent {
+  id: number;
+  actor: string;
+  action: string;
+  clinicId: string | null;
+  target: string | null;
+  details: string | null;
+  ip: string | null;
+  createdAt: string;
+}
+
+export interface AdminOpsHealth {
+  ok: boolean;
+  version?: string;
+  deploymentMode: string;
+  platformEnabled: boolean;
+  clinicCount: number;
+  r2Configured: boolean;
+  uptimeSec: number;
+  api?: { ok: boolean };
+  database?: { ok: boolean };
+  storage?: { ok: boolean };
+  r2?: { configured: boolean; ok: boolean | null };
+  sync?: { registeredDevices: number; activeDevices: number };
 }

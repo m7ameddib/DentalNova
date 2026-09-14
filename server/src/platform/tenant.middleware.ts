@@ -35,7 +35,9 @@ export class TenantMiddleware implements NestMiddleware {
     const token = header.slice(7).trim();
     if (!token) return undefined;
     const payload = decodeJwtPayload(token);
-    if (!payload || payload.dibnovaAdmin) return undefined;
+    if (!payload || payload.dibnovaAdmin || payload.purpose === 'dibnova_admin' || payload.iss === 'dentalnova-admin') {
+      return undefined;
+    }
     const clinicId = payload.clinicId?.trim();
     return clinicId || undefined;
   }

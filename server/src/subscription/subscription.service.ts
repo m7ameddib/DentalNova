@@ -291,7 +291,6 @@ export class SubscriptionService {
         doctorName: clinic.doctorName ?? trial?.doctorName ?? null,
         trialType: clinic.trialType ?? trial?.trialType ?? null,
         username: trial?.username ?? usernames[0] ?? null,
-        passwordPlain: trial?.passwordPlain ?? null,
         subscription: {
           deploymentMode: 'online' as const,
           applicable: true,

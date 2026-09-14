@@ -1,4 +1,4 @@
-import { IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, MaxLength, Min, MinLength } from 'class-validator';
 import { Type } from 'class-transformer';
 
 export class AdminNotesDto {
@@ -73,6 +73,34 @@ export class AdminResetPasswordDto {
   userId!: number;
 
   @IsString()
+  @MinLength(8)
   @MaxLength(200)
   newPassword!: string;
+}
+
+export class AdminUserStatusDto {
+  @IsString()
+  @MaxLength(64)
+  clinicId!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  userId!: number;
+
+  @IsBoolean()
+  isActive!: boolean;
+}
+
+export class AdminUserRoleDto {
+  @IsString()
+  @MaxLength(64)
+  clinicId!: string;
+
+  @Type(() => Number)
+  @IsInt()
+  userId!: number;
+
+  @IsString()
+  @IsIn(['doctor', 'employee'])
+  roleName!: 'doctor' | 'employee';
 }

@@ -53,6 +53,19 @@ function formatDate(iso: string | null): string {
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString();
 }
 
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B';
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`;
+}
+
+function healthLabel(ok: boolean | null | undefined): string {
+  if (ok == null) return '—';
+  return ok ? 'ok' : 'down';
+}
+
 export function DibNovaAdminPage() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
@@ -110,6 +123,10 @@ export function DibNovaAdminPage() {
     queryClient.invalidateQueries({ queryKey: ['dibnova-admin-installation'] });
     queryClient.invalidateQueries({ queryKey: ['dibnova-admin-dashboard'] });
     queryClient.invalidateQueries({ queryKey: ['dibnova-admin-trials'] });
+    queryClient.invalidateQueries({ queryKey: ['dibnova-admin-users'] });
+    queryClient.invalidateQueries({ queryKey: ['dibnova-admin-audit'] });
+    queryClient.invalidateQueries({ queryKey: ['dibnova-admin-ops-health'] });
+    queryClient.invalidateQueries({ queryKey: ['dibnova-admin-history'] });
     queryClient.invalidateQueries({ queryKey: ['subscription-status'] });
     queryClient.invalidateQueries({ queryKey: ['installation-status'] });
   };
@@ -196,7 +213,18 @@ export function DibNovaAdminPage() {
     }
   }
 
-  function handleLogout() {
+  function confirmAction(messageKey: string, vars?: Record<string, string>): boolean {
+    return window.confirm(t(messageKey, vars));
+  }
+
+  async function handleLogout() {
+    try {
+      if (isDibNovaAdminAuthenticated()) {
+        await dibnovaAdminApi.logout();
+      }
+    } catch {
+      /* session is cleared below either way */
+    }
     clearDibNovaAdminSession();
     setAuthenticated(false);
     setUsername('');
@@ -204,6 +232,7 @@ export function DibNovaAdminPage() {
     setError(null);
     setSuccess(null);
     queryClient.removeQueries({ queryKey: ['dibnova-admin-installation'] });
+    queryClient.removeQueries({ queryKey: ['dibnova-admin-audit'] });
   }
 
   const isOnline = data?.deploymentMode === 'online';
@@ -318,6 +347,12 @@ export function DibNovaAdminPage() {
   const { data: aiUsage = [] } = useQuery({
     queryKey: ['dibnova-admin-ai-usage'],
     queryFn: () => dibnovaAdminApi.aiUsage(),
+    enabled: authenticated && isOnline,
+  });
+
+  const { data: auditEvents = [] } = useQuery({
+    queryKey: ['dibnova-admin-audit', selectedClinicId],
+    queryFn: () => dibnovaAdminApi.audit(selectedClinicId || undefined),
     enabled: authenticated && isOnline,
   });
 
@@ -456,11 +491,23 @@ export function DibNovaAdminPage() {
                     </p>
                   )}
                   {opsHealth && (
-                    <p className="muted" style={{ marginTop: 8 }}>
-                      {t('dibnovaAdmin.opsHealth')}: {opsHealth.deploymentMode} · clinics {opsHealth.clinicCount} ·{' '}
-                      {t('dibnovaAdmin.opsR2')}: {opsHealth.r2Configured ? t('dibnovaAdmin.yes') : t('dibnovaAdmin.no')} ·
-                      uptime {opsHealth.uptimeSec}s
-                    </p>
+                    <div className="admin-health-grid">
+                      <div className={`admin-health-chip ${opsHealth.ok ? 'admin-health-chip--ok' : 'admin-health-chip--down'}`}>
+                        {t('dibnovaAdmin.opsHealth')}: {opsHealth.ok ? t('dibnovaAdmin.healthOk') : t('dibnovaAdmin.healthDown')}
+                      </div>
+                      <div className="admin-health-chip">API {healthLabel(opsHealth.api?.ok)}</div>
+                      <div className="admin-health-chip">DB {healthLabel(opsHealth.database?.ok)}</div>
+                      <div className="admin-health-chip">{t('dibnovaAdmin.opsStorage')} {healthLabel(opsHealth.storage?.ok)}</div>
+                      <div className="admin-health-chip">
+                        {t('dibnovaAdmin.opsR2')}: {opsHealth.r2Configured ? healthLabel(opsHealth.r2?.ok) : t('dibnovaAdmin.no')}
+                      </div>
+                      <div className="admin-health-chip">
+                        {t('dibnovaAdmin.opsDevices')}: {opsHealth.sync?.activeDevices ?? 0}/{opsHealth.sync?.registeredDevices ?? 0}
+                      </div>
+                      <div className="muted">
+                        {opsHealth.deploymentMode} · {t('dibnovaAdmin.totalClinics')} {opsHealth.clinicCount} · uptime {opsHealth.uptimeSec}s
+                      </div>
+                    </div>
                   )}
                 </section>
               )}
@@ -516,28 +563,13 @@ export function DibNovaAdminPage() {
                                     !isTrialPendingStatus(clinic.subscription.status)
                                   }
                                   onClick={() => {
+                                    if (!confirmAction('dibnovaAdmin.activateTrialConfirm')) return;
                                     setSelectedClinicId(clinic.clinicId);
                                     activateTrialMutation.mutate(clinic.clinicId);
                                   }}
                                 >
                                   {t('dibnovaAdmin.activateTrial')}
                                 </button>
-                                {clinic.trialType === 'marketing' && clinic.username && clinic.passwordPlain && (
-                                  <button
-                                    type="button"
-                                    className="btn btn--ghost btn--small"
-                                    onClick={() =>
-                                      sendTrialWhatsApp(
-                                        clinic.clinicPhone || '',
-                                        clinic.username || '',
-                                        clinic.passwordPlain || '',
-                                      )
-                                    }
-                                  >
-                                    <WhatsAppIcon />
-                                    {t('dibnovaAdmin.sendTrialWhatsApp')}
-                                  </button>
-                                )}
                               </div>
                             </td>
                           </tr>
@@ -763,7 +795,10 @@ export function DibNovaAdminPage() {
                         actionMutation.isPending ||
                         !isTrialPendingStatus(effectiveStatus)
                       }
-                      onClick={() => actionMutation.mutate('activate')}
+                      onClick={() => {
+                        if (!confirmAction('dibnovaAdmin.activateConfirm')) return;
+                        actionMutation.mutate('activate');
+                      }}
                     >
                       {t('dibnovaAdmin.activate')}
                     </button>
@@ -786,7 +821,10 @@ export function DibNovaAdminPage() {
                         actionMutation.isPending ||
                         (effectiveStatus !== 'ACTIVE' && effectiveStatus !== 'TRIAL_ACTIVE')
                       }
-                      onClick={() => actionMutation.mutate('extend')}
+                      onClick={() => {
+                        if (!confirmAction('dibnovaAdmin.extendConfirm')) return;
+                        actionMutation.mutate('extend');
+                      }}
                     >
                       {t('dibnovaAdmin.extend')}
                     </button>
@@ -799,7 +837,10 @@ export function DibNovaAdminPage() {
                           effectiveStatus !== 'TRIAL_ACTIVE' &&
                           !isTrialPendingStatus(effectiveStatus))
                       }
-                      onClick={() => actionMutation.mutate('suspend')}
+                      onClick={() => {
+                        if (!confirmAction('dibnovaAdmin.suspendConfirm')) return;
+                        actionMutation.mutate('suspend');
+                      }}
                     >
                       {t('dibnovaAdmin.suspend')}
                     </button>
@@ -812,7 +853,10 @@ export function DibNovaAdminPage() {
                           effectiveStatus !== 'EXPIRED' &&
                           effectiveStatus !== 'TRIAL_EXPIRED')
                       }
-                      onClick={() => actionMutation.mutate('reactivate')}
+                      onClick={() => {
+                        if (!confirmAction('dibnovaAdmin.reactivateConfirm')) return;
+                        actionMutation.mutate('reactivate');
+                      }}
                     >
                       {t('dibnovaAdmin.reactivate')}
                     </button>
@@ -1006,11 +1050,11 @@ export function DibNovaAdminPage() {
                             </tr>
                             <tr>
                               <th>{t('dibnovaAdmin.opsStorage')}</th>
-                              <td>{clinicOps.attachmentBytes}</td>
+                              <td>{formatBytes(clinicOps.attachmentBytes)}</td>
                             </tr>
                             <tr>
                               <th>{t('dibnovaAdmin.opsDbSize')}</th>
-                              <td>{clinicOps.clinicDbBytes ?? 0}</td>
+                              <td>{formatBytes(clinicOps.clinicDbBytes ?? 0)}</td>
                             </tr>
                             <tr>
                               <th>{t('dibnovaAdmin.opsDevices')}</th>
@@ -1022,14 +1066,18 @@ export function DibNovaAdminPage() {
                     </section>
                   )}
 
-                  {aiUsage.length > 0 && (
-                    <section className="admin-card">
-                      <h2 className="admin-card__title">{t('dibnovaAdmin.aiUsageTitle')}</h2>
+                  <section className="admin-card">
+                    <h2 className="admin-card__title">{t('dibnovaAdmin.aiUsageTitle')}</h2>
+                    {aiUsage.length === 0 ? (
+                      <p className="muted">{t('dibnovaAdmin.aiUsageEmpty')}</p>
+                    ) : (
                       <table className="admin-table">
                         <thead>
                           <tr>
                             <th>{t('dibnovaAdmin.clinicName')}</th>
                             <th>{t('dibnovaAdmin.aiCalls')}</th>
+                            <th>{t('dibnovaAdmin.aiDuration')}</th>
+                            <th>{t('dibnovaAdmin.aiImages')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1037,65 +1085,112 @@ export function DibNovaAdminPage() {
                             <tr key={row.clinicId || 'unknown'}>
                               <td className="mono-text">{row.clinicId || '—'}</td>
                               <td>{row.calls}</td>
+                              <td>{row.durationMs}</td>
+                              <td>{row.imageCalls}</td>
                             </tr>
                           ))}
                         </tbody>
                       </table>
-                    </section>
-                  )}
+                    )}
+                    <p className="muted">{t('dibnovaAdmin.aiUsageCostHint')}</p>
+                  </section>
 
                   <section className="admin-card">
                     <h2 className="admin-card__title">{t('dibnovaAdmin.usersTitle')}</h2>
-                    <table className="admin-table">
-                      <thead>
-                        <tr>
-                          <th>{t('settings.fullName')}</th>
-                          <th>{t('settings.username')}</th>
-                          <th>{t('settings.role')}</th>
-                          <th>{t('common.actions')}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {clinicUsers.map((user: AdminClinicUser) => (
-                          <tr key={user.id}>
-                            <td>{user.fullName}</td>
-                            <td>{user.username}</td>
-                            <td>{user.roleLabel || user.roleName}</td>
-                            <td>
-                              {resetUserId === user.id ? (
+                    {clinicUsers.length === 0 ? (
+                      <p className="muted">{t('dibnovaAdmin.usersEmpty')}</p>
+                    ) : (
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>{t('settings.fullName')}</th>
+                            <th>{t('settings.username')}</th>
+                            <th>{t('settings.role')}</th>
+                            <th>{t('common.status')}</th>
+                            <th>{t('common.actions')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {clinicUsers.map((user: AdminClinicUser) => (
+                            <tr key={user.id}>
+                              <td>{user.fullName}</td>
+                              <td>{user.username}</td>
+                              <td>
+                                <select
+                                  value={user.roleName === 'employee' ? 'employee' : 'doctor'}
+                                  onChange={(e) => {
+                                    const roleName = e.target.value as 'doctor' | 'employee';
+                                    if (!confirmAction('dibnovaAdmin.roleConfirm', { name: user.fullName, role: roleName })) return;
+                                    void dibnovaAdminApi
+                                      .setUserRole(selectedClinicId, user.id, roleName)
+                                      .then(() => {
+                                        setSuccess(t('dibnovaAdmin.success.role'));
+                                        invalidate();
+                                        queryClient.invalidateQueries({ queryKey: ['dibnova-admin-users'] });
+                                      })
+                                      .catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                                  }}
+                                >
+                                  <option value="doctor">{t('dibnovaAdmin.roleDoctor')}</option>
+                                  <option value="employee">{t('dibnovaAdmin.roleEmployee')}</option>
+                                </select>
+                              </td>
+                              <td>{user.isActive ? t('dibnovaAdmin.userActive') : t('dibnovaAdmin.userInactive')}</td>
+                              <td>
                                 <div className="table-row-actions">
-                                  <input
-                                    type="password"
-                                    value={resetPassword}
-                                    onChange={(e) => setResetPassword(e.target.value)}
-                                    placeholder={t('auth.newPassword')}
-                                    autoComplete="new-password"
-                                  />
+                                  {resetUserId === user.id ? (
+                                    <>
+                                      <input
+                                        type="password"
+                                        value={resetPassword}
+                                        onChange={(e) => setResetPassword(e.target.value)}
+                                        placeholder={t('auth.newPassword')}
+                                        autoComplete="new-password"
+                                      />
+                                      <button
+                                        type="button"
+                                        className="btn btn--primary btn--small"
+                                        onClick={() => {
+                                          if (!window.confirm(t('dibnovaAdmin.resetPasswordConfirm', { name: user.fullName }))) return;
+                                          void dibnovaAdminApi.resetUserPassword(selectedClinicId, user.id, resetPassword).then(() => {
+                                            setResetUserId(null);
+                                            setResetPassword('');
+                                            setSuccess(t('dibnovaAdmin.success.resetPassword'));
+                                          }).catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                                        }}
+                                      >
+                                        {t('common.save')}
+                                      </button>
+                                    </>
+                                  ) : (
+                                    <button type="button" className="btn btn--ghost btn--small" onClick={() => { setResetUserId(user.id); setResetPassword(''); }}>
+                                      {t('dibnovaAdmin.resetPassword')}
+                                    </button>
+                                  )}
                                   <button
                                     type="button"
-                                    className="btn btn--primary btn--small"
+                                    className="btn btn--ghost btn--small"
                                     onClick={() => {
-                                      if (!window.confirm(t('dibnovaAdmin.resetPasswordConfirm', { name: user.fullName }))) return;
-                                      void dibnovaAdminApi.resetUserPassword(selectedClinicId, user.id, resetPassword).then(() => {
-                                        setResetUserId(null);
-                                        setResetPassword('');
-                                        setSuccess(t('dibnovaAdmin.success.resetPassword'));
-                                      }).catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                                      if (!confirmAction(user.isActive ? 'dibnovaAdmin.deactivateConfirm' : 'dibnovaAdmin.activateUserConfirm', { name: user.fullName })) return;
+                                      void dibnovaAdminApi
+                                        .setUserStatus(selectedClinicId, user.id, !user.isActive)
+                                        .then(() => {
+                                          setSuccess(t(user.isActive ? 'dibnovaAdmin.success.deactivate' : 'dibnovaAdmin.success.activateUser'));
+                                          invalidate();
+                                          queryClient.invalidateQueries({ queryKey: ['dibnova-admin-users'] });
+                                        })
+                                        .catch((err) => setError(getErrorMessage(err, t('common.error'))));
                                     }}
                                   >
-                                    {t('common.save')}
+                                    {user.isActive ? t('dibnovaAdmin.deactivateUser') : t('dibnovaAdmin.activateUser')}
                                   </button>
                                 </div>
-                              ) : (
-                                <button type="button" className="btn btn--ghost btn--small" onClick={() => { setResetUserId(user.id); setResetPassword(''); }}>
-                                  {t('dibnovaAdmin.resetPassword')}
-                                </button>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
                     <button
                       type="button"
                       className="btn btn--secondary btn--small"
@@ -1103,16 +1198,18 @@ export function DibNovaAdminPage() {
                         if (!window.confirm(t('auth.recoveryCodeConfirm'))) return;
                         void dibnovaAdminApi.issueRecoveryCode(selectedClinicId).then((r) => {
                           setSuccess(`${t('auth.recoveryCodeOnce')}: ${r.recoveryCode}`);
-                        });
+                        }).catch((err) => setError(getErrorMessage(err, t('common.error'))));
                       }}
                     >
                       {t('auth.issueRecoveryCode')}
                     </button>
                   </section>
 
-                  {history.length > 0 && (
-                    <section className="admin-card">
-                      <h2 className="admin-card__title">{t('dibnovaAdmin.historyTitle')}</h2>
+                  <section className="admin-card">
+                    <h2 className="admin-card__title">{t('dibnovaAdmin.historyTitle')}</h2>
+                    {history.length === 0 ? (
+                      <p className="muted">{t('dibnovaAdmin.historyEmpty')}</p>
+                    ) : (
                       <table className="admin-table">
                         <thead>
                           <tr>
@@ -1131,8 +1228,36 @@ export function DibNovaAdminPage() {
                           ))}
                         </tbody>
                       </table>
-                    </section>
-                  )}
+                    )}
+                  </section>
+
+                  <section className="admin-card">
+                    <h2 className="admin-card__title">{t('dibnovaAdmin.auditTitle')}</h2>
+                    {auditEvents.length === 0 ? (
+                      <p className="muted">{t('dibnovaAdmin.auditEmpty')}</p>
+                    ) : (
+                      <table className="admin-table">
+                        <thead>
+                          <tr>
+                            <th>{t('common.date')}</th>
+                            <th>{t('dibnovaAdmin.auditActor')}</th>
+                            <th>{t('dibnovaAdmin.eventType')}</th>
+                            <th>{t('common.note')}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {auditEvents.map((event) => (
+                            <tr key={event.id}>
+                              <td>{formatDate(event.createdAt)}</td>
+                              <td>{event.actor}</td>
+                              <td>{event.action}</td>
+                              <td>{event.details || event.target || '—'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    )}
+                  </section>
                 </>
               )}
 
@@ -1208,6 +1333,7 @@ export function DibNovaAdminPage() {
                             <th>{t('dibnovaAdmin.offlineClinicName')}</th>
                             <th>{t('dibnovaAdmin.offlineSlotStatus')}</th>
                             <th>{t('dibnovaAdmin.installationId')}</th>
+                            <th>{t('common.actions')}</th>
                           </tr>
                         </thead>
                         <tbody>
@@ -1217,6 +1343,26 @@ export function DibNovaAdminPage() {
                               <td>{slot.clinicName}</td>
                               <td>{slot.status}</td>
                               <td className="mono-text">{slot.installationId ?? '—'}</td>
+                              <td>
+                                {slot.status === 'pending' && (
+                                  <button
+                                    type="button"
+                                    className="btn btn--ghost btn--small btn--danger"
+                                    onClick={() => {
+                                      if (!confirmAction('dibnovaAdmin.revokeSlotConfirm')) return;
+                                      void dibnovaAdminApi
+                                        .revokeOfflineLicenseSlot(slot.id)
+                                        .then(() => {
+                                          setSuccess(t('dibnovaAdmin.success.revokeSlot'));
+                                          queryClient.invalidateQueries({ queryKey: ['dibnova-admin-offline-slots'] });
+                                        })
+                                        .catch((err) => setError(getErrorMessage(err, t('common.error'))));
+                                    }}
+                                  >
+                                    {t('dibnovaAdmin.revokeSlot')}
+                                  </button>
+                                )}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
