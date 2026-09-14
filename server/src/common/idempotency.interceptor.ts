@@ -1,6 +1,6 @@
 import { CallHandler, ConflictException, ExecutionContext, Injectable, NestInterceptor } from '@nestjs/common';
 import { Observable, of } from 'rxjs';
-import { tap } from 'rxjs/operators';
+import { catchError, map } from 'rxjs/operators';
 import { DatabaseService } from '../database/database.service';
 
 @Injectable()
@@ -15,6 +15,7 @@ export class IdempotencyInterceptor implements NestInterceptor {
       headers?: Record<string, string | string[] | undefined>;
       is?: (type: string) => boolean;
     }>();
+    const res = context.switchToHttp().getResponse<{ statusCode?: number; status?: (code: number) => void }>();
     const method = (req.method ?? 'GET').toUpperCase();
     const keyHeader = req.headers?.['x-idempotency-key'];
     const key = Array.isArray(keyHeader) ? keyHeader[0] : keyHeader;
@@ -26,36 +27,71 @@ export class IdempotencyInterceptor implements NestInterceptor {
     }
 
     const path = String(req.originalUrl ?? req.url ?? '').split('?')[0];
-    try {
-      this.ensureTable();
-      const existing = this.database.connection
-        .prepare('SELECT method, path, response_json FROM request_idempotency WHERE key = ?')
-        .get(key) as { method: string; path: string; response_json: string } | undefined;
-      if (existing) {
-        if (existing.method !== method || existing.path !== path) {
+    this.ensureTable();
+
+    const existing = this.database.connection
+      .prepare('SELECT method, path, status_code, response_json FROM request_idempotency WHERE key = ?')
+      .get(key) as { method: string; path: string; status_code: number; response_json: string } | undefined;
+    if (existing) {
+      if (existing.method !== method || existing.path !== path) {
+        throw new ConflictException('Idempotency key already used for a different request');
+      }
+      if (existing.status_code === 0) {
+        throw new ConflictException('A request with this idempotency key is already in progress');
+      }
+      res.status?.(existing.status_code);
+      return of(JSON.parse(existing.response_json));
+    }
+
+    const reserved = this.database.connection
+      .prepare(
+        `INSERT OR IGNORE INTO request_idempotency (key, method, path, status_code, response_json)
+         VALUES (?, ?, ?, 0, '')`,
+      )
+      .run(key, method, path);
+    if (reserved.changes === 0) {
+      const raced = this.database.connection
+        .prepare('SELECT method, path, status_code, response_json FROM request_idempotency WHERE key = ?')
+        .get(key) as { method: string; path: string; status_code: number; response_json: string } | undefined;
+      if (raced && raced.status_code > 0) {
+        if (raced.method !== method || raced.path !== path) {
           throw new ConflictException('Idempotency key already used for a different request');
         }
-        return of(JSON.parse(existing.response_json));
+        res.status?.(raced.status_code);
+        return of(JSON.parse(raced.response_json));
       }
-    } catch (err) {
-      if (err instanceof ConflictException) throw err;
-      return next.handle();
+      throw new ConflictException('A request with this idempotency key is already in progress');
     }
 
     return next.handle().pipe(
-      tap((data) => {
+      map((data) => {
+        const statusCode = Number(res.statusCode || 200);
+        this.store(key, method, path, statusCode, data);
+        return data;
+      }),
+      catchError((err) => {
         try {
-          this.database.connection
-            .prepare(
-              `INSERT OR IGNORE INTO request_idempotency (key, method, path, status_code, response_json)
-               VALUES (?, ?, ?, ?, ?)`,
-            )
-            .run(key, method, path, 200, JSON.stringify(data ?? null));
+          this.database.connection.prepare('DELETE FROM request_idempotency WHERE key = ? AND status_code = 0').run(key);
         } catch {
-          /* never block a successful write because the replay log failed */
+          /* ignore */
         }
+        throw err;
       }),
     );
+  }
+
+  private store(key: string, method: string, path: string, statusCode: number, data: unknown): void {
+    try {
+      this.database.connection
+        .prepare(
+          `UPDATE request_idempotency
+           SET status_code = ?, response_json = ?
+           WHERE key = ?`,
+        )
+        .run(statusCode, JSON.stringify(data ?? null), key);
+    } catch {
+      /* never block a successful write because the replay log failed */
+    }
   }
 
   private ensureTable(): void {

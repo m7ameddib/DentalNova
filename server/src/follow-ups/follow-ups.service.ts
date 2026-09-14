@@ -28,6 +28,8 @@ import { AppointmentsService } from '../appointments/appointments.service';
 
 import { addLocalDays, localTodayIso } from '../common/local-date.util';
 import { remainingCents } from '../common/money.util';
+import { DatabaseService } from '../database/database.service';
+import { AuditService } from '../audit/audit.service';
 
 
 
@@ -62,6 +64,8 @@ export class FollowUpsService {
     private readonly paymentMethodsRepo: PaymentMethodsRepository,
 
     private readonly appointmentsService: AppointmentsService,
+    private readonly db: DatabaseService,
+    private readonly audit: AuditService,
 
   ) {}
 
@@ -665,28 +669,50 @@ export class FollowUpsService {
 
       }
 
-      const payment = this.paymentsRepo.create({
-
-        patientId: existing.patientId,
-
-        amountCents: Math.round(dto.payment.amount * 100),
-
-        method: dto.payment.method,
-
-        date: dto.payment.date ?? todayIso(),
-
-        note: dto.payment.note ?? null,
-
-        recordedById: user.id,
-
-      });
+      const payment = this.db.connection.transaction(() => {
+        const created = this.paymentsRepo.create({
+          patientId: existing.patientId,
+          amountCents: Math.round(dto.payment!.amount * 100),
+          method: dto.payment!.method,
+          date: dto.payment!.date ?? todayIso(),
+          note: dto.payment!.note ?? null,
+          recordedById: user.id,
+        });
+        this.syncFinancialFollowUps();
+        this.audit.log({
+          action: 'PAYMENT_RECORDED',
+          entityType: 'payment',
+          entityId: created.id,
+          patientId: existing.patientId,
+          description: `Payment recorded from follow-up: ${(created.amountCents / 100).toFixed(2)}`,
+          userId: user.id,
+        });
+        this.followUpsRepo.addHistory({
+          followUpId: id,
+          patientId: existing.patientId,
+          type: existing.type,
+          reason: existing.reason,
+          result: dto.result,
+          note: dto.note?.trim() ?? null,
+          nextFollowUpDate: dto.nextFollowUpDate ?? null,
+          paymentId: created.id,
+          paymentAmountCents: created.amountCents,
+          performedById: user.id,
+        });
+        return created;
+      })();
 
       paymentId = payment.id;
 
       paymentAmountCents = payment.amountCents;
 
-      this.syncFinancialFollowUps();
-
+      return {
+        id,
+        patientId: existing.patientId,
+        paymentId,
+        paymentAmountCents,
+        remainingCents: this.getPatientFinancials(existing.patientId).remainingCents,
+      };
     }
 
 

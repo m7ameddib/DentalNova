@@ -2,6 +2,7 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 export type DeploymentMode = 'offline' | 'online';
+export type ClinicSignupMode = 'open' | 'invite' | 'disabled';
 
 /**
  * Central deployment-mode configuration for the unified DentalNova codebase.
@@ -42,6 +43,21 @@ export class DeploymentService implements OnModuleInit {
     return this.isOffline();
   }
 
+  isProduction(): boolean {
+    return (this.config.get<string>('NODE_ENV') || '').toLowerCase() === 'production';
+  }
+
+  /**
+   * Online clinic self-signup. Production defaults to invite-only.
+   * Set ONLINE_CLINIC_SIGNUP=open|invite|disabled to override.
+   */
+  clinicSignupMode(): ClinicSignupMode {
+    const raw = (this.config.get<string>('ONLINE_CLINIC_SIGNUP') || '').trim().toLowerCase();
+    if (raw === 'open' || raw === 'invite' || raw === 'disabled') return raw;
+    if (this.isOnline() && this.isProduction()) return 'invite';
+    return 'open';
+  }
+
   /** Comma-separated browser origins allowed in online mode (CORS). */
   allowedOrigins(): string[] {
     const explicit = this.config.get<string>('CORS_ORIGINS');
@@ -64,6 +80,17 @@ export class DeploymentService implements OnModuleInit {
         'Online deployment requires a strong JWT_SECRET environment variable. ' +
           'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"',
       );
+    }
+
+    const geminiKey = this.config.get<string>('GEMINI_API_KEY')?.trim();
+    if (geminiKey) {
+      const aiSecret = this.config.get<string>('AI_SERVICE_SECRET')?.trim();
+      if (!aiSecret || aiSecret === 'DentalNova.AI.Proxy.v1') {
+        throw new Error(
+          'Online AI is enabled (GEMINI_API_KEY is set) but AI_SERVICE_SECRET is missing or using the public default. ' +
+            'Set a unique AI_SERVICE_SECRET before starting.',
+        );
+      }
     }
   }
 }

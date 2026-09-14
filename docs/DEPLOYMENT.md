@@ -200,7 +200,19 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `SERVE_CLIENT` | `1` | `1` | Serve React UI from API |
 | `CORS_ORIGINS` | — | domain URL | Allowed browser origins |
 | `DOMAIN` | — | `dentalnova.dibnova.com` | Caddy HTTPS domain |
-| `GEMINI_API_KEY` | optional | optional | AI assistant |
+| `GEMINI_API_KEY` | optional | optional | AI assistant. If set Online, `AI_SERVICE_SECRET` must be a unique non-default value |
+| `AI_SERVICE_SECRET` | unique shared secret | unique secret | Offline proxy auth to Online `/api/ai-provider`. Never use the public default in production |
+| `ONLINE_CLINIC_SIGNUP` | — | `open` / `invite` / `disabled` | Production Online defaults to **invite**. Create tokens via DibNova admin `POST /dibnova-admin/signup-invite` |
+| `ALLOW_DEMO_USERS` | `1` to seed demo logins | refused when `NODE_ENV=production` | Demo `doctor` / `employee` accounts |
+| `R2_ACCOUNT_ID` | optional | optional | Cloudflare R2 account id (Online should set when using object storage) |
+| `R2_ACCESS_KEY_ID` | optional | optional | R2 access key — **server-side only**, never sent to the browser |
+| `R2_SECRET_ACCESS_KEY` | optional | optional | R2 secret — server-side only |
+| `R2_ENDPOINT` | optional | optional | R2 S3 endpoint (defaults to `https://<account>.r2.cloudflarestorage.com`) |
+| `R2_BUCKET` | optional | optional | Default `dentalnova-files` |
+| `R2_REGION` | optional | optional | Default `auto` |
+| `R2_PREFIX` | optional | optional | Optional key prefix inside the bucket |
+| `PUBLIC_ONLINE_URL` | — | optional | Public URL returned in pairing payloads |
+| `PLATFORM_SECRETS_KEY` | — | optional | Encrypts trial passwords in platform.db (falls back to `JWT_SECRET`) |
 | `DIBNOVA_ADMIN_USERNAME` | optional | **required** | DibNova admin sign-in username |
 | `DIBNOVA_ADMIN_PASSWORD` | optional | **required** | DibNova admin sign-in password (server-side only) |
 | `DIBNOVA_ADMIN_API_KEY` | — | optional | Automation/scripts only — not used in the browser UI |
@@ -208,6 +220,20 @@ The offline launcher sets `DEPLOYMENT_MODE=offline` automatically.
 | `GITHUB_RELEASES_REPO` | optional | — | Offline update source (default: `m7ameddib/DentalNova`) |
 
 See `server/.env.example` (offline) and `deploy/.env.online.example` (online).
+
+---
+
+## Same-clinic Online ↔ Offline sync
+
+This is **not** the Online browser IndexedDB outbox, and **not** a backup.
+
+1. On the **Online** clinic (Settings → Online ↔ Offline sync) create a pairing code (expires in ~10 minutes).
+2. On the **Offline Windows** app enter the Online URL + code. The server issues device credentials stored only in `{DNT_DATA_DIR}/config/sync-device.json`.
+3. The Offline app uploads pending change-log rows and pulls deltas since its checkpoint. Device JWTs cannot be used as doctor sessions. Revoke a computer from Online Settings or Disconnect from Offline (best-effort self-revoke).
+
+Initial pairing downloads an Online snapshot into the Offline database. Do **not** pair two already-populated unrelated clinic databases expecting an automatic merge — review conflicts in Settings.
+
+Object files (X-rays, PDFs) sync through the API (`/api/sync/files`), not with client R2 keys. When R2 env vars are set, Online also stores blobs in bucket `dentalnova-files` (keys are prefixed with the clinic id). Offline keeps a local filesystem copy when R2 is unavailable.
 
 ---
 

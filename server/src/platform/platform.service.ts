@@ -308,6 +308,7 @@ export class PlatformService implements OnModuleInit {
     passwordPlain?: string | null;
   }): void {
     this.assertEnabled();
+    const storedSecret = input.passwordPlain ? this.encryptSecret(input.passwordPlain) : null;
     this.db
       .prepare(
         `INSERT INTO clinic_trial_accounts (clinic_id, trial_type, doctor_name, username, password_plain)
@@ -323,7 +324,7 @@ export class PlatformService implements OnModuleInit {
         input.trialType,
         input.doctorName?.trim() || null,
         input.username?.trim() || null,
-        input.passwordPlain ?? null,
+        storedSecret,
       );
   }
 
@@ -707,9 +708,49 @@ export class PlatformService implements OnModuleInit {
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         FOREIGN KEY (clinic_id) REFERENCES clinics(id)
       );
+      CREATE TABLE IF NOT EXISTS clinic_signup_invites (
+        id TEXT PRIMARY KEY,
+        code_hash TEXT NOT NULL UNIQUE,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        used_clinic_id TEXT,
+        created_by TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS sync_pairing_codes (
+        code_hash TEXT PRIMARY KEY,
+        clinic_id TEXT NOT NULL,
+        created_by_user_id INTEGER,
+        expires_at TEXT NOT NULL,
+        used_at TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE IF NOT EXISTS sync_registered_devices (
+        id TEXT PRIMARY KEY,
+        clinic_id TEXT NOT NULL,
+        name TEXT,
+        secret_hash TEXT NOT NULL,
+        installation_id TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        last_seen_at TEXT,
+        revoked_at TEXT,
+        pull_checkpoint INTEGER NOT NULL DEFAULT 0
+      );
     `);
     this.addColumnIfMissing('clinics', 'trial_type', 'TEXT');
     this.addColumnIfMissing('clinics', 'doctor_name', 'TEXT');
+    this.migrateTrialPasswords();
+  }
+
+  private migrateTrialPasswords(): void {
+    const rows = this.db
+      .prepare(`SELECT clinic_id AS clinicId, password_plain AS passwordPlain FROM clinic_trial_accounts`)
+      .all() as Array<{ clinicId: string; passwordPlain: string | null }>;
+    const update = this.db.prepare(`UPDATE clinic_trial_accounts SET password_plain = ? WHERE clinic_id = ?`);
+    for (const row of rows) {
+      if (!row.passwordPlain || row.passwordPlain.startsWith('enc:v1:')) continue;
+      update.run(this.encryptSecret(row.passwordPlain), row.clinicId);
+    }
   }
 
   private mapTrialAccount(row: Record<string, unknown>): ClinicTrialAccount {
@@ -718,9 +759,172 @@ export class PlatformService implements OnModuleInit {
       trialType: row.trial_type as ClinicTrialType,
       doctorName: (row.doctor_name as string | null) ?? null,
       username: (row.username as string | null) ?? null,
-      passwordPlain: (row.password_plain as string | null) ?? null,
+      passwordPlain: this.decryptSecret((row.password_plain as string | null) ?? null),
       createdAt: String(row.created_at ?? ''),
     };
+  }
+
+  createSignupInvite(createdBy?: string, ttlHours = 72): { token: string; expiresAt: string } {
+    this.assertEnabled();
+    const token = crypto.randomBytes(18).toString('base64url');
+    const codeHash = this.hashToken(token);
+    const expiresAt = new Date(Date.now() + ttlHours * 60 * 60 * 1000).toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO clinic_signup_invites (id, code_hash, expires_at, created_by) VALUES (?, ?, ?, ?)`,
+      )
+      .run(crypto.randomUUID(), codeHash, expiresAt, createdBy ?? 'dibnova-admin');
+    return { token, expiresAt };
+  }
+
+  consumeSignupInvite(token: string): void {
+    this.assertEnabled();
+    const codeHash = this.hashToken(token.trim());
+    const row = this.db
+      .prepare(`SELECT id, expires_at, used_at FROM clinic_signup_invites WHERE code_hash = ?`)
+      .get(codeHash) as { id: string; expires_at: string; used_at: string | null } | undefined;
+    if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
+      throw new Error('INVALID_INVITE');
+    }
+    this.db.prepare(`UPDATE clinic_signup_invites SET used_at = datetime('now') WHERE id = ?`).run(row.id);
+  }
+
+  createPairingCode(clinicId: string, createdByUserId: number, ttlMinutes = 10): { code: string; expiresAt: string } {
+    this.assertEnabled();
+    this.requireClinic(clinicId);
+    const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 8; i += 1) code += alphabet[crypto.randomInt(0, alphabet.length)];
+    const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
+    this.db
+      .prepare(
+        `INSERT INTO sync_pairing_codes (code_hash, clinic_id, created_by_user_id, expires_at) VALUES (?, ?, ?, ?)`,
+      )
+      .run(this.hashToken(code), clinicId, createdByUserId, expiresAt);
+    return { code, expiresAt };
+  }
+
+  consumePairingCode(code: string): string {
+    this.assertEnabled();
+    const row = this.db
+      .prepare(`SELECT code_hash, clinic_id, expires_at, used_at FROM sync_pairing_codes WHERE code_hash = ?`)
+      .get(this.hashToken(code.trim().toUpperCase())) as
+      | { code_hash: string; clinic_id: string; expires_at: string; used_at: string | null }
+      | undefined;
+    if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
+      throw new Error('INVALID_PAIRING');
+    }
+    this.db.prepare(`UPDATE sync_pairing_codes SET used_at = datetime('now') WHERE code_hash = ?`).run(row.code_hash);
+    return row.clinic_id;
+  }
+
+  registerSyncDevice(input: {
+    clinicId: string;
+    name: string;
+    secretHash: string;
+    installationId?: string | null;
+  }): string {
+    this.assertEnabled();
+    const id = crypto.randomUUID();
+    this.db
+      .prepare(
+        `INSERT INTO sync_registered_devices (id, clinic_id, name, secret_hash, installation_id)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .run(id, input.clinicId, input.name, input.secretHash, input.installationId ?? null);
+    return id;
+  }
+
+  findSyncDevice(deviceId: string): {
+    id: string;
+    clinicId: string;
+    name: string;
+    secretHash: string;
+    installationId: string | null;
+    revokedAt: string | null;
+    pullCheckpoint: number;
+  } | null {
+    this.assertEnabled();
+    const row = this.db.prepare(`SELECT * FROM sync_registered_devices WHERE id = ?`).get(deviceId) as
+      | Record<string, unknown>
+      | undefined;
+    if (!row) return null;
+    return {
+      id: String(row.id),
+      clinicId: String(row.clinic_id),
+      name: String(row.name ?? ''),
+      secretHash: String(row.secret_hash),
+      installationId: (row.installation_id as string | null) ?? null,
+      revokedAt: (row.revoked_at as string | null) ?? null,
+      pullCheckpoint: Number(row.pull_checkpoint ?? 0),
+    };
+  }
+
+  touchSyncDevice(deviceId: string): void {
+    this.assertEnabled();
+    this.db.prepare(`UPDATE sync_registered_devices SET last_seen_at = datetime('now') WHERE id = ?`).run(deviceId);
+  }
+
+  setDeviceCheckpoint(deviceId: string, seq: number): void {
+    this.assertEnabled();
+    this.db.prepare(`UPDATE sync_registered_devices SET pull_checkpoint = ? WHERE id = ?`).run(seq, deviceId);
+  }
+
+  revokeSyncDevice(clinicId: string, deviceId: string): boolean {
+    this.assertEnabled();
+    const result = this.db
+      .prepare(
+        `UPDATE sync_registered_devices SET revoked_at = datetime('now') WHERE id = ? AND clinic_id = ? AND revoked_at IS NULL`,
+      )
+      .run(deviceId, clinicId);
+    return result.changes > 0;
+  }
+
+  listSyncDevices(clinicId: string) {
+    this.assertEnabled();
+    return this.db
+      .prepare(
+        `SELECT id, name, installation_id AS installationId, created_at AS createdAt, last_seen_at AS lastSeenAt, revoked_at AS revokedAt
+         FROM sync_registered_devices WHERE clinic_id = ? ORDER BY created_at DESC`,
+      )
+      .all(clinicId);
+  }
+
+  private secretsKey(): Buffer {
+    const raw =
+      this.config.get<string>('PLATFORM_SECRETS_KEY')?.trim() ||
+      this.config.get<string>('JWT_SECRET')?.trim() ||
+      'dev-secret';
+    return crypto.createHash('sha256').update(`dentalnova-platform|${raw}`).digest();
+  }
+
+  encryptSecret(plain: string): string {
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', this.secretsKey(), iv);
+    const enc = Buffer.concat([cipher.update(plain, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    return `enc:v1:${iv.toString('base64url')}:${tag.toString('base64url')}:${enc.toString('base64url')}`;
+  }
+
+  decryptSecret(stored: string | null): string | null {
+    if (!stored) return null;
+    if (!stored.startsWith('enc:v1:')) return stored;
+    const parts = stored.split(':');
+    if (parts.length !== 5) return null;
+    try {
+      const iv = Buffer.from(parts[2], 'base64url');
+      const tag = Buffer.from(parts[3], 'base64url');
+      const data = Buffer.from(parts[4], 'base64url');
+      const decipher = crypto.createDecipheriv('aes-256-gcm', this.secretsKey(), iv);
+      decipher.setAuthTag(tag);
+      return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
+    } catch {
+      return null;
+    }
+  }
+
+  private hashToken(value: string): string {
+    return crypto.createHash('sha256').update(value).digest('hex');
   }
 
   private mapClinic(row: Record<string, unknown>): PlatformClinic {

@@ -16,3 +16,29 @@ export function remainingTrialDays(expiresAt: string | null | undefined, now = D
   if (Number.isNaN(expiry)) return null;
   return Math.max(0, Math.ceil((expiry - now) / (24 * 60 * 60 * 1000)));
 }
+
+export function isCachedSubscriptionUsable(
+  cached:
+    | {
+        canUseSystem?: boolean;
+        expiresAt?: string | null;
+        status?: string;
+      }
+    | null
+    | undefined,
+  options: { offline: boolean; graceMs: number; now?: number },
+): boolean {
+  if (!cached) return false;
+  const now = options.now ?? Date.now();
+  const markedUsable =
+    cached.canUseSystem === true || isSubscriptionUsable(cached.status as OnlineSubscriptionStatus | undefined);
+  if (!markedUsable) return false;
+
+  if (!cached.expiresAt) {
+    return cached.canUseSystem === true;
+  }
+  const expiry = new Date(cached.expiresAt).getTime();
+  if (Number.isNaN(expiry)) return cached.canUseSystem === true;
+  if (expiry >= now) return true;
+  return options.offline && now - expiry <= options.graceMs;
+}

@@ -104,6 +104,17 @@ function seedTreatmentTypes(db: Database.Database) {
 }
 
 function seedDemoUsers(db: Database.Database) {
+  const mode = (process.env.DEPLOYMENT_MODE || 'offline').toLowerCase();
+  const isProd = (process.env.NODE_ENV || '').toLowerCase() === 'production';
+  if (isProd && mode === 'online') {
+    console.error('Refusing to create demo users in production Online mode.');
+    if (process.env.ALLOW_DEMO_USERS === '1') process.exit(1);
+    return;
+  }
+  if (process.env.ALLOW_DEMO_USERS !== '1') {
+    console.log('Skipping demo users. Set ALLOW_DEMO_USERS=1 to create them (never in production Online).');
+    return;
+  }
   const getRoleId = db.prepare('SELECT id FROM roles WHERE name = ?');
   const getUser = db.prepare('SELECT id FROM users WHERE username = ?');
   const insertUser = db.prepare(

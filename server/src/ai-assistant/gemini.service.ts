@@ -52,7 +52,9 @@ export class GeminiService {
   }
 
   getAiServiceSecret(): string {
-    return this.config.get<string>('AI_SERVICE_SECRET')?.trim() || GeminiService.DEFAULT_AI_SERVICE_SECRET;
+    const value = this.config.get<string>('AI_SERVICE_SECRET')?.trim() || '';
+    if (!value || value === GeminiService.DEFAULT_AI_SERVICE_SECRET) return '';
+    return value;
   }
 
   async chat(

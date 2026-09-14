@@ -66,4 +66,9 @@ export class FirstSetupDto {
   @IsOptional()
   @IsString()
   address?: string;
+
+  /** Required when ONLINE_CLINIC_SIGNUP=invite (production Online default). */
+  @IsOptional()
+  @IsString()
+  inviteToken?: string;
 }

@@ -35,6 +35,9 @@ export interface InstallationStatusResponse {
   deploymentMode: 'offline' | 'online';
   onlineSubscriptionStatus?: OnlineSubscriptionStatus | null;
   canCreateClinic?: boolean;
+  clinicSignupMode?: 'open' | 'invite' | 'disabled';
+  requiresInviteToken?: boolean;
+  licenseExpired?: boolean;
 }
 
 export interface SetupCompleteResponse extends InstallationStatusResponse {
@@ -65,6 +68,7 @@ export class InstallationService {
 
   getStatus(): InstallationStatusResponse {
     if (this.platform.isEnabled()) {
+      const signupMode = this.deployment.clinicSignupMode();
       return {
         phase: 'ready',
         installationId: '',
@@ -72,7 +76,10 @@ export class InstallationService {
         product: 'DNT Dental',
         deploymentMode: 'online',
         onlineSubscriptionStatus: null,
-        canCreateClinic: true,
+        canCreateClinic: signupMode !== 'disabled',
+        clinicSignupMode: signupMode,
+        requiresInviteToken: signupMode === 'invite',
+        licenseExpired: false,
       };
     }
     const row = this.repo.get();
@@ -84,6 +91,9 @@ export class InstallationService {
       deploymentMode: this.deployment.getMode(),
       onlineSubscriptionStatus: null,
       canCreateClinic: false,
+      clinicSignupMode: this.deployment.clinicSignupMode(),
+      requiresInviteToken: false,
+      licenseExpired: this.isLicenseExpired(),
     };
   }
 
@@ -244,6 +254,22 @@ export class InstallationService {
   }
 
   private async completeOnlineClinicSetup(dto: FirstSetupDto): Promise<SetupCompleteResponse> {
+    const signupMode = this.deployment.clinicSignupMode();
+    if (signupMode === 'disabled') {
+      throw new ConflictException('Online clinic signup is disabled. Contact DibNova support.');
+    }
+    if (signupMode === 'invite') {
+      const token = dto.inviteToken?.trim();
+      if (!token) {
+        throw new BadRequestException('A clinic invite token is required.');
+      }
+      try {
+        this.platform.consumeSignupInvite(token);
+      } catch {
+        throw new BadRequestException('Invalid or expired invite token.');
+      }
+    }
+
     const username = dto.adminUsername.trim();
     const phoneNormalized = normalizePhone(dto.adminPhone);
 
@@ -444,7 +470,28 @@ export class InstallationService {
     return `${base}${crypto.randomBytes(2).toString('hex')}`;
   }
 
+  isLicenseExpired(): boolean {
+    if (!this.deployment.requiresLicense()) return false;
+    const row = this.repo.get();
+    if (!row.licensePayload) return false;
+    try {
+      const payload = JSON.parse(row.licensePayload) as { expiresAt?: string | null };
+      if (!payload.expiresAt) return false;
+      const expiry = new Date(payload.expiresAt);
+      return !Number.isNaN(expiry.getTime()) && expiry.getTime() < Date.now();
+    } catch {
+      return true;
+    }
+  }
+
   isReady(): boolean {
+    if (this.platform.isEnabled()) return true;
+    if (this.repo.phase() !== 'ready') return false;
+    if (this.isLicenseExpired()) return false;
+    return true;
+  }
+
+  isSetupComplete(): boolean {
     if (this.platform.isEnabled()) return true;
     return this.repo.phase() === 'ready';
   }

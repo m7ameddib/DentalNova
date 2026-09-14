@@ -18,6 +18,8 @@ export function FirstSetupPage() {
     queryFn: installationApi.status,
   });
   const isOnline = installStatus?.deploymentMode === 'online';
+  const needsInvite = Boolean(installStatus?.requiresInviteToken);
+  const [inviteToken, setInviteToken] = useState('');
   const [clinicName, setClinicName] = useState('');
   const [doctorName, setDoctorName] = useState('');
   const [clinicPhone, setClinicPhone] = useState('');
@@ -53,6 +55,7 @@ export function FirstSetupPage() {
         adminPhone: adminPhone.trim() || doctorPhone.trim(),
         adminPassword,
         address: address.trim() || undefined,
+        inviteToken: needsInvite ? inviteToken.trim() : undefined,
       });
       if (result.accessToken && result.user) {
         setSession(result.accessToken, result.user);
@@ -167,6 +170,13 @@ export function FirstSetupPage() {
             <span className="form-field__label">{t('installation.confirmPassword')}</span>
             <input type="password" value={adminPasswordConfirm} onChange={(e) => setAdminPasswordConfirm(e.target.value)} required minLength={8} autoComplete="new-password" />
           </label>
+          {needsInvite && (
+            <label className="form-field setup-grid__full">
+              <span className="form-field__label">{t('installation.inviteToken')}</span>
+              <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} required autoComplete="off" />
+              <span className="form-field__hint muted">{t('installation.inviteTokenHint')}</span>
+            </label>
+          )}
         </div>
 
         {error && <div className="form-error-banner">{error}</div>}

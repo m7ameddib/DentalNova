@@ -186,6 +186,11 @@ export class DibNovaAdminController {
     return { recoveryCode: code };
   }
 
+  @Post('signup-invite')
+  createSignupInvite() {
+    return this.platform.createSignupInvite();
+  }
+
   /** Create a one-time offline activation code (licensing server only). */
   @Post('offline-license/create-slot')
   createOfflineLicenseSlot(@Body() dto: CreateOfflineLicenseSlotDto) {

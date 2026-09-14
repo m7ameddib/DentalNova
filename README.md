@@ -41,8 +41,8 @@ DNT-project/
 │       ├── patients/       # Patients, family linking, account/appointment summaries
 │       ├── appointments/   # Day schedule + booking
 │       ├── treatments/     # Treatment type catalog + patient treatments
-│       ├── payments/       # Patient payments
-│       └── sync/           # Placeholder interface for future online synchronization
+│               ├── payments/       # Patient payments
+│       └── sync/           # Same-clinic Online ↔ Offline change-sync (pairing + device auth)
 └── client/               # React + Vite desktop UI
     └── src/
         ├── api/            # Thin HTTP client modules (the only layer allowed to call the API)
@@ -55,19 +55,23 @@ DNT-project/
 **Why this split:** UI (client) never touches the database. It calls typed
 API modules, which call the NestJS controllers, which delegate to services
 (business logic), which use repositories (data access) to run SQL against
-the local SQLite file (persistence). Swapping any layer later — e.g.
-pointing the client at a remote host, or adding a real sync provider that
-implements `server/src/sync/sync.interface.ts` — does not require touching
-the other layers.
+the local SQLite file (persistence). Online browser temporary offline
+fallback (`client/src/offline`) is separate from Offline Windows pairing
+sync (`server/src/sync`).
 
-## Offline-first, online-ready
+## Offline-first, plus same-clinic Online ↔ Offline sync
 
 Everything runs locally: the API listens on `localhost` and stores data in
-a single SQLite file (`server/data/clinic.db`, created automatically). No
-internet connection is required for normal clinic work. Every syncable
-table (`patients`, `appointments`, `patient_treatments`, `payments`) already
-carries a `sync_status` + `updated_at` column so a future sync
-implementation can diff local vs. remote state without a schema change.
+a SQLite file (`server/data/clinic.db`, created automatically). No
+internet connection is required for normal Offline clinic work.
+
+Three distinct mechanisms:
+
+1. **Online browser fallback** — if the cloud API is briefly unreachable, the browser queues essential writes in IndexedDB and replays them. This is not clinic-to-clinic sync.
+2. **Offline Windows app** — full local Nest + SQLite clinic database.
+3. **Paired change-sync** — Settings → *Online ↔ Offline sync* issues a short-lived pairing code on Online; the Offline app enters that code. Device credentials are stored in `{dataRoot}/config/sync-device.json` (never in the installer). Changes (patients, treatments, payments, appointments, etc.) flow both ways with stable record UIDs, idempotency, and human review for financial/clinical conflicts.
+
+**Sync is not a backup.** Keep Backup & Restore (and USB copies) independent. Pairing never copies `clinic.db` as a whole and never embeds a permanent server secret in the Offline binary.
 
 ## RBAC
 
@@ -86,8 +90,9 @@ npm install
 # create the server env file (defaults already work without this)
 copy server\.env.example server\.env
 
-# seed default roles, permissions, treatment types and two demo logins
-npm run seed
+# seed default roles, permissions, treatment types
+# demo logins require ALLOW_DEMO_USERS=1 (never in production Online)
+ALLOW_DEMO_USERS=1 npm run seed
 
 # start the API (http://localhost:4000/api)
 npm run dev:server
@@ -96,7 +101,7 @@ npm run dev:server
 npm run dev:client
 ```
 
-Demo logins (created by `npm run seed`):
+Demo logins (only when seeded with `ALLOW_DEMO_USERS=1`; never in production Online):
 
 | Username | Password    | Role     |
 | -------- | ----------- | -------- |
@@ -113,5 +118,6 @@ chart with treatment codes, the treatment add flow, a single-calendar
 appointments page, and the patient account/payments foundation.
 
 Intentionally **not** implemented yet (architecture is prepared for them):
-advanced inventory, laboratory management, complex reports, WhatsApp API
-automation, and real cloud synchronization.
+advanced inventory, WhatsApp API automation. Same-clinic Online ↔ Offline
+change-sync is implemented (pairing + device credentials + conflict review);
+it is not a substitute for backups or a multi-clinic mesh.

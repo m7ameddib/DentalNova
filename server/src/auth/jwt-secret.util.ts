@@ -13,3 +13,6 @@ export function resolveJwtSecret(config: ConfigService): string {
   }
   return config.get<string>('JWT_SECRET') || 'dev-secret';
 }
+
+export { DEV_JWT_SECRET } from './jwt-payload.util';
+

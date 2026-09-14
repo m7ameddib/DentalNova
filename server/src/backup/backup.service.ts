@@ -11,13 +11,13 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { createReadStream } from 'fs';
 import archiver, { ArchiverError } from 'archiver';
-import AdmZip from 'adm-zip';
 import yauzl from 'yauzl';
 import { DatabaseService } from '../database/database.service';
 import { UploadsService } from '../common/uploads.service';
 import { APP_VERSION } from '../common/version';
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { safeExtractZip } from '../common/safe-unzip.util';
 
 const BACKUP_VERSION = 2;
 
@@ -119,9 +119,7 @@ export class BackupService {
   }
 
   private async unzipArchive(zipPath: string, destDir: string): Promise<void> {
-    fs.mkdirSync(destDir, { recursive: true });
-    const zip = new AdmZip(zipPath);
-    zip.extractAllTo(destDir, true);
+    await safeExtractZip(zipPath, destDir);
   }
 
   private async assertBackupZipValid(zipPath: string): Promise<void> {

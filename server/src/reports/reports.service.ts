@@ -83,12 +83,9 @@ export class ReportsService {
     if (includeFinancial) {
       const treatmentTotals = this.treatmentsRepo.sumForPeriod(from, to);
       const collectedForPeriod = this.paymentsRepo.totalForPeriod(from, to);
-      const outstandingBalanceCents = Math.max(
-        0,
-        this.treatmentsRepo.totalFinalAmountAll() -
-          this.patientsRepo.totalAccountDiscountAll() -
-          this.paymentsRepo.totalPaidAll(),
-      );
+      const outstandingBalanceCents = this.patientsRepo
+        .findOutstanding()
+        .reduce((sum, p) => sum + p.remainingCents, 0);
       const totalExpensesCents = this.expensesRepo.totalForPeriod(from, to);
       summary.financial = {
         totalTreatmentValueCents: treatmentTotals.baseCents,

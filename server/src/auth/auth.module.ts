@@ -14,6 +14,7 @@ import { PasswordResetRepository } from '../database/repositories/password-reset
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
 import { OnlineClinicAccountsRepository } from '../database/repositories/online-clinic-accounts.repository';
 import { JwtSecretService } from './jwt-secret.service';
+import { AuthRateLimitService } from './auth-rate-limit.service';
 import { PathsService } from '../common/paths.service';
 import { DeploymentService } from '../common/deployment.service';
 import { InstallationModule } from '../installation/installation.module';
@@ -33,6 +34,7 @@ import { InstallationModule } from '../installation/installation.module';
     PasswordResetService,
     SmsService,
     JwtStrategy,
+    AuthRateLimitService,
     PermissionsGuard,
     UsersRepository,
     RolesRepository,

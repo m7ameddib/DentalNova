@@ -330,15 +330,15 @@ $backupServiceJs = Join-Path $MainDir 'server\dist\backup\backup.service.js'
 $requiredModules = @(
   '@nestjs\core\package.json',
   'better-sqlite3\package.json',
-  'adm-zip\package.json',
+  'yauzl\package.json',
   'bcryptjs\package.json',
   'multer\package.json'
 )
 if (-not (Test-Path $mainJs)) { throw "Packaging failed: missing server entrypoint at $mainJs" }
 if (-not (Test-Path $publicIndex)) { throw "Packaging failed: missing frontend at $publicIndex" }
 if (-not (Test-Path $backupServiceJs)) { throw "Packaging failed: missing backup service at $backupServiceJs" }
-if (-not (Select-String -Path $backupServiceJs -Pattern 'adm-zip' -Quiet)) {
-  throw 'Packaging failed: backup fix (adm-zip) not present in compiled server'
+if (-not (Select-String -Path $backupServiceJs -Pattern 'safeExtractZip|safe-unzip' -Quiet)) {
+  throw 'Packaging failed: safe backup unzip (path-traversal protection) not present in compiled server'
 }
 
 foreach ($rel in $requiredModules) {

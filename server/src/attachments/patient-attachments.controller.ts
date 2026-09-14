@@ -22,6 +22,7 @@ import { PERMISSIONS } from '../common/rbac.constants';
 import { PatientAttachmentsService } from './patient-attachments.service';
 import { CreateAttachmentDto } from './dto/create-attachment.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { contentDispositionFor } from './attachment-mime.util';
 
 const MAX_UPLOAD_SIZE_BYTES = 25 * 1024 * 1024;
 
@@ -50,15 +51,17 @@ export class PatientAttachmentsController {
 
   @RequirePermissions(PERMISSIONS.PATIENTS_VIEW)
   @Get(':attachmentId/file')
-  getFile(
+  async getFile(
     @Param('patientId', ParseIntPipe) patientId: number,
     @Param('attachmentId', ParseIntPipe) attachmentId: number,
     @Res() res: Response,
   ) {
-    const { absolutePath, mimeType, fileName } = this.service.getFileAbsolutePath(patientId, attachmentId);
-    if (mimeType) res.type(mimeType);
-    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileName)}"`);
-    res.sendFile(absolutePath);
+    const { bytes, mimeType, fileName, inline } = await this.service.readFileBytes(patientId, attachmentId);
+    const safeMime = inline ? mimeType || 'application/octet-stream' : 'application/octet-stream';
+    res.setHeader('Content-Type', safeMime);
+    res.setHeader('X-Content-Type-Options', 'nosniff');
+    res.setHeader('Content-Disposition', contentDispositionFor(fileName, inline));
+    res.send(bytes);
   }
 
   @RequirePermissions(PERMISSIONS.PATIENTS_EDIT)

@@ -2,8 +2,6 @@ import axios, { AxiosInstance } from 'axios';
 import {
   classifyReplayError,
   collectTempIds,
-  isAlreadyAppliedReplay,
-  isUnreplayableClientError,
   MAX_SYNC_ATTEMPTS,
   remapIds,
   requeueStuckItems,
@@ -83,7 +81,7 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
       const url = remapIds(item.url, idMap);
       const data = remapIds(item.data, idMap);
 
-      if (stillHasUnmappedTempId(url) || stillHasUnmappedTempId(data)) {
+        if (stillHasUnmappedTempId(url) || stillHasUnmappedTempId(data)) {
         const needed = collectTempIds(data, collectTempIds(url));
         const queue = await getOutbox();
         const parentQueued = queue.some(
@@ -93,7 +91,13 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
           await updateOutboxItem(item.id, { status: 'pending', url, data });
           continue;
         }
-        await removeOutboxItem(item.id);
+        await updateOutboxItem(item.id, {
+          status: 'failed',
+          lastError: 'unmapped-temp-id',
+          url,
+          data,
+        });
+        useOfflineStatusStore.getState().setLastError('unmapped-temp-id');
         continue;
       }
 
@@ -169,9 +173,25 @@ export async function flushOutbox(api: AxiosInstance): Promise<void> {
           }
         }
 
-        if (isAlreadyAppliedReplay(status) || isUnreplayableClientError(status)) {
-          await removeOutboxItem(item.id);
-          synced += 1;
+        if (kind === 'conflict') {
+          await updateOutboxItem(item.id, {
+            status: 'conflict',
+            lastError: status ? `http-${status}` : error.message,
+            attempts,
+            lastAttemptAt: new Date().toISOString(),
+          });
+          useOfflineStatusStore.getState().setLastError(status ? `http-${status}` : error.message);
+          continue;
+        }
+
+        if (status === 400 || status === 403 || status === 422) {
+          await updateOutboxItem(item.id, {
+            status: 'failed',
+            lastError: status ? `http-${status}` : error.message,
+            attempts,
+            lastAttemptAt: new Date().toISOString(),
+          });
+          useOfflineStatusStore.getState().setLastError(status ? `http-${status}` : error.message);
           continue;
         }
 

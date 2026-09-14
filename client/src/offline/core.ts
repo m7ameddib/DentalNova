@@ -176,10 +176,10 @@ export function isUnreplayableClientError(status?: number): boolean {
 }
 
 export function isSettledUnreplayable(item: Pick<OutboxItem, 'status' | 'lastError'>): boolean {
-  if (item.status === 'conflict') return true;
+  if (item.status === 'conflict') return false;
   if (item.status !== 'failed') return false;
-  if (item.lastError === 'unmapped-temp-id') return true;
-  return isUnreplayableClientError(parseOutboxHttpStatus(item.lastError));
+  if (item.lastError === 'unmapped-temp-id') return false;
+  return false;
 }
 
 export function stillHasUnmappedTempId(value: unknown): boolean {
@@ -489,6 +489,7 @@ function emptyAccountSummary(): Record<string, unknown> {
     totalCostCents: 0,
     totalPaidCents: 0,
     remainingCents: 0,
+    creditCents: 0,
     lastPayments: [],
     lastDiscounts: [],
   };
@@ -511,6 +512,7 @@ function patchAccountSummaryCache(
     totalPaidCents,
     totalCostCents,
     remainingCents: Math.max(0, totalCostCents - totalPaidCents),
+    creditCents: Math.max(0, totalPaidCents - totalCostCents),
     lastPayments: delta.payment ? [delta.payment, ...lastPayments].slice(0, 10) : lastPayments,
   });
 }
@@ -697,5 +699,7 @@ export function pendingCount(items: OutboxItem[]): number {
 }
 
 export function conflictCount(items: OutboxItem[]): number {
-  return items.filter((item) => item.status === 'failed' && !isSettledUnreplayable(item)).length;
+  return items.filter(
+    (item) => item.status === 'conflict' || (item.status === 'failed' && !isSettledUnreplayable(item)),
+  ).length;
 }

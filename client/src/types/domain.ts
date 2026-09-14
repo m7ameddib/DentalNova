@@ -180,6 +180,7 @@ export interface AccountSummary {
   totalCostCents: number;
   totalPaidCents: number;
   remainingCents: number;
+  creditCents?: number;
   lastPayments: Payment[];
   lastDiscounts: AccountDiscount[];
 }
