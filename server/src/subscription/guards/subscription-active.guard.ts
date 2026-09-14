@@ -106,6 +106,8 @@ export class SubscriptionActiveGuard implements CanActivate {
       '/auth/reset-password',
       '/api/ai-provider',
       '/ai-provider',
+      '/api/sync/pairing/preview',
+      '/sync/pairing/preview',
       '/api/sync/pairing/complete',
       '/sync/pairing/complete',
       '/api/sync/token',

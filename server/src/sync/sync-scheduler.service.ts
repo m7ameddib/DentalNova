@@ -19,6 +19,9 @@ export class SyncSchedulerService implements OnModuleInit, OnModuleDestroy {
     this.timer = setInterval(() => {
       void this.tick();
     }, 30_000);
+    setTimeout(() => {
+      void this.tick();
+    }, 2_000);
   }
 
   onModuleDestroy() {

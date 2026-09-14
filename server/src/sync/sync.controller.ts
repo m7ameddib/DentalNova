@@ -29,12 +29,12 @@ import {
   ConnectOnlineDto,
   DeviceTokenDto,
   PairingCompleteDto,
+  PairingPreviewDto,
   PushChangesDto,
   ResolveConflictDto,
 } from './dto/sync.dto';
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
-import { publicPeerInfo } from './pairing-public.util';
 
 @Controller('sync')
 export class SyncController {
@@ -56,6 +56,22 @@ export class SyncController {
   @Post('pairing/start')
   startPairing(@CurrentUser() user: AuthenticatedUser) {
     return this.pairing.startPairing(user);
+  }
+
+  @SkipSubscriptionGuard()
+  @SetMetadata(SKIP_INSTALLATION_GUARD, true)
+  @Post('pairing/preview')
+  previewPairing(@Body() dto: PairingPreviewDto, @Req() req: Request) {
+    const key = `pair-preview:${requestClientIp(req)}`;
+    this.rateLimit.assertAllowed(key, 20, 15 * 60 * 1000);
+    try {
+      const result = this.pairing.previewFromOnline(dto.code);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, 15 * 60 * 1000);
+      throw err;
+    }
   }
 
   @SkipSubscriptionGuard()
@@ -85,10 +101,16 @@ export class SyncController {
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @Post('connect/preview')
+  previewConnect(@Body() dto: ConnectOnlineDto) {
+    return this.pairing.previewOffline(dto);
+  }
+
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   @Post('connect')
   async connect(@Body() dto: ConnectOnlineDto) {
-    const stored = await this.pairing.connectOffline(dto);
-    return publicPeerInfo(stored);
+    return this.pairing.connectOffline(dto);
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)

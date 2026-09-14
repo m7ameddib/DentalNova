@@ -2,6 +2,24 @@ import { apiClient } from './client';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
+export interface ClinicSyncCensus {
+  patients: number;
+  payments: number;
+  treatments: number;
+  appointments: number;
+  total: number;
+}
+
+export interface ClinicSyncDevice {
+  id: string;
+  name: string;
+  installationId?: string | null;
+  createdAt: string;
+  lastSeenAt?: string | null;
+  revokedAt?: string | null;
+  pullCheckpoint?: number;
+}
+
 export interface ClinicSyncStatus {
   kind: 'none' | 'online-hub' | 'offline-peer';
   state: ClinicSyncState;
@@ -12,14 +30,35 @@ export interface ClinicSyncStatus {
   lastError: string | null;
   peerClinicName?: string | null;
   onlineClinicId?: string | null;
-  devices?: Array<{
-    id: string;
-    name: string;
-    installationId?: string | null;
-    createdAt: string;
-    lastSeenAt?: string | null;
-    revokedAt?: string | null;
-  }>;
+  localClinicName?: string | null;
+  pairingBlocked?: boolean;
+  census?: ClinicSyncCensus | null;
+  devices?: ClinicSyncDevice[];
+}
+
+export interface PairingStartResult {
+  code: string;
+  expiresAt: string;
+  clinicName: string;
+  clinicId: string;
+  onlineUrl: string;
+  ttlMinutes: number;
+}
+
+export interface PairingPreviewResult {
+  clinicId: string;
+  clinicName: string;
+  expiresAt: string;
+  onlineUrl: string;
+}
+
+export interface PublicPeerInfo {
+  paired: true;
+  deviceId: string;
+  onlineBaseUrl: string;
+  clinicId: string;
+  clinicName: string;
+  pairedAt: string;
 }
 
 export interface SyncConflictRow {
@@ -36,12 +75,11 @@ export interface SyncConflictRow {
 
 export const syncApi = {
   status: () => apiClient.get<ClinicSyncStatus>('/sync/status').then((r) => r.data),
-  startPairing: () =>
-    apiClient
-      .post<{ code: string; expiresAt: string; clinicName: string; clinicId: string }>('/sync/pairing/start')
-      .then((r) => r.data),
+  startPairing: () => apiClient.post<PairingStartResult>('/sync/pairing/start').then((r) => r.data),
+  previewConnect: (onlineUrl: string, pairingCode: string) =>
+    apiClient.post<PairingPreviewResult>('/sync/connect/preview', { onlineUrl, pairingCode }).then((r) => r.data),
   connect: (onlineUrl: string, pairingCode: string, deviceName?: string) =>
-    apiClient.post('/sync/connect', { onlineUrl, pairingCode, deviceName }).then((r) => r.data),
+    apiClient.post<PublicPeerInfo>('/sync/connect', { onlineUrl, pairingCode, deviceName }).then((r) => r.data),
   disconnect: () => apiClient.post('/sync/disconnect').then((r) => r.data),
   syncNow: () => apiClient.post('/sync/now').then((r) => r.data),
   bootstrap: () => apiClient.post('/sync/bootstrap').then((r) => r.data),

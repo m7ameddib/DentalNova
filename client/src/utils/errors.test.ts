@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { getErrorMessage } from './errors';
+import { getApiErrorCode, getErrorMessage } from './errors';
 
 test('getErrorMessage reads string and array Nest messages', () => {
   const stringErr = {
@@ -19,4 +19,13 @@ test('getErrorMessage reads string and array Nest messages', () => {
   assert.match(getErrorMessage(arrayErr, 'fallback'), /onlineUrl/);
   assert.equal(getErrorMessage(empty, 'fallback'), 'fallback');
   assert.equal(getErrorMessage(new Error('nope'), 'fallback'), 'fallback');
+});
+
+test('getApiErrorCode reads Nest machine codes', () => {
+  const err = {
+    isAxiosError: true,
+    response: { data: { code: 'POPULATED_OFFLINE_BLOCKED', message: 'blocked' } },
+  };
+  assert.equal(getApiErrorCode(err), 'POPULATED_OFFLINE_BLOCKED');
+  assert.equal(getApiErrorCode(new Error('nope')), undefined);
 });
