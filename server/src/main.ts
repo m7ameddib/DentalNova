@@ -60,6 +60,8 @@ async function bootstrap() {
             imgSrc: ["'self'", 'data:', 'blob:'],
             connectSrc: ["'self'"],
             fontSrc: ["'self'", 'data:'],
+            workerSrc: ["'self'"],
+            manifestSrc: ["'self'"],
             objectSrc: ["'none'"],
             frameAncestors: ["'none'"],
             baseUri: ["'self'"],
