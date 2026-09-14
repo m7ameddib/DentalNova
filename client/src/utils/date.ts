@@ -65,6 +65,15 @@ export const TIME_DISPLAY_OPTIONS: Intl.DateTimeFormatOptions = {
 
 const CLOCK_TIME_RE = /^(\d{1,2}):(\d{2})(?::\d{2})?$/;
 
+function parseTimestamp(isoTimestamp: string): Date | null {
+  if (!isoTimestamp) return null;
+  const normalized = isoTimestamp.includes('T') ? isoTimestamp : isoTimestamp.replace(' ', 'T');
+  const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
+  const parsed = new Date(hasZone ? normalized : `${normalized}Z`);
+  if (Number.isNaN(parsed.getTime())) return null;
+  return parsed;
+}
+
 /** True when a value is a stored 24h clock string such as "16:00" or "9:15". */
 export function isStoredClockTime(value: string): boolean {
   return CLOCK_TIME_RE.test(value.trim());
@@ -88,11 +97,9 @@ export function formatDisplayTimeValue(value: string, locale: string): string {
 }
 
 export function formatTimeDisplay(isoTimestamp: string, locale: string): string {
-  try {
-    return new Date(isoTimestamp.replace(' ', 'T') + 'Z').toLocaleTimeString(locale, TIME_DISPLAY_OPTIONS);
-  } catch {
-    return isoTimestamp;
-  }
+  const parsed = parseTimestamp(isoTimestamp);
+  if (!parsed) return isoTimestamp;
+  return parsed.toLocaleTimeString(locale, TIME_DISPLAY_OPTIONS);
 }
 
 export function formatDateDisplay(dateIso: string, locale: string): string {
@@ -109,11 +116,8 @@ export function formatDateDisplay(dateIso: string, locale: string): string {
 
 /** Formats a full ISO timestamp (e.g. a treatment's createdAt) for display. */
 export function formatDateTimeDisplay(isoTimestamp: string, locale: string): string {
-  if (!isoTimestamp) return '';
-  const normalized = isoTimestamp.includes('T') ? isoTimestamp : isoTimestamp.replace(' ', 'T');
-  const hasZone = /[zZ]|[+-]\d{2}:?\d{2}$/.test(normalized);
-  const parsed = new Date(hasZone ? normalized : `${normalized}Z`);
-  if (Number.isNaN(parsed.getTime())) return '';
+  const parsed = parseTimestamp(isoTimestamp);
+  if (!parsed) return '';
   return parsed.toLocaleString(locale, {
     year: 'numeric',
     month: 'short',
