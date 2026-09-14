@@ -37,7 +37,7 @@
     "release:test-license-rotation": "node release/scripts/test-license-key-rotation.js",
     "test:online-multiclinic": "node release/scripts/test-online-multiclinic.js",
     "test:offline-fallback": "npx --yes tsx --test client/src/offline/core.test.ts",
-    "test:unit": "npx --yes tsx --test client/src/offline/core.test.ts client/src/utils/date.test.ts client/src/utils/landingPath.test.ts client/src/utils/subscription.test.ts server/src/common/money.util.test.ts server/src/common/safe-unzip.util.test.ts server/src/auth/jwt-payload.util.test.ts server/src/dibnova-admin/admin-audit.util.test.ts server/src/attachments/attachment-mime.util.test.ts server/src/sync/sync-apply.util.test.ts server/src/sync/clinic-census.util.test.ts server/src/storage/object-storage.util.test.ts server/src/patients/file-number.util.test.ts",
+    "test:unit": "npx --yes tsx --test client/src/offline/core.test.ts client/src/utils/date.test.ts client/src/utils/landingPath.test.ts client/src/utils/subscription.test.ts client/src/utils/pairing-payload.test.ts server/src/common/money.util.test.ts server/src/common/safe-unzip.util.test.ts server/src/auth/jwt-payload.util.test.ts server/src/dibnova-admin/admin-audit.util.test.ts server/src/attachments/attachment-mime.util.test.ts server/src/sync/sync-apply.util.test.ts server/src/sync/clinic-census.util.test.ts server/src/sync/pairing-public.util.test.ts server/src/storage/object-storage.util.test.ts server/src/patients/file-number.util.test.ts",
     "test:security-sync": "node release/scripts/test-security-sync.js",
     "test:admin-security": "node release/scripts/test-admin-security.js",
     "test:r2-live": "node release/scripts/test-r2-live.js"

@@ -1,5 +1,11 @@
 import { Equals, IsArray, IsBoolean, IsOptional, IsString, MinLength } from 'class-validator';
 
+export class PairingPreviewDto {
+  @IsString()
+  @MinLength(4)
+  code!: string;
+}
+
 export class PairingCompleteDto {
   @IsString()
   @MinLength(4)

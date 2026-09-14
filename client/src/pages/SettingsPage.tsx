@@ -127,7 +127,7 @@ export function SettingsPage() {
       });
       list.push({
         id: 'clinicSync',
-        label: t('settings.clinicSync.title'),
+        label: isOfflineMode ? t('settings.clinicSync.navOffline') : t('settings.clinicSync.navOnline'),
         icon: <RefreshCw size={15} />,
         content: <ClinicSyncSection mode={isOfflineMode ? 'offline' : 'online'} />,
       });

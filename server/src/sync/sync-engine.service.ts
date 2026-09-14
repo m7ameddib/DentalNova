@@ -44,6 +44,7 @@ export class SyncEngineService {
     const peer = this.pairing.readPeerConfig();
     const lastError = this.readPeerValue('last_error');
     const pending = this.deployment.isOnline() ? this.onlineDevicesBehind() : pendingCount(conn);
+    const census = this.deployment.isOffline() ? clinicOperationalCensus(conn) : null;
     let state: ClinicSyncState = 'OFFLINE';
     if (this.running) {
       state = 'SYNCING';
@@ -62,6 +63,17 @@ export class SyncEngineService {
       lastError: this.readPeerValue('last_error'),
       peerClinicName: peer?.clinicName ?? null,
       onlineClinicId: peer?.onlineClinicId ?? null,
+      localClinicName: this.pairing.localClinicName(),
+      pairingBlocked: Boolean(this.deployment.isOffline() && !peer && census?.populated),
+      census: census
+        ? {
+            patients: census.counts.patients ?? 0,
+            payments: census.counts.payments ?? 0,
+            treatments: census.counts.patient_treatments ?? 0,
+            appointments: census.counts.appointments ?? 0,
+            total: census.total,
+          }
+        : null,
       devices: this.deployment.isOnline() && this.platform.isEnabled()
         ? this.platform.listSyncDevices(getTenantClinicId() || '')
         : [],

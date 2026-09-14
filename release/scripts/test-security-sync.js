@@ -189,6 +189,28 @@ async function main() {
 
     const pairing = await request('POST', '/sync/pairing/start', { token: tokenA, expected: [200, 201] });
     assert(pairing.data.code, 'pairing code missing');
+    assert(pairing.data.clinicName === 'Sync Clinic A', 'pairing start must show clinic name');
+    assert(pairing.data.clinicId === clinicA.data.user.clinicId, 'pairing start must show clinic id');
+    assert(pairing.data.onlineUrl, 'pairing start must show Online URL');
+    const preview = await request('POST', '/sync/pairing/preview', {
+      body: { code: pairing.data.code },
+      expected: 200,
+    });
+    assert(preview.data.clinicName === 'Sync Clinic A', 'preview must confirm clinic name');
+    assert(preview.data.clinicId === clinicA.data.user.clinicId, 'preview must confirm clinic id');
+    assert(!preview.data.deviceSecret && !preview.data.deviceId, 'preview must not issue device credentials');
+    const previewAgain = await request('POST', '/sync/pairing/preview', {
+      body: { code: pairing.data.code },
+      expected: 200,
+    });
+    assert(previewAgain.data.clinicId === clinicA.data.user.clinicId, 'preview must not consume the pairing code');
+    const badPreview = await request('POST', '/sync/pairing/preview', { body: { code: 'NOPECODE' } });
+    assert(badPreview.status === 401 || badPreview.status === 400, `unknown pairing code must fail (got ${badPreview.status})`);
+    const connectOnOnline = await request('POST', '/sync/connect', {
+      token: tokenA,
+      body: { onlineUrl: 'https://dentalnova.dibnova.com', pairingCode: pairing.data.code },
+    });
+    assert(connectOnOnline.status === 400, `Online server must not accept Offline connect (got ${connectOnOnline.status})`);
     const refusePopulated = await request('POST', '/sync/pairing/complete', {
       body: { code: pairing.data.code, deviceName: 'Test PC', emptyClinic: false },
     });
@@ -199,6 +221,8 @@ async function main() {
     });
     assert(complete.data.deviceId && complete.data.deviceSecret, 'device credentials missing');
     assert(complete.data.clinicId === clinicA.data.user.clinicId, 'device must bind to clinic A');
+    const usedPreview = await request('POST', '/sync/pairing/preview', { body: { code: pairing.data.code } });
+    assert(usedPreview.status === 401 || usedPreview.status === 400, 'consumed pairing code must not preview');
 
     const deviceTok = await request('POST', '/sync/token', {
       body: { deviceId: complete.data.deviceId, deviceSecret: complete.data.deviceSecret },
@@ -207,6 +231,11 @@ async function main() {
     const deviceToken = deviceTok.data.accessToken;
     const meDevice = await request('GET', '/auth/me', { token: deviceToken });
     assert(meDevice.status === 401, 'device JWT must not be a doctor session');
+    const statusA = await request('GET', '/sync/status', { token: tokenA, expected: 200 });
+    const statusDump = JSON.stringify(statusA.data);
+    assert(!statusDump.includes('deviceSecret'), 'sync status must not include device secret');
+    assert(!statusDump.includes('secretHash'), 'sync status must not include secret hash');
+    assert((statusA.data.devices || []).some((d) => d.id === complete.data.deviceId && !d.revokedAt), 'paired device must appear in status');
 
     const snapChanges = await collectSnapshot(deviceToken);
     const hasPatient = snapChanges.some(

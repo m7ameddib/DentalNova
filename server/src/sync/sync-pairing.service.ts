@@ -21,15 +21,16 @@ import { SYNC_DEVICE_JWT_ISSUER } from '../auth/jwt-payload.util';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { clinicOperationalCensus, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
+import {
+  compactPairingCode,
+  INVALID_ONLINE_URL,
+  normalizeOnlineBaseUrl,
+  PublicPeerInfo,
+  StoredPeerConfig,
+  toPublicPeerInfo,
+} from './pairing-public.util';
 
-export interface StoredPeerConfig {
-  deviceId: string;
-  deviceSecret: string;
-  onlineBaseUrl: string;
-  onlineClinicId: string;
-  clinicName: string;
-  pairedAt: string;
-}
+export type { StoredPeerConfig, PublicPeerInfo } from './pairing-public.util';
 
 @Injectable()
 export class SyncPairingService {
@@ -45,16 +46,87 @@ export class SyncPairingService {
     private readonly config: ConfigService,
   ) {}
 
-  startPairing(user: AuthenticatedUser): { code: string; expiresAt: string; clinicName: string; clinicId: string } {
+  startPairing(user: AuthenticatedUser): {
+    code: string;
+    expiresAt: string;
+    clinicName: string;
+    clinicId: string;
+    onlineUrl: string;
+    ttlMinutes: number;
+  } {
     if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
       throw new BadRequestException('Pairing codes are created on the Online clinic.');
     }
     const clinicId = user.clinicId || getTenantClinicId();
     if (!clinicId) throw new ForbiddenException('Clinic context required');
     const clinic = this.platform.requireClinic(clinicId);
-    const { code, expiresAt } = this.platform.createPairingCode(clinicId, user.id);
+    const ttlMinutes = 10;
+    const { code, expiresAt } = this.platform.createPairingCode(clinicId, user.id, ttlMinutes);
     this.platform.logEvent(clinicId, 'PAIRING_CODE', `user ${user.id}`);
-    return { code, expiresAt, clinicName: clinic.name, clinicId };
+    return {
+      code,
+      expiresAt,
+      clinicName: clinic.name,
+      clinicId,
+      onlineUrl: this.publicOnlineUrl(),
+      ttlMinutes,
+    };
+  }
+
+  previewFromOnline(code: string): { clinicId: string; clinicName: string; expiresAt: string; onlineUrl: string } {
+    if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
+      throw new BadRequestException('Pairing must be previewed against the Online server.');
+    }
+    let peeked: { clinicId: string; expiresAt: string };
+    try {
+      peeked = this.platform.peekPairingCode(compactPairingCode(code));
+    } catch {
+      throw new UnauthorizedException('Invalid or expired pairing code.');
+    }
+    const clinic = this.platform.requireClinic(peeked.clinicId);
+    return {
+      clinicId: clinic.id,
+      clinicName: clinic.name,
+      expiresAt: peeked.expiresAt,
+      onlineUrl: this.publicOnlineUrl(),
+    };
+  }
+
+  async previewOffline(input: { onlineUrl: string; pairingCode: string }): Promise<{
+    clinicId: string;
+    clinicName: string;
+    expiresAt: string;
+    onlineUrl: string;
+  }> {
+    if (!this.deployment.isOffline()) {
+      throw new BadRequestException('Connect to Online from the Offline Windows app.');
+    }
+    if (this.readPeerConfig()) {
+      throw new BadRequestException('This Offline installation is already paired. Disconnect first before pairing again.');
+    }
+    this.assertEmptyOffline();
+    const base = this.requireOnlineUrl(input.onlineUrl);
+    const res = await fetch(`${base}/api/sync/pairing/preview`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ code: compactPairingCode(input.pairingCode) }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    const body = (await res.json().catch(() => ({}))) as {
+      clinicId?: string;
+      clinicName?: string;
+      expiresAt?: string;
+      message?: string;
+    };
+    if (!res.ok || !body.clinicId || !body.clinicName) {
+      throw new BadRequestException(body.message || 'Could not find that pairing code. Check the Online address and code.');
+    }
+    return {
+      clinicId: body.clinicId,
+      clinicName: body.clinicName,
+      expiresAt: body.expiresAt || '',
+      onlineUrl: base,
+    };
   }
 
   completeFromOnline(input: { code: string; deviceName: string; installationId?: string; emptyClinic: boolean }): {
@@ -74,7 +146,7 @@ export class SyncPairingService {
     }
     let clinicId: string;
     try {
-      clinicId = this.platform.consumePairingCode(input.code);
+      clinicId = this.platform.consumePairingCode(compactPairingCode(input.code));
     } catch {
       throw new UnauthorizedException('Invalid or expired pairing code.');
     }
@@ -97,28 +169,21 @@ export class SyncPairingService {
     };
   }
 
-  async connectOffline(input: { onlineUrl: string; pairingCode: string; deviceName?: string }): Promise<StoredPeerConfig> {
+  async connectOffline(input: { onlineUrl: string; pairingCode: string; deviceName?: string }): Promise<PublicPeerInfo> {
     if (!this.deployment.isOffline()) {
       throw new BadRequestException('Connect to Online from the Offline Windows app.');
     }
     if (this.readPeerConfig()) {
       throw new BadRequestException('This Offline installation is already paired. Disconnect first before pairing again.');
     }
-    const census = clinicOperationalCensus(this.db.connection);
-    if (census.populated) {
-      throw new BadRequestException({
-        statusCode: 400,
-        message: populatedOfflineMessage(census),
-        code: POPULATED_OFFLINE_CODE,
-      });
-    }
-    const base = input.onlineUrl.replace(/\/$/, '');
+    this.assertEmptyOffline();
+    const base = this.requireOnlineUrl(input.onlineUrl);
     const installationId = this.installation.get().installationId;
     const res = await fetch(`${base}/api/sync/pairing/complete`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        code: input.pairingCode.trim().toUpperCase(),
+        code: compactPairingCode(input.pairingCode),
         deviceName: input.deviceName?.trim() || this.clinicSettings.get()?.clinicName || 'Offline clinic',
         installationId,
         emptyClinic: true,
@@ -144,7 +209,15 @@ export class SyncPairingService {
       pairedAt: new Date().toISOString(),
     };
     this.writePeerConfig(stored);
-    return stored;
+    return toPublicPeerInfo(stored);
+  }
+
+  localClinicName(): string | null {
+    try {
+      return this.clinicSettings.get()?.clinicName ?? null;
+    } catch {
+      return null;
+    }
   }
 
   issueDeviceToken(deviceId: string, deviceSecret: string): { accessToken: string; expiresIn: string; clinicId: string } {
@@ -209,9 +282,37 @@ export class SyncPairingService {
     return path.join(this.paths.configDir(), 'sync-device.json');
   }
 
+  private assertEmptyOffline(): void {
+    const census = clinicOperationalCensus(this.db.connection);
+    if (census.populated) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: populatedOfflineMessage(census),
+        code: POPULATED_OFFLINE_CODE,
+      });
+    }
+  }
+
+  private requireOnlineUrl(raw: string): string {
+    try {
+      return normalizeOnlineBaseUrl(raw);
+    } catch (err) {
+      if ((err as Error).message === INVALID_ONLINE_URL) {
+        throw new BadRequestException('Enter a valid Online clinic address, like https://dentalnova.dibnova.com');
+      }
+      throw err;
+    }
+  }
+
   private publicOnlineUrl(): string {
     const fromEnv = this.config.get<string>('PUBLIC_ONLINE_URL')?.trim();
-    if (fromEnv) return fromEnv.replace(/\/$/, '');
+    if (fromEnv) {
+      try {
+        return normalizeOnlineBaseUrl(fromEnv);
+      } catch {
+        /* fall through */
+      }
+    }
     const domain = this.config.get<string>('DOMAIN')?.trim();
     if (domain) return `https://${domain.replace(/\/$/, '')}`;
     return 'https://dentalnova.dibnova.com';
