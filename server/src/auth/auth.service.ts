@@ -64,6 +64,7 @@ export class AuthService {
   toAuthenticatedUser(userId: number, clinicId?: string): AuthenticatedUser {
     const user = this.usersRepo.findById(userId);
     if (!user) throw new UnauthorizedException('User not found');
+    if (!user.isActive) throw new UnauthorizedException('User not found');
     const role = this.rolesRepo.findById(user.roleId);
     const permissions = role ? this.rolesRepo.getPermissionsForRole(role.id).map((p) => p.key) : [];
     return {

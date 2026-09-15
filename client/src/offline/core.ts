@@ -406,6 +406,18 @@ export function buildOptimisticRecord(
     };
   }
 
+  if (path === '/account-discounts' || path.startsWith('/account-discounts/')) {
+    return {
+      patientId: payload.patientId,
+      amountCents: payload.amount != null ? Math.round(Number(payload.amount) * 100) : Number(payload.amountCents ?? 0),
+      date: payload.date ?? now.slice(0, 10),
+      note: payload.note ?? null,
+      recordedById: null,
+      status: 'ACTIVE',
+      ...base,
+    };
+  }
+
   if (path === '/lab-cases' || path.startsWith('/lab-cases/')) {
     const labCost =
       payload.labCostCents ??
@@ -571,6 +583,30 @@ function findCachedPayment(
   return null;
 }
 
+function findCachedDiscount(
+  caches: Record<string, CachedGet>,
+  id: number,
+): Record<string, unknown> | null {
+  if (!Number.isFinite(id)) return null;
+  for (const [key, entry] of Object.entries(caches)) {
+    if (!key.includes('/account-discounts') || !Array.isArray(entry.data)) continue;
+    for (const item of entry.data) {
+      const rec = asRecord(item);
+      if (rec && rec.id === id) return rec;
+    }
+  }
+  const summaryKeys = Object.keys(caches).filter((key) => key.includes('/account-summary'));
+  for (const key of summaryKeys) {
+    const rec = asRecord(caches[key]?.data);
+    const last = Array.isArray(rec?.lastDiscounts) ? rec.lastDiscounts : [];
+    for (const item of last) {
+      const discount = asRecord(item);
+      if (discount && discount.id === id) return discount;
+    }
+  }
+  return null;
+}
+
 function findCachedTreatment(
   caches: Record<string, CachedGet>,
   id: number,
@@ -590,17 +626,25 @@ function patchAccountSummaryCache(
   caches: Record<string, CachedGet>,
   writeCache: (key: string, data: unknown) => void,
   patientId: number,
-  delta: { paidCents?: number; costCents?: number; payment?: Record<string, unknown> },
+  delta: {
+    paidCents?: number;
+    costCents?: number;
+    discountCents?: number;
+    payment?: Record<string, unknown>;
+    discount?: Record<string, unknown>;
+  },
 ): void {
   const key = `GET /patients/${patientId}/account-summary`;
   const rec = asRecord(caches[key]?.data) ?? emptyAccountSummary();
   const paidDelta = delta.paidCents ?? 0;
   const costDelta = delta.costCents ?? 0;
+  const discountDelta = delta.discountCents ?? 0;
   const totalPaidCents = Number(rec.totalPaidCents ?? 0) + paidDelta;
   const subtotalCents = Number(rec.subtotalCents ?? rec.totalCostCents ?? 0) + costDelta;
-  const accountDiscountCents = Number(rec.accountDiscountCents ?? 0);
-  const totalCostCents = Math.max(0, Number(rec.totalCostCents ?? 0) + costDelta);
+  const accountDiscountCents = Math.max(0, Number(rec.accountDiscountCents ?? 0) + discountDelta);
+  const totalCostCents = Math.max(0, subtotalCents - accountDiscountCents);
   const lastPayments = Array.isArray(rec.lastPayments) ? rec.lastPayments : [];
+  const lastDiscounts = Array.isArray(rec.lastDiscounts) ? rec.lastDiscounts : [];
   writeCache(key, {
     ...rec,
     subtotalCents,
@@ -610,6 +654,7 @@ function patchAccountSummaryCache(
     remainingCents: Math.max(0, totalCostCents - totalPaidCents),
     creditCents: Math.max(0, totalPaidCents - totalCostCents),
     lastPayments: delta.payment ? [delta.payment, ...lastPayments].slice(0, 10) : lastPayments,
+    lastDiscounts: delta.discount ? [delta.discount, ...lastDiscounts].slice(0, 10) : lastDiscounts,
   });
 }
 
@@ -734,6 +779,22 @@ export function applyMutationToCaches(
         payment: result,
       });
     }
+
+    if (path === '/account-discounts' && result.patientId != null) {
+      const discountsKey = `GET /patients/${result.patientId}/account-discounts`;
+      if (!next[discountsKey] || !Array.isArray(next[discountsKey].data)) {
+        writeCache(discountsKey, [result]);
+      }
+      for (const [key, entry] of Object.entries(next)) {
+        if (key.includes(`/patients/${result.patientId}/account-discounts`) && Array.isArray(entry.data)) {
+          writeCache(key, upsertArrayItem(entry.data, result));
+        }
+      }
+      patchAccountSummaryCache(next, writeCache, Number(result.patientId), {
+        discountCents: Number(result.amountCents ?? 0),
+        discount: result,
+      });
+    }
   }
 
   if (method === 'PATCH' || method === 'PUT') {
@@ -741,8 +802,10 @@ export function applyMutationToCaches(
     const id = idMatch ? Number(idMatch[1]) : Number(result.id);
     const treatmentMatch = path.match(/^\/treatments\/(-?\d+)(?:\/status)?$/);
     const paymentVoidMatch = path.match(/^\/payments\/(-?\d+)\/void$/);
+    const discountVoidMatch = path.match(/^\/account-discounts\/(-?\d+)\/void$/);
     const priorTreatment = treatmentMatch ? findCachedTreatment(next, Number(treatmentMatch[1])) : null;
     const priorPayment = paymentVoidMatch ? findCachedPayment(next, Number(paymentVoidMatch[1])) : null;
+    const priorDiscount = discountVoidMatch ? findCachedDiscount(next, Number(discountVoidMatch[1])) : null;
     if (!Number.isNaN(id)) {
       const patch = { ...asRecord(mutation.body), ...result, id };
       for (const [key, entry] of Object.entries(next)) {
@@ -761,6 +824,13 @@ export function applyMutationToCaches(
         const amount = Number(priorPayment.amountCents ?? 0);
         if (patientId && amount) {
           patchAccountSummaryCache(next, writeCache, patientId, { paidCents: -amount });
+        }
+      }
+      if (priorDiscount && String(priorDiscount.status ?? 'ACTIVE') !== 'VOID') {
+        const patientId = Number(priorDiscount.patientId);
+        const amount = Number(priorDiscount.amountCents ?? 0);
+        if (patientId && amount) {
+          patchAccountSummaryCache(next, writeCache, patientId, { discountCents: -amount });
         }
       }
     }

@@ -13,7 +13,7 @@ import { accountDiscountsApi } from '@/api/accountDiscounts.api';
 import { paymentMethodsApi, settingsApi } from '@/api/settings.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
-import { formatMoney } from '@/utils/money';
+import { formatMoney, remainingAfterUnreflectedPayment } from '@/utils/money';
 import { todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
@@ -25,6 +25,8 @@ import { isBillableTreatment } from '@/utils/treatment-display';
 import { Patient, Payment } from '@/types/domain';
 
 type AccountAddMode = 'payment' | 'discount' | null;
+
+type JustPaid = Payment & { methodLabel?: string; remainingAfterCents: number };
 
 export function AccountSection({ patientId, patient }: { patientId: number; patient: Patient }) {
   const { t } = useTranslation();
@@ -39,7 +41,7 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
   const [date, setDate] = useState(todayIso());
   const [note, setNote] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [justPaid, setJustPaid] = useState<Payment | null>(null);
+  const [justPaid, setJustPaid] = useState<JustPaid | null>(null);
 
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
@@ -74,7 +76,11 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
       queryClient.invalidateQueries({ queryKey: ['account-summary', patientId] });
       queryClient.invalidateQueries({ queryKey: ['patient-payments', patientId] });
       const methodLabel = methods.find((m) => m.code === payment.method)?.label;
-      setJustPaid({ ...payment, methodLabel });
+      setJustPaid({
+        ...payment,
+        methodLabel,
+        remainingAfterCents: remainingAfterUnreflectedPayment(summary?.remainingCents, payment.amountCents),
+      });
       resetForm();
     },
     onError: (err) => setError(getErrorMessage(err, t('common.error'))),
@@ -141,26 +147,26 @@ export function AccountSection({ patientId, patient }: { patientId: number; pati
     });
   }
 
-  async function handlePrintReceipt(payment: Payment) {
+  async function handlePrintReceipt(payment: JustPaid) {
     const clinic = await loadClinicPrintInfo();
     print(
       <PaymentReceiptPrintable
         patient={patient}
         payment={payment}
-        remainingCents={summary?.remainingCents ?? 0}
+        remainingCents={payment.remainingAfterCents}
         clinic={clinic}
         language={language}
       />,
     );
   }
 
-  function handleWhatsAppReceipt(payment: Payment) {
+  function handleWhatsAppReceipt(payment: JustPaid) {
     const message = t('whatsapp.paymentReceipt', {
       clinicName: clinicSettings?.clinicName || t('app.name'),
       patientName: patient.fullName,
       amount: formatMoney(payment.amountCents),
       date: payment.date,
-      remaining: formatMoney(summary?.remainingCents ?? 0),
+      remaining: formatMoney(payment.remainingAfterCents),
     });
     openWhatsApp(patient.phone, message);
   }

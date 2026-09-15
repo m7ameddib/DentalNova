@@ -12,6 +12,7 @@ import { isValidPhone, normalizePhone } from '../common/phone.util';
 import { JwtSecretService } from './jwt-secret.service';
 import { PasswordResetJwtPayload } from './auth.types';
 import { PASSWORD_RESET_JWT_ISSUER } from './jwt-payload.util';
+import { passwordResetTag, passwordResetTagMatches } from './password-reset-token.util';
 import { PlatformService } from '../platform/platform.service';
 import { runInTenant } from '../platform/tenant-context';
 
@@ -60,6 +61,7 @@ export class PasswordResetService {
         username: user.username,
         purpose: 'password_reset',
         clinicId: directory?.clinicId,
+        passwordTag: passwordResetTag(user.passwordHash),
       } satisfies PasswordResetJwtPayload,
       {
         secret: this.jwtSecret.getResetSecret(),
@@ -125,6 +127,9 @@ export class PasswordResetService {
       const user = this.usersRepo.findById(payload.sub);
       if (!user || !user.isActive || user.username !== payload.username) {
         throw new UnauthorizedException('Invalid password reset token.');
+      }
+      if (!passwordResetTagMatches(user.passwordHash, payload.passwordTag)) {
+        throw new UnauthorizedException('Password reset link has expired. Start again.');
       }
       return user;
     };

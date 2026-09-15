@@ -2,6 +2,8 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuthStore } from '@/store/auth.store';
 import { syncApi } from '@/api/sync.api';
+import { apiClient } from '@/api/client';
+import { syncWhenOnline } from '@/offline/intercept';
 
 /**
  * When an Offline clinic is paired, run the existing sync engine as soon as
@@ -23,6 +25,7 @@ export function useClinicAutoSync() {
       try {
         const status = await syncApi.status();
         if (status.kind === 'offline-peer' && status.paired) {
+          await syncWhenOnline(apiClient);
           await syncApi.syncNow();
           await queryClient.invalidateQueries({ queryKey: ['clinic-sync-status'] });
           await queryClient.invalidateQueries({ queryKey: ['clinic-sync-conflicts'] });

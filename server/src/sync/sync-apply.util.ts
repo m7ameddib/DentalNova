@@ -33,7 +33,10 @@ function getUid(db: Database.Database, entity: string, localId: number | null | 
   if (row) return row.record_uid;
   const uid = newUid();
   db.prepare('INSERT OR IGNORE INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(entity, localId, uid);
-  return uid;
+  const mapped = db
+    .prepare('SELECT record_uid FROM sync_id_map WHERE entity = ? AND local_id = ?')
+    .get(entity, localId) as { record_uid: string } | undefined;
+  return mapped?.record_uid ?? uid;
 }
 
 function getLocalId(db: Database.Database, entity: string, uid: string | null | undefined): number | null {
@@ -67,21 +70,22 @@ export function snapshotRow(db: Database.Database, entityName: string, localId: 
 export function pendingOutbound(db: Database.Database, limit = 200): SyncChangePayload[] {
   const rows = db
     .prepare(
-      `SELECT change_id, entity, record_uid, local_id, op
-       FROM sync_change_log
-       WHERE acked_at IS NULL AND origin = 'local'
-       ORDER BY seq ASC
+      `SELECT c.change_id, c.entity, c.record_uid, c.local_id, c.op
+       FROM sync_change_log c
+       INNER JOIN (
+         SELECT entity, record_uid, MAX(seq) AS max_seq
+         FROM sync_change_log
+         WHERE acked_at IS NULL AND origin = 'local'
+         GROUP BY entity, record_uid
+       ) latest
+         ON latest.entity = c.entity AND latest.record_uid = c.record_uid AND latest.max_seq = c.seq
+       ORDER BY c.seq ASC
        LIMIT ?`,
     )
     .all(limit) as Array<{ change_id: string; entity: string; record_uid: string; local_id: number | null; op: SyncOp }>;
 
-  const latest = new Map<string, (typeof rows)[number]>();
-  for (const row of rows) {
-    latest.set(`${row.entity}:${row.record_uid}`, row);
-  }
-
   const payload: SyncChangePayload[] = [];
-  for (const row of latest.values()) {
+  for (const row of rows) {
     if (row.op === 'delete') {
       payload.push({ changeId: row.change_id, entity: row.entity, recordUid: row.record_uid, op: 'delete', row: null });
       continue;
@@ -107,8 +111,19 @@ function entityOrder(name: string): number {
 }
 
 export function markAcked(db: Database.Database, changeIds: string[]): void {
-  const stmt = db.prepare(`UPDATE sync_change_log SET acked_at = datetime('now') WHERE change_id = ?`);
-  for (const id of changeIds) stmt.run(id);
+  const ackOne = db.prepare(`UPDATE sync_change_log SET acked_at = datetime('now') WHERE change_id = ?`);
+  const ackSuperseded = db.prepare(
+    `UPDATE sync_change_log SET acked_at = datetime('now')
+     WHERE acked_at IS NULL AND origin = 'local' AND entity = ? AND record_uid = ? AND seq <= ?`,
+  );
+  const lookup = db.prepare(
+    `SELECT entity, record_uid AS recordUid, seq FROM sync_change_log WHERE change_id = ?`,
+  );
+  for (const id of changeIds) {
+    const row = lookup.get(id) as { entity: string; recordUid: string; seq: number } | undefined;
+    ackOne.run(id);
+    if (row) ackSuperseded.run(row.entity, row.recordUid, row.seq);
+  }
 }
 
 export function currentCheckpoint(db: Database.Database): number {
@@ -187,6 +202,12 @@ function recordConflict(
   localJson: unknown,
   remoteJson: unknown,
 ): void {
+  const existing = db
+    .prepare(
+      `SELECT 1 FROM sync_conflicts WHERE entity = ? AND record_uid = ? AND reason = ? AND resolved_at IS NULL LIMIT 1`,
+    )
+    .get(entity, recordUid, reason);
+  if (existing) return;
   db.prepare(
     `INSERT INTO sync_conflicts (conflict_id, entity, record_uid, local_json, remote_json, reason)
      VALUES (?, ?, ?, ?, ?, ?)`,
@@ -244,12 +265,19 @@ export function applyChanges(
   return { accepted, skipped, conflicts };
 }
 
+/** Transient apply failures must be retried; do not advance the pull checkpoint past them. */
+export function canAdvancePullCheckpoint(applied: ApplyResult): boolean {
+  return !applied.conflicts.some((c) => c.reason === 'apply-error');
+}
+
 export function recordInboundConflicts(
   db: Database.Database,
   conflicts: Array<{ entity: string; recordUid: string; reason: string }>,
 ): void {
   for (const conflict of conflicts) {
-    recordConflict(db, conflict.entity, conflict.recordUid, conflict.reason, null, conflict);
+    const localId = getLocalId(db, conflict.entity, conflict.recordUid);
+    const local = localId != null ? snapshotRow(db, conflict.entity, localId) : null;
+    recordConflict(db, conflict.entity, conflict.recordUid, conflict.reason, local, conflict);
   }
 }
 
@@ -553,7 +581,11 @@ export function unresolvedConflictCount(db: Database.Database): number {
 
 export function pendingCount(db: Database.Database): number {
   const row = db
-    .prepare(`SELECT COUNT(*) AS c FROM sync_change_log WHERE acked_at IS NULL AND origin = 'local'`)
+    .prepare(
+      `SELECT COUNT(*) AS c FROM (
+         SELECT 1 FROM sync_change_log WHERE acked_at IS NULL AND origin = 'local' GROUP BY entity, record_uid
+       )`,
+    )
     .get() as { c: number };
   return row.c;
 }
@@ -590,6 +622,18 @@ export function resolveConflict(
           row: remote,
         },
       ], 'conflict-resolution');
+    }
+    db.prepare(
+      `UPDATE sync_change_log SET acked_at = datetime('now')
+       WHERE entity = ? AND record_uid = ? AND origin = 'local' AND acked_at IS NULL`,
+    ).run(row.entity, row.record_uid);
+  } else {
+    const localId = getLocalId(db, row.entity, row.record_uid);
+    if (localId != null) {
+      db.prepare(
+        `INSERT INTO sync_change_log (change_id, entity, record_uid, local_id, op, origin)
+         VALUES (?, ?, ?, ?, 'upsert', 'local')`,
+      ).run(newChangeId(), row.entity, row.record_uid, localId);
     }
   }
   db.prepare(`UPDATE sync_conflicts SET resolved_at = datetime('now'), resolution = ? WHERE conflict_id = ?`).run(
