@@ -4560,6 +4560,12 @@ textarea {
   font-weight: 600;
   color: #15803d;
 }
+.appointment-reminder-action {
+  display: inline-flex;
+}
+.appointment-reminder-hint {
+  margin: 0 0 10px;
+}
 
 .appointment-form-overlay {
   position: fixed;

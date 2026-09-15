@@ -8,6 +8,28 @@
  * themselves inside WhatsApp.
  */
 
+/** Eastern Arabic-Indic (٠-٩) and Persian (۰-۹) digits → ASCII, so Arabic-locale entry still WhatsApps. */
+const ARABIC_INDIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+
+function toAsciiPhoneDigits(raw: string): string {
+  let out = '';
+  for (const ch of raw) {
+    const arabic = ARABIC_INDIC_DIGITS.indexOf(ch);
+    if (arabic >= 0) {
+      out += String(arabic);
+      continue;
+    }
+    const persian = PERSIAN_DIGITS.indexOf(ch);
+    if (persian >= 0) {
+      out += String(persian);
+      continue;
+    }
+    out += ch;
+  }
+  return out;
+}
+
 /**
  * Normalizes a locally-entered phone number into digits-only international
  * format. Strips everything but digits/`+`, drops a leading `+` or local trunk
@@ -17,7 +39,7 @@
  */
 export function normalizeWhatsAppPhone(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  let digits = String(raw).trim().replace(/[^\d+]/g, '');
+  let digits = toAsciiPhoneDigits(String(raw)).trim().replace(/[^\d+]/g, '');
   if (digits.startsWith('+')) digits = digits.slice(1);
   digits = digits.replace(/^0+/, '');
   if (digits.length >= 7 && digits.length <= 8 && !digits.startsWith('961')) {
@@ -26,12 +48,59 @@ export function normalizeWhatsAppPhone(raw: string | null | undefined): string |
   return digits.length >= 7 ? digits : null;
 }
 
-/** Linked patient phone, or walk-in guest phone — whichever is actually present. */
-export function appointmentReminderPhone(appt: {
+/** Phone fields the reminder button may receive from schedule, GET-by-id, or a stale cache. */
+export interface AppointmentReminderPhoneFields {
   patientPhone?: string | null;
   guestPhone?: string | null;
-}): string | null {
-  return normalizeWhatsAppPhone(appt.patientPhone || appt.guestPhone);
+  phone?: string | null;
+  patient_phone?: string | null;
+  guest_phone?: string | null;
+}
+
+/** First non-empty phone string on the appointment, without WhatsApp normalization. */
+export function appointmentReminderRawPhone(
+  appt: AppointmentReminderPhoneFields | null | undefined,
+): string | null {
+  if (!appt) return null;
+  const candidates = [appt.patientPhone, appt.guestPhone, appt.phone, appt.patient_phone, appt.guest_phone];
+  for (const value of candidates) {
+    if (value == null) continue;
+    const trimmed = String(value).trim();
+    if (trimmed) return trimmed;
+  }
+  return null;
+}
+
+/** Linked patient phone, or walk-in guest phone — whichever is actually present. */
+export function appointmentReminderPhone(
+  appt: AppointmentReminderPhoneFields | null | undefined,
+): string | null {
+  return normalizeWhatsAppPhone(appointmentReminderRawPhone(appt));
+}
+
+export type AppointmentReminderDisableReason = 'missing' | 'invalid' | 'pending' | 'lookingUp';
+
+export interface AppointmentReminderButtonState {
+  phone: string | null;
+  disabled: boolean;
+  reason: AppointmentReminderDisableReason | null;
+}
+
+/**
+ * Enable the Appointments "Open WhatsApp reminder" button only when a usable
+ * patient/guest phone is already known. `lookingUp` covers the hydrate fetch
+ * after opening a card whose schedule payload omitted `patientPhone`.
+ */
+export function appointmentReminderButtonState(
+  appt: AppointmentReminderPhoneFields | null | undefined,
+  opts: { mutationPending?: boolean; lookingUp?: boolean } = {},
+): AppointmentReminderButtonState {
+  if (opts.mutationPending) return { phone: null, disabled: true, reason: 'pending' };
+  const phone = appt ? appointmentReminderPhone(appt) : null;
+  if (phone) return { phone, disabled: false, reason: null };
+  if (opts.lookingUp) return { phone: null, disabled: true, reason: 'lookingUp' };
+  if (appt && appointmentReminderRawPhone(appt)) return { phone: null, disabled: true, reason: 'invalid' };
+  return { phone: null, disabled: true, reason: 'missing' };
 }
 
 /** Builds a `wa.me` link, or null when the phone number isn't usable. */

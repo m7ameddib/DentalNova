@@ -1005,6 +1005,9 @@
   "whatsapp": {
     "openConversation": "فتح محادثة واتساب",
     "noPhone": "لا يوجد رقم هاتف مسجل",
+    "invalidPhone": "لا يمكن استخدام رقم الهاتف هذا لواتساب",
+    "lookingUpPhone": "جاري البحث عن هاتف المريض…",
+    "reminderNeedsPhone": "أضف رقم هاتف في ملف المريض (أو للزائر) لإرسال تذكير واتساب",
     "sendSummary": "واتساب",
     "sendReceipt": "واتساب",
     "sendReminder": "فتح تذكير واتساب",

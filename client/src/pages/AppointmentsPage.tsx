@@ -37,7 +37,12 @@ import { currentTimeRounded, formatDateDisplay, formatReminderClockTime, formatT
 import { DateField } from '@/components/common/DateField';
 import { buildWeekDays, expandSlotTimes, startOfWeekIso, timeToMinutes, trimTimesFromWorkingDayStart, weekRangeLabel } from '@/utils/calendar';
 import { getErrorMessage } from '@/utils/errors';
-import { appointmentReminderPhone, openWhatsApp, openWhatsAppPreferred } from '@/utils/whatsapp';
+import {
+  appointmentReminderButtonState,
+  appointmentReminderPhone,
+  openWhatsApp,
+  openWhatsAppPreferred,
+} from '@/utils/whatsapp';
 import { buildAppointmentReminderMessage, resolveWhatsAppMessageLanguage } from '@/utils/whatsappTemplates';
 import { AppointmentStatus, AppointmentWithPatient, DaySchedule, Patient } from '@/types/domain';
 /** Fallback slot times shown while the first day's schedule is still loading. */
@@ -339,9 +344,36 @@ export function AppointmentsPage() {
     ((outsideHoursPrompt.kind === 'create' && selectedSlot) ||
       (outsideHoursPrompt.kind === 'update' && editMode));
 
+  const reminderHydrateQuery = useQuery({
+    queryKey: ['appointment-reminder-hydrate', managingAppt?.id],
+    enabled: !!managingAppt && !appointmentReminderPhone(managingAppt),
+    queryFn: async () => {
+      const id = managingAppt!.id;
+      const fresh = await appointmentsApi.getById(id);
+      if (appointmentReminderPhone(fresh)) return fresh;
+      const patientId = fresh.patientId ?? managingAppt!.patientId;
+      if (!patientId) return fresh;
+      const patient = await patientsApi.getById(patientId);
+      return { ...fresh, patientPhone: patient.phone || fresh.patientPhone };
+    },
+    staleTime: 30_000,
+  });
+
+  const reminderTarget = useMemo(() => {
+    if (!managingAppt) return null;
+    if (appointmentReminderPhone(managingAppt)) return managingAppt;
+    if (!reminderHydrateQuery.data) return managingAppt;
+    return { ...managingAppt, ...reminderHydrateQuery.data };
+  }, [managingAppt, reminderHydrateQuery.data]);
+
+  const reminderButton = appointmentReminderButtonState(reminderTarget, {
+    mutationPending: reminderMutation.isPending,
+    lookingUp: !!managingAppt && reminderHydrateQuery.isFetching && !appointmentReminderPhone(reminderTarget),
+  });
+
   function handleSendReminder() {
-    if (!managingAppt) return;
-    const phone = managingAppt.patientPhone || managingAppt.guestPhone;
+    if (!reminderTarget) return;
+    const phone = reminderButton.phone ?? appointmentReminderPhone(reminderTarget);
     const msgLocale =
       clinicSettings && resolveWhatsAppMessageLanguage(clinicSettings) === 'ar'
         ? 'ar'
@@ -353,23 +385,32 @@ export function AppointmentsPage() {
       message = clinicSettings
         ? buildAppointmentReminderMessage(clinicSettings, {
             clinicName: clinicSettings.clinicName?.trim() || t('app.name'),
-            patientName: managingAppt.patientName ?? '',
-            appointmentDate: formatDateDisplay(managingAppt.date, msgLocale),
-            appointmentTime: managingAppt.time,
-            appointmentReason: managingAppt.reason,
+            patientName: reminderTarget.patientName ?? '',
+            appointmentDate: formatDateDisplay(reminderTarget.date, msgLocale),
+            appointmentTime: reminderTarget.time,
+            appointmentReason: reminderTarget.reason,
           })
-        : [t('app.name'), managingAppt.patientName ?? '', formatDateDisplay(managingAppt.date, msgLocale), formatReminderClockTime(managingAppt.time)]
+        : [t('app.name'), reminderTarget.patientName ?? '', formatDateDisplay(reminderTarget.date, msgLocale), formatReminderClockTime(reminderTarget.time)]
             .filter(Boolean)
             .join(' — ');
     } catch {
-      message = formatReminderClockTime(managingAppt.time);
+      message = formatReminderClockTime(reminderTarget.time);
     }
     if (!openWhatsAppPreferred(phone, message)) {
-      setError(t('whatsapp.noPhone'));
+      setError(t(reminderButton.reason === 'invalid' ? 'whatsapp.invalidPhone' : 'whatsapp.noPhone'));
       return;
     }
-    reminderMutation.mutate(managingAppt.id);
+    reminderMutation.mutate(reminderTarget.id);
   }
+
+  const reminderHintKey =
+    reminderButton.reason === 'lookingUp'
+      ? 'whatsapp.lookingUpPhone'
+      : reminderButton.reason === 'invalid'
+        ? 'whatsapp.invalidPhone'
+        : reminderButton.reason === 'missing'
+          ? 'whatsapp.reminderNeedsPhone'
+          : null;
 
   const sendApptActiveAppointments = useMemo(() => {
     const appointments = printDaySchedule?.appointments ?? [];
@@ -1317,18 +1358,27 @@ export function AppointmentsPage() {
                 </div>
 
                 <div className="form-actions form-actions--start">
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--small btn--whatsapp"
-                    onClick={handleSendReminder}
-                    disabled={reminderMutation.isPending || !appointmentReminderPhone(managingAppt)}
-                  >
-                    <MessageCircle size={13} /> {t('whatsapp.sendReminder')}
-                  </button>
+                  <span className="appointment-reminder-action" title={reminderHintKey ? t(reminderHintKey) : undefined}>
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--small btn--whatsapp"
+                      onClick={handleSendReminder}
+                      disabled={reminderButton.disabled}
+                      aria-describedby={reminderHintKey ? 'appointment-reminder-hint' : undefined}
+                      title={reminderHintKey ? t(reminderHintKey) : (t('whatsapp.sendReminder') ?? '')}
+                    >
+                      <MessageCircle size={13} /> {t('whatsapp.sendReminder')}
+                    </button>
+                  </span>
                   <button type="button" className="btn btn--ghost btn--small" onClick={startEditMode}>
                     {t('appointmentsPage.editAppointment')}
                   </button>
                 </div>
+                {reminderHintKey && (
+                  <p id="appointment-reminder-hint" className="form-field__hint muted appointment-reminder-hint">
+                    {t(reminderHintKey)}
+                  </p>
+                )}
 
                 <div className="status-action-group">
                   <span className="form-field__label">{t('appointmentsPage.manage.changeStatus')}</span>

@@ -127,7 +127,7 @@ export class AppointmentsService {
       description: `Appointment ${dto.date} ${dto.time}`,
       userId: currentUser.id,
     });
-    return created;
+    return this.appointmentsRepo.findDetailedById(created.id) ?? created;
   }
 
   private hasOverlap(date: string, time: string, durationMin: number, excludeId?: number): boolean {
@@ -162,7 +162,7 @@ export class AppointmentsService {
       description: `Appointment status: ${existing?.status ?? '?'} → ${dto.status}`,
       userId: currentUser?.id ?? null,
     });
-    return updated;
+    return this.appointmentsRepo.findDetailedById(id) ?? updated;
   }
 
   linkPatient(id: number, dto: LinkAppointmentPatientDto) {
@@ -170,7 +170,9 @@ export class AppointmentsService {
     if (!appointment) throw new NotFoundException('Appointment not found');
     const patient = this.patientsRepo.findById(dto.patientId);
     if (!patient) throw new NotFoundException('Patient not found');
-    return this.appointmentsRepo.linkPatient(id, dto.patientId);
+    const linked = this.appointmentsRepo.linkPatient(id, dto.patientId);
+    if (!linked) throw new NotFoundException('Appointment not found');
+    return this.appointmentsRepo.findDetailedById(id) ?? linked;
   }
 
   update(id: number, dto: UpdateAppointmentDto, currentUser?: AuthenticatedUser) {

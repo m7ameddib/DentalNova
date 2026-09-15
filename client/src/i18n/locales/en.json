@@ -1010,6 +1010,9 @@
   "whatsapp": {
     "openConversation": "Open WhatsApp conversation",
     "noPhone": "No phone number on file",
+    "invalidPhone": "This phone number can't be used for WhatsApp",
+    "lookingUpPhone": "Looking up the patient's phone…",
+    "reminderNeedsPhone": "Add a phone number on the patient record (or guest) to send a WhatsApp reminder",
     "sendSummary": "WhatsApp",
     "sendReceipt": "WhatsApp",
     "sendReminder": "Open WhatsApp reminder",
