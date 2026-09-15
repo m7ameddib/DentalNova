@@ -372,6 +372,7 @@ export function AiAssistantPage() {
         </div>
       </div>
 
+      <p className="ops-disclaimer ops-disclaimer--phi">{t('aiAssistant.phiWarning')}</p>
       <p className="ops-disclaimer">{t('aiAssistant.medicalDisclaimer')}</p>
     </div>
   );

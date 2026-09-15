@@ -1,5 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { isInsecureAiServiceSecret, onlineAiSecretBootError } from './ai-service-secret.util';
 
 export type DeploymentMode = 'offline' | 'online';
 export type ClinicSignupMode = 'open' | 'invite' | 'disabled';
@@ -85,10 +86,24 @@ export class DeploymentService implements OnModuleInit {
     const geminiKey = this.config.get<string>('GEMINI_API_KEY')?.trim();
     if (geminiKey) {
       const aiSecret = this.config.get<string>('AI_SERVICE_SECRET')?.trim();
-      if (!aiSecret || aiSecret === 'DentalNova.AI.Proxy.v1') {
+      if (isInsecureAiServiceSecret(aiSecret)) {
+        throw new Error(onlineAiSecretBootError());
+      }
+    }
+
+    if (this.isProduction()) {
+      const adminUser = this.config.get<string>('DIBNOVA_ADMIN_USERNAME')?.trim();
+      const adminPass = this.config.get<string>('DIBNOVA_ADMIN_PASSWORD');
+      if (!adminUser || !adminPass) {
         throw new Error(
-          'Online AI is enabled (GEMINI_API_KEY is set) but AI_SERVICE_SECRET is missing or using the public default. ' +
-            'Set a unique AI_SERVICE_SECRET before starting.',
+          'Online production requires DIBNOVA_ADMIN_USERNAME and DIBNOVA_ADMIN_PASSWORD so clinics can be activated. ' +
+            'These are server-side credentials for /dibnova-admin — they are never entered as an API key in the browser.',
+        );
+      }
+      const platformSecrets = this.config.get<string>('PLATFORM_SECRETS_KEY')?.trim();
+      if (!platformSecrets) {
+        throw new Error(
+          'Online production requires PLATFORM_SECRETS_KEY (a unique secret, not JWT_SECRET) to encrypt trial passwords in platform.db.',
         );
       }
     }

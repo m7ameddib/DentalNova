@@ -44,6 +44,9 @@ export class SubscriptionActiveGuard implements CanActivate {
       }
       const clinicId = getTenantClinicId() || req.user?.clinicId?.trim();
       if (!clinicId) {
+        if (req.headers?.authorization?.startsWith('Bearer ')) {
+          throw new UnauthorizedException();
+        }
         throw new ForbiddenException({
           code: 'CLINIC_CONTEXT_REQUIRED',
           message: 'This request is not bound to a clinic.',
@@ -103,6 +106,8 @@ export class SubscriptionActiveGuard implements CanActivate {
       '/auth/reset-password',
       '/api/ai-provider',
       '/ai-provider',
+      '/api/sync/pairing/preview',
+      '/sync/pairing/preview',
       '/api/sync/pairing/complete',
       '/sync/pairing/complete',
       '/api/sync/token',

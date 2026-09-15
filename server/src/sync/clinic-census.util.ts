@@ -41,6 +41,35 @@ export function clinicOperationalCensus(db: Database.Database): ClinicCensus {
   return { counts, total, populated: total > 0 };
 }
 
+export type EmptyClinicCensusPayload = {
+  patients: number;
+  payments: number;
+  treatments: number;
+  appointments: number;
+  total: number;
+};
+
+export function censusAttestationFromClinic(census: ClinicCensus): EmptyClinicCensusPayload {
+  return {
+    patients: census.counts.patients ?? 0,
+    payments: census.counts.payments ?? 0,
+    treatments: census.counts.patient_treatments ?? 0,
+    appointments: census.counts.appointments ?? 0,
+    total: census.total,
+  };
+}
+
+export function isEmptyCensusAttestation(census: EmptyClinicCensusPayload | null | undefined): boolean {
+  if (!census) return false;
+  return (
+    Number(census.patients) === 0 &&
+    Number(census.payments) === 0 &&
+    Number(census.treatments) === 0 &&
+    Number(census.appointments) === 0 &&
+    Number(census.total) === 0
+  );
+}
+
 export const POPULATED_OFFLINE_CODE = 'POPULATED_OFFLINE_BLOCKED';
 
 export function populatedOfflineMessage(census: ClinicCensus): string {

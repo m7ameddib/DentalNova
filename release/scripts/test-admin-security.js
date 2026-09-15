@@ -13,6 +13,7 @@ const MAIN = path.join(ROOT, 'server', 'dist', 'main.js');
 const PORT = process.env.ADMIN_SECURITY_TEST_PORT || '4110';
 const BASE = `http://127.0.0.1:${PORT}/api`;
 const JWT_SECRET = 'admin-security-test-jwt-secret-value-32ch';
+const ADMIN_API_KEY = 'admin-security-test-key16';
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
@@ -102,6 +103,7 @@ async function main() {
       MIGRATIONS_DIR: path.join(ROOT, 'database', 'migrations'),
       DIBNOVA_ADMIN_USERNAME: 'dibadmin',
       DIBNOVA_ADMIN_PASSWORD: 'dibadmin-pass',
+      DIBNOVA_ADMIN_API_KEY: ADMIN_API_KEY,
       NODE_ENV: 'test',
       SERVE_CLIENT: '0',
       ONLINE_CLINIC_SIGNUP: 'open',
@@ -274,6 +276,52 @@ async function main() {
     const auditDump = JSON.stringify(audit.data).toLowerCase();
     assert(!auditDump.includes('dibadmin-pass'), 'audit must not store admin password');
     assert(!auditDump.includes('newpass123'), 'audit must not store reset password');
+
+    const forgedClinic = signHs256(
+      {
+        sub: 1,
+        username: 'adminsec-a',
+        roleName: 'doctor',
+        clinicId: clinicIdA,
+        iss: 'dentalnova-session',
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      },
+      'not-the-server-jwt-secret',
+    );
+    const forgedPatients = await request('GET', '/patients', { token: forgedClinic });
+    assert(forgedPatients.status === 401, `forged clinic JWT must not access patients (got ${forgedPatients.status})`);
+
+    const viaApiKey = await request('GET', '/dibnova-admin/clinics', {
+      headers: { 'X-DibNova-Admin-Key': ADMIN_API_KEY },
+      expected: 200,
+    });
+    assert(Array.isArray(viaApiKey.data), 'admin API key must list clinics');
+
+    const installId = crypto.randomBytes(16).toString('hex');
+    for (let i = 0; i < 10; i += 1) {
+      const activate = await request('POST', '/licensing/offline-activate', {
+        body: { installationId: installId, activationCode: 'DNT-BAD-CODE' },
+      });
+      assert(
+        [400, 503].includes(activate.status),
+        `offline-activate attempt ${i + 1} expected 400/503, got ${activate.status}`,
+      );
+    }
+    const activateLimited = await request('POST', '/licensing/offline-activate', {
+      body: { installationId: installId, activationCode: 'DNT-BAD-CODE' },
+    });
+    assert(activateLimited.status === 429, `offline-activate must rate-limit (got ${activateLimited.status})`);
+
+    for (let i = 0; i < 8; i += 1) {
+      const badKey = await request('GET', '/dibnova-admin/clinics', {
+        headers: { 'X-DibNova-Admin-Key': `wrong-admin-key-${i}-xxxx` },
+      });
+      assert(badKey.status === 401, `wrong admin API key must be 401 (got ${badKey.status})`);
+    }
+    const keyLimited = await request('GET', '/dibnova-admin/clinics', {
+      headers: { 'X-DibNova-Admin-Key': 'wrong-admin-key-finalxx' },
+    });
+    assert(keyLimited.status === 429, `admin API key must rate-limit (got ${keyLimited.status})`);
 
     const logout = await request('POST', '/dibnova-admin/auth/logout', { token: adminToken, expected: [200, 201] });
     assert(logout.data.loggedOut === true, 'logout must succeed');

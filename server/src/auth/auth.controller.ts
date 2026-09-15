@@ -1,7 +1,7 @@
-import { Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
+import { BadRequestException, Body, Controller, Get, Post, Req, UseGuards } from '@nestjs/common';
 import { Request } from 'express';
 import { AuthService } from './auth.service';
-import { PasswordResetService } from './password-reset.service';
+import { PasswordResetService, RECOVERY_CODE_ONLY } from './password-reset.service';
 import { AuthRateLimitService } from './auth-rate-limit.service';
 import { LoginDto } from './dto/login.dto';
 import {
@@ -52,7 +52,7 @@ export class AuthController {
     if (dto.recoveryCode?.trim()) {
       return this.passwordResetService.recoverWithCode(dto.username, dto.recoveryCode);
     }
-    return this.passwordResetService.requestOtp(dto.username, dto.phone ?? '');
+    throw new BadRequestException(RECOVERY_CODE_ONLY);
   }
 
   @SkipSubscriptionGuard()

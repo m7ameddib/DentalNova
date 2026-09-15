@@ -1,5 +1,6 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
+import { JwtModule } from '@nestjs/jwt';
 import * as fs from 'fs';
 import * as path from 'path';
 import { DatabaseModule } from './database/database.module';
@@ -47,11 +48,13 @@ function resolveServerEnvFile(): string {
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, envFilePath: resolveServerEnvFile() }),
+    JwtModule.register({}),
     PlatformModule,
     StorageModule,
     DatabaseModule,
     IdempotencyModule,
-    InstallationModule,    AuditModule,
+    InstallationModule,
+    AuditModule,
     AuthModule,
     UsersModule,
     PatientsModule,
@@ -75,6 +78,7 @@ function resolveServerEnvFile(): string {
     UpdatesModule,
     OfflineLicensingModule,
   ],
+  providers: [TenantMiddleware],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

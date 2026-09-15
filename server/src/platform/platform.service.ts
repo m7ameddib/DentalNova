@@ -780,7 +780,7 @@ export class PlatformService implements OnModuleInit {
     this.platformDb = new Database(file);
     this.platformDb.pragma('journal_mode = WAL');
     this.platformDb.pragma('foreign_keys = ON');
-    this.platformDb.pragma('busy_timeout = 5000');
+    this.platformDb.pragma('busy_timeout = 15000');
     this.ensureSchema();
     this.logger.log(`Online platform registry ready at ${file}`);
     this.adoptLegacyClinicIfNeeded();
@@ -964,6 +964,19 @@ export class PlatformService implements OnModuleInit {
       )
       .run(this.hashToken(code), clinicId, createdByUserId, expiresAt);
     return { code, expiresAt };
+  }
+
+  peekPairingCode(code: string): { clinicId: string; expiresAt: string } {
+    this.assertEnabled();
+    const row = this.db
+      .prepare(`SELECT clinic_id, expires_at, used_at FROM sync_pairing_codes WHERE code_hash = ?`)
+      .get(this.hashToken(code.trim().toUpperCase())) as
+      | { clinic_id: string; expires_at: string; used_at: string | null }
+      | undefined;
+    if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
+      throw new Error('INVALID_PAIRING');
+    }
+    return { clinicId: row.clinic_id, expiresAt: row.expires_at };
   }
 
   consumePairingCode(code: string): string {

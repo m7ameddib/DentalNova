@@ -159,7 +159,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     const db = new Database(dbFile);
     db.pragma('journal_mode = WAL');
     db.pragma('foreign_keys = ON');
-    db.pragma('busy_timeout = 5000');
+    db.pragma('busy_timeout = 15000');
     this.runMigrationsOn(db);
     this.ensureReferenceDataOn(db);
     try {

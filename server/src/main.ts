@@ -18,6 +18,7 @@ import * as fs from 'fs';
 
 import * as path from 'path';
 
+import helmet from 'helmet';
 import { Request, Response, NextFunction } from 'express';
 
 
@@ -48,12 +49,42 @@ async function bootstrap() {
 
   if (deployment.isOnline()) {
     app.set('trust proxy', 1);
+    app.use(
+      helmet({
+        contentSecurityPolicy: {
+          useDefaults: true,
+          directives: {
+            defaultSrc: ["'self'"],
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", 'data:', 'blob:'],
+            connectSrc: ["'self'"],
+            fontSrc: ["'self'", 'data:'],
+            workerSrc: ["'self'"],
+            manifestSrc: ["'self'"],
+            objectSrc: ["'none'"],
+            frameAncestors: ["'none'"],
+            baseUri: ["'self'"],
+            formAction: ["'self'"],
+            upgradeInsecureRequests: [],
+          },
+        },
+        crossOriginEmbedderPolicy: false,
+        frameguard: { action: 'deny' },
+        referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+        hsts: { maxAge: 15552000, includeSubDomains: true },
+      }),
+    );
     const origins = deployment.allowedOrigins();
     app.enableCors({
-      origin: origins.length > 0 ? origins : true,
+      origin: origins.length > 0 ? origins : false,
       credentials: true,
     });
-    logger.log(`Online mode — CORS origins: ${origins.join(', ') || '(all)'}`);
+    if (origins.length === 0) {
+      logger.warn('Online mode has no CORS origins configured; browsers will be blocked. Set CORS_ORIGINS.');
+    } else {
+      logger.log(`Online mode — CORS origins: ${origins.join(', ')}`);
+    }
   } else {
     app.enableCors({ origin: true, credentials: true });
   }
@@ -66,7 +97,7 @@ async function bootstrap() {
 
       transform: true,
 
-      forbidNonWhitelisted: false,
+      forbidNonWhitelisted: true,
 
     }),
 
@@ -77,10 +108,11 @@ async function bootstrap() {
   app.setGlobalPrefix('api');
 
   const clientDistCandidates = [
+    path.join(__dirname, '..', '..', 'client', 'dist'),
+    path.join(process.cwd(), '..', 'client', 'dist'),
+    path.join(process.cwd(), 'client', 'dist'),
     path.join(__dirname, '..', 'public'),
     path.join(process.cwd(), 'public'),
-    path.join(__dirname, '..', '..', 'client', 'dist'),
-    path.join(process.cwd(), 'client', 'dist'),
   ];
 
   const clientDist = clientDistCandidates.find((p) => fs.existsSync(path.join(p, 'index.html')));

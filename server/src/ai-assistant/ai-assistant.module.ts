@@ -9,9 +9,10 @@ import { AiAssistantService } from './ai-assistant.service';
 import { AiActionExecutor } from './ai-action.executor';
 import { AiContextBuilder } from './ai-context.builder';
 import { GeminiService } from './gemini.service';
+import { AuthModule } from '../auth/auth.module';
 
 @Module({
-  imports: [PatientsModule, TreatmentsModule, PaymentsModule, AppointmentsModule],
+  imports: [PatientsModule, TreatmentsModule, PaymentsModule, AppointmentsModule, AuthModule],
   controllers: [AiAssistantController, AiProviderController],
   providers: [AiAssistantService, AiActionExecutor, AiContextBuilder, GeminiService],
 })

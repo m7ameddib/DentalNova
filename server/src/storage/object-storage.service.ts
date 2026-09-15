@@ -5,6 +5,7 @@ import * as path from 'path';
 import { UploadsService } from '../common/uploads.service';
 import { DeploymentService } from '../common/deployment.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { createHash } from 'crypto';
 import { r2ObjectKey, withRetries } from './object-storage.util';
 
 const DEFAULT_BUCKET = 'dentalnova-files';
@@ -160,7 +161,13 @@ export class ObjectStorageService implements OnModuleInit {
   }
 
   private objectKey(relativePath: string): string {
-    return r2ObjectKey(relativePath, getTenantClinicId(), this.prefix);
+    return r2ObjectKey(relativePath, getTenantClinicId() || this.offlineTenantSegment(), this.prefix);
+  }
+
+  /** Offline installs that share one R2 bucket must not all land under `offline-local/`. */
+  private offlineTenantSegment(): string {
+    const dataDir = this.config.get<string>('DNT_DATA_DIR') || this.config.get<string>('DATABASE_FILE') || 'offline-local';
+    return `offline-${createHash('sha256').update(String(dataDir)).digest('hex').slice(0, 12)}`;
   }
 
   private async streamToBuffer(body: unknown): Promise<Buffer | null> {

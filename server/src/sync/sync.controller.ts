@@ -29,6 +29,7 @@ import {
   ConnectOnlineDto,
   DeviceTokenDto,
   PairingCompleteDto,
+  PairingPreviewDto,
   PushChangesDto,
   ResolveConflictDto,
 } from './dto/sync.dto';
@@ -59,6 +60,22 @@ export class SyncController {
 
   @SkipSubscriptionGuard()
   @SetMetadata(SKIP_INSTALLATION_GUARD, true)
+  @Post('pairing/preview')
+  previewPairing(@Body() dto: PairingPreviewDto, @Req() req: Request) {
+    const key = `pair-preview:${requestClientIp(req)}`;
+    this.rateLimit.assertAllowed(key, 20, 15 * 60 * 1000);
+    try {
+      const result = this.pairing.previewFromOnline(dto.code);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, 15 * 60 * 1000);
+      throw err;
+    }
+  }
+
+  @SkipSubscriptionGuard()
+  @SetMetadata(SKIP_INSTALLATION_GUARD, true)
   @Post('pairing/complete')
   completePairing(@Body() dto: PairingCompleteDto, @Req() req: Request) {
     const key = `pair:${requestClientIp(req)}`;
@@ -79,13 +96,27 @@ export class SyncController {
   token(@Body() dto: DeviceTokenDto, @Req() req: Request) {
     const key = `sync-token:${requestClientIp(req)}:${dto.deviceId}`;
     this.rateLimit.assertAllowed(key, 20, 15 * 60 * 1000);
-    return this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret);
+    try {
+      const result = this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, 15 * 60 * 1000);
+      throw err;
+    }
+  }
+
+  @UseGuards(JwtAuthGuard, PermissionsGuard)
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  @Post('connect/preview')
+  previewConnect(@Body() dto: ConnectOnlineDto) {
+    return this.pairing.previewOffline(dto);
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   @Post('connect')
-  connect(@Body() dto: ConnectOnlineDto) {
+  async connect(@Body() dto: ConnectOnlineDto) {
     return this.pairing.connectOffline(dto);
   }
 

@@ -164,6 +164,7 @@ export function UpdatesSection() {
       </div>
 
       <p className="muted updates-safety-note">{t('settings.updates.dataSafety')}</p>
+      <p className="muted updates-safety-note">{t('settings.updates.signingIntegrity')}</p>
 
       {error && <div className="form-error-banner">{error}</div>}
       {success && <div className="form-success-banner">{success}</div>}

@@ -10,6 +10,7 @@ import {
   isSessionJwtPayload,
   isSyncDevicePayload,
   isValidAdminJwtPayload,
+  SYNC_DEVICE_JWT_ISSUER,
 } from './jwt-payload.util';
 
 test('password-reset tokens are not session JWTs', () => {
@@ -18,10 +19,12 @@ test('password-reset tokens are not session JWTs', () => {
   assert.equal(isSessionJwtPayload(reset), false);
 });
 
-test('device sync tokens are not session JWTs', () => {
+test('device sync tokens with dentalnova-sync-device issuer are not session JWTs', () => {
   const device = { sub: 0, typ: 'sync-device', clinicId: 'abc', deviceId: 'd1' };
   assert.equal(isSyncDevicePayload(device), true);
   assert.equal(isSessionJwtPayload(device), false);
+  assert.equal(isSyncDevicePayload({ iss: SYNC_DEVICE_JWT_ISSUER, sub: 0 }), true);
+  assert.equal(isSessionJwtPayload({ iss: SYNC_DEVICE_JWT_ISSUER, sub: 1, username: 'doc', roleName: 'doctor' }), false);
 });
 
 test('DibNova admin tokens are not clinic session JWTs', () => {

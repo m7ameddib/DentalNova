@@ -26,6 +26,12 @@ import { OnlineClinicAccountsRepository } from '../database/repositories/online-
 import { isValidPhone, normalizePhone } from '../common/phone.util';
 import { PlatformService } from '../platform/platform.service';
 import { runInTenant } from '../platform/tenant-context';
+import {
+  isLegacyDevLicensePayload,
+  isLicenseExpiryDue,
+  reconstructLicenseText,
+  unsignedLicensePermitted,
+} from '../common/license-state.util';
 
 export interface InstallationStatusResponse {
   phase: InstallationPhase;
@@ -67,13 +73,14 @@ export class InstallationService {
   ) {}
 
   getStatus(): InstallationStatusResponse {
+    const hideBuild = this.deployment.isProduction();
     if (this.platform.isEnabled()) {
       const signupMode = this.deployment.clinicSignupMode();
       return {
         phase: 'ready',
         installationId: '',
-        version: APP_VERSION,
-        product: 'DNT Dental',
+        version: hideBuild ? '' : APP_VERSION,
+        product: hideBuild ? '' : 'DNT Dental',
         deploymentMode: 'online',
         onlineSubscriptionStatus: null,
         canCreateClinic: signupMode !== 'disabled',
@@ -86,8 +93,8 @@ export class InstallationService {
     return {
       phase: this.repo.phase(),
       installationId: row.installationId,
-      version: APP_VERSION,
-      product: 'DNT Dental',
+      version: hideBuild ? '' : APP_VERSION,
+      product: hideBuild ? '' : 'DNT Dental',
       deploymentMode: this.deployment.getMode(),
       onlineSubscriptionStatus: null,
       canCreateClinic: false,
@@ -473,12 +480,14 @@ export class InstallationService {
   isLicenseExpired(): boolean {
     if (!this.deployment.requiresLicense()) return false;
     const row = this.repo.get();
-    if (!row.licensePayload) return false;
+    const production = this.deployment.isProduction();
+    if (!row.licensePayload) return production;
+    if (!row.licenseSignature || isLegacyDevLicensePayload(row.licensePayload)) {
+      return !unsignedLicensePermitted(production);
+    }
     try {
-      const payload = JSON.parse(row.licensePayload) as { expiresAt?: string | null };
-      if (!payload.expiresAt) return false;
-      const expiry = new Date(payload.expiresAt);
-      return !Number.isNaN(expiry.getTime()) && expiry.getTime() < Date.now();
+      const payload = this.license.parseAndVerify(reconstructLicenseText(row.licensePayload, row.licenseSignature));
+      return isLicenseExpiryDue(payload.expiresAt ?? null);
     } catch {
       return true;
     }

@@ -1,4 +1,4 @@
-/** Pure offline-fallback helpers — no IndexedDB or network. Safe to unit-test. */
+import { priceMultiplier, TreatmentScope } from '../utils/teeth';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -263,11 +263,59 @@ function mergeById(value: unknown, id: number, patch: Record<string, unknown>): 
   return next;
 }
 
+export function collectCachedTreatmentTypes(
+  caches: Record<string, CachedGet>,
+): Array<{ id: number; defaultPriceCents?: number; scope?: string; label?: string }> {
+  const types: Array<{ id: number; defaultPriceCents?: number; scope?: string; label?: string }> = [];
+  for (const [key, entry] of Object.entries(caches)) {
+    if (!key.includes('/treatment-types') || !Array.isArray(entry.data)) continue;
+    for (const item of entry.data) {
+      const rec = asRecord(item);
+      if (rec && typeof rec.id === 'number') {
+        types.push({
+          id: rec.id,
+          defaultPriceCents: Number(rec.defaultPriceCents ?? 0),
+          scope: typeof rec.scope === 'string' ? rec.scope : undefined,
+          label: typeof rec.label === 'string' ? rec.label : undefined,
+        });
+      }
+    }
+  }
+  return types;
+}
+
+export function optimisticTreatmentPricing(
+  payload: Record<string, unknown>,
+  types: Array<{ id: number; defaultPriceCents?: number; scope?: string; label?: string }>,
+): {
+  priceCents: number;
+  baseAmountCents: number;
+  discountCents: number;
+  finalAmountCents: number;
+  treatmentLabel: string;
+} {
+  const type = types.find((row) => row.id === Number(payload.treatmentTypeId));
+  const unit = Number(type?.defaultPriceCents ?? 0);
+  const teeth = Array.isArray(payload.teeth) ? payload.teeth : [];
+  const scope = String(payload.treatmentScope ?? type?.scope ?? 'SINGLE') as TreatmentScope;
+  const multiplier = priceMultiplier(scope, teeth.length);
+  const discountCents = payload.discount != null ? Math.round(Number(payload.discount) * 100) : 0;
+  const baseAmountCents = unit * multiplier;
+  return {
+    priceCents: unit,
+    baseAmountCents,
+    discountCents,
+    finalAmountCents: Math.max(0, baseAmountCents - discountCents),
+    treatmentLabel: type?.label ?? '',
+  };
+}
+
 export function buildOptimisticRecord(
   method: string,
   url: string,
   body: unknown,
   tempId: number,
+  treatmentTypes: Array<{ id: number; defaultPriceCents?: number; scope?: string; label?: string }> = [],
 ): Record<string, unknown> {
   const now = new Date().toISOString();
   const payload = asRecord(body) ?? {};
@@ -322,6 +370,7 @@ export function buildOptimisticRecord(
   }
 
   if (path === '/treatments' || path.startsWith('/treatments/')) {
+    const priced = optimisticTreatmentPricing(payload, treatmentTypes);
     return {
       patientId: payload.patientId,
       treatmentTypeId: payload.treatmentTypeId,
@@ -329,22 +378,18 @@ export function buildOptimisticRecord(
       teeth: payload.teeth ?? [],
       treatmentDate: payload.treatmentDate ?? null,
       treatmentScope: payload.treatmentScope ?? null,
-      priceCents: 0,
-      baseAmountCents: 0,
-      discountCents: payload.discount != null ? Math.round(Number(payload.discount) * 100) : 0,
-      finalAmountCents: 0,
       status: payload.status ?? 'PLANNED',
       note: payload.note ?? null,
       doctorId: null,
       treatmentCode: '',
       treatmentAbbreviation: '',
-      treatmentLabel: '',
       treatmentColor: '',
       doctorName: null,
       followUp1Days: null,
       followUp2Days: null,
       followUp3Days: null,
       ...base,
+      ...priced,
     };
   }
 
@@ -500,6 +545,30 @@ function treatmentAccountCostCents(treatment: Record<string, unknown> | null | u
   if (String(treatment.status ?? '') === 'VOID') return 0;
   const amount = Number(treatment.finalAmountCents ?? 0);
   return Number.isFinite(amount) ? Math.max(0, amount) : 0;
+}
+
+function findCachedPayment(
+  caches: Record<string, CachedGet>,
+  id: number,
+): Record<string, unknown> | null {
+  if (!Number.isFinite(id)) return null;
+  for (const [key, entry] of Object.entries(caches)) {
+    if (!key.includes('/patients/') || !key.includes('/payments') || !Array.isArray(entry.data)) continue;
+    for (const item of entry.data) {
+      const rec = asRecord(item);
+      if (rec && rec.id === id) return rec;
+    }
+  }
+  const summaryKeys = Object.keys(caches).filter((key) => key.includes('/account-summary'));
+  for (const key of summaryKeys) {
+    const rec = asRecord(caches[key]?.data);
+    const last = Array.isArray(rec?.lastPayments) ? rec.lastPayments : [];
+    for (const item of last) {
+      const pay = asRecord(item);
+      if (pay && pay.id === id) return pay;
+    }
+  }
+  return null;
 }
 
 function findCachedTreatment(
@@ -671,7 +740,9 @@ export function applyMutationToCaches(
     const idMatch = path.match(/\/(\d+|-?\d+)(?:\/|$)/);
     const id = idMatch ? Number(idMatch[1]) : Number(result.id);
     const treatmentMatch = path.match(/^\/treatments\/(-?\d+)(?:\/status)?$/);
+    const paymentVoidMatch = path.match(/^\/payments\/(-?\d+)\/void$/);
     const priorTreatment = treatmentMatch ? findCachedTreatment(next, Number(treatmentMatch[1])) : null;
+    const priorPayment = paymentVoidMatch ? findCachedPayment(next, Number(paymentVoidMatch[1])) : null;
     if (!Number.isNaN(id)) {
       const patch = { ...asRecord(mutation.body), ...result, id };
       for (const [key, entry] of Object.entries(next)) {
@@ -683,6 +754,13 @@ export function applyMutationToCaches(
         const costDelta = treatmentAccountCostCents(after) - treatmentAccountCostCents(priorTreatment);
         if (patientId && costDelta !== 0) {
           patchAccountSummaryCache(next, writeCache, patientId, { costCents: costDelta });
+        }
+      }
+      if (priorPayment && String(priorPayment.status ?? 'ACTIVE') !== 'VOID') {
+        const patientId = Number(priorPayment.patientId);
+        const amount = Number(priorPayment.amountCents ?? 0);
+        if (patientId && amount) {
+          patchAccountSummaryCache(next, writeCache, patientId, { paidCents: -amount });
         }
       }
     }

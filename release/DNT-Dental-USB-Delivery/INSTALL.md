@@ -24,16 +24,16 @@
 
 ### AI Assistant
 
-Offline DentalNova uses the Dental Nova Online AI service (Gemini 3.5 Lite). Clinic data stays on this computer; only chat messages and images are sent.
+Offline DentalNova uses the Dental Nova Online AI service (Gemini). Clinic data stays on this computer except the chat text, attached images, and the clinic context the assistant needs to answer — those are sent to Google Gemini when AI is enabled. Leave `AI_SERVICE_URL` empty to disable the assistant.
 
 No local Gemini API key is required. Optional override in `server/.env`:
 
 ```
 AI_SERVICE_URL=https://dentalnova.dibnova.com
-AI_SERVICE_SECRET=DentalNova.AI.Proxy.v1
+AI_SERVICE_SECRET=REPLACE_WITH_UNIQUE_AI_PROXY_SECRET
 ```
 
-Leave `AI_SERVICE_URL` empty to disable the assistant.
+Use a **unique** secret shared with the Online server. Never use `DentalNova.AI.Proxy.v1` — Online will refuse to boot (or reject the proxy) if that public default is set while AI is enabled. Leave `AI_SERVICE_URL` empty to disable the assistant.
 
 ### Option 2 — Portable folder + install script
 

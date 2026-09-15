@@ -353,4 +353,212 @@ test('syncing a treatment then completing the same uid does not duplicate the ch
   db.close();
 });
 
+test('treatment teeth snapshot maps treatment_id to treatmentUid, not the local integer id', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT,
+      phone TEXT
+    );
+    CREATE TABLE treatment_types (id INTEGER PRIMARY KEY AUTOINCREMENT, label TEXT);
+    CREATE TABLE patient_treatments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER,
+      treatment_type_id INTEGER,
+      final_amount_cents INTEGER,
+      status TEXT
+    );
+    CREATE TABLE patient_treatment_teeth (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      treatment_id INTEGER NOT NULL,
+      tooth_number INTEGER NOT NULL
+    );
+    CREATE TABLE lab_names (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
+    CREATE TABLE lab_account_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_name_id INTEGER NOT NULL,
+      amount_cents INTEGER,
+      payment_method TEXT,
+      payment_date TEXT
+    );
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('Ada')`).run();
+  db.prepare(`INSERT INTO treatment_types (label) VALUES ('Filling')`).run();
+  db.prepare(
+    `INSERT INTO patient_treatments (patient_id, treatment_type_id, final_amount_cents, status) VALUES (1, 1, 5000, 'PLANNED')`,
+  ).run();
+  db.prepare(`INSERT INTO patient_treatment_teeth (treatment_id, tooth_number) VALUES (1, 16)`).run();
+  const treatmentSnap = snapshotRow(db, 'patient_treatments', 1);
+  const toothSnap = snapshotRow(db, 'patient_treatment_teeth', 1);
+  assert.equal(toothSnap?.treatmentUid, treatmentSnap?.recordUid);
+  assert.equal(toothSnap?.treatmentId, undefined);
+
+  db.prepare(`INSERT INTO lab_names (name) VALUES ('Cairo Lab')`).run();
+  db.prepare(
+    `INSERT INTO lab_account_payments (lab_name_id, amount_cents, payment_method, payment_date) VALUES (1, 1000, 'CASH', '2026-01-01')`,
+  ).run();
+  const labSnap = snapshotRow(db, 'lab_names', 1);
+  const paySnap = snapshotRow(db, 'lab_account_payments', 1);
+  assert.equal(paySnap?.labNameUid, labSnap?.recordUid);
+  assert.equal(paySnap?.laboratoryId, undefined);
+  db.close();
+});
+
+test('working hours, clinic_settings, and lab history are sync entities with UID maps', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE clinic_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      clinic_name TEXT,
+      account_recovery_code_hash TEXT,
+      logo_path TEXT,
+      work_start_time TEXT,
+      updated_at TEXT
+    );
+    CREATE TABLE clinic_weekly_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      day_of_week INTEGER,
+      start_time TEXT,
+      end_time TEXT,
+      sort_order INTEGER
+    );
+    CREATE TABLE patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT);
+    CREATE TABLE users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT);
+    CREATE TABLE lab_cases (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER, lab_name TEXT);
+    CREATE TABLE lab_case_history (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_case_id INTEGER,
+      patient_id INTEGER,
+      action TEXT,
+      performed_by_id INTEGER
+    );
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  db.prepare(
+    `INSERT INTO clinic_settings (id, clinic_name, account_recovery_code_hash, logo_path, work_start_time)
+     VALUES (1, 'Sunrise', 'hash-secret', '/tmp/logo.png', '09:00')`,
+  ).run();
+  db.prepare(
+    `INSERT INTO clinic_weekly_periods (day_of_week, start_time, end_time, sort_order) VALUES (0, '09:00', '13:00', 0)`,
+  ).run();
+  const settingsSnap = snapshotRow(db, 'clinic_settings', 1);
+  assert.equal(settingsSnap?.clinicName, 'Sunrise');
+  assert.equal(settingsSnap?.accountRecoveryCodeHash, undefined);
+  assert.equal(settingsSnap?.logoPath, undefined);
+  const hoursSnap = snapshotRow(db, 'clinic_weekly_periods', 1);
+  assert.equal(hoursSnap?.dayOfWeek, 0);
+
+  applyChanges(
+    db,
+    [
+      {
+        changeId: 'cs-remote',
+        entity: 'clinic_settings',
+        recordUid: 'settings-uid-online',
+        op: 'upsert',
+        row: { clinicName: 'Online Clinic', workStartTime: '08:00' },
+      },
+    ],
+    'online-server',
+  );
+  const after = db.prepare(`SELECT clinic_name, work_start_time, account_recovery_code_hash FROM clinic_settings WHERE id = 1`).get() as {
+    clinic_name: string;
+    work_start_time: string;
+    account_recovery_code_hash: string;
+  };
+  assert.equal(after.clinic_name, 'Online Clinic');
+  assert.equal(after.work_start_time, '08:00');
+  assert.equal(after.account_recovery_code_hash, 'hash-secret');
+
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('Ada')`).run();
+  db.prepare(`INSERT INTO users (username) VALUES ('doc')`).run();
+  db.prepare(`INSERT INTO lab_cases (patient_id, lab_name) VALUES (1, 'Cairo')`).run();
+  db.prepare(`INSERT INTO lab_case_history (lab_case_id, patient_id, action, performed_by_id) VALUES (1, 1, 'SENT', 1)`).run();
+  const history = snapshotRow(db, 'lab_case_history', 1);
+  assert.equal(typeof history?.labCaseUid, 'string');
+  assert.equal(typeof history?.patientUid, 'string');
+  assert.equal(history?.labCaseId, undefined);
+  db.close();
+});
+
+test('lab payment expense circular FKs sync as UIDs, not local integers', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE expense_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
+    CREATE TABLE clinic_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expense_category_id INTEGER,
+      amount_cents INTEGER,
+      source_lab_payment_id INTEGER,
+      created_by_id INTEGER
+    );
+    CREATE TABLE lab_cases (id INTEGER PRIMARY KEY AUTOINCREMENT, lab_name TEXT);
+    CREATE TABLE lab_case_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_case_id INTEGER,
+      amount_cents INTEGER,
+      expense_id INTEGER
+    );
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  db.prepare(`INSERT INTO expense_categories (name) VALUES ('Lab')`).run();
+  db.prepare(`INSERT INTO lab_cases (lab_name) VALUES ('Cairo')`).run();
+  db.prepare(`INSERT INTO clinic_expenses (expense_category_id, amount_cents) VALUES (1, 2500)`).run();
+  db.prepare(`INSERT INTO lab_case_payments (lab_case_id, amount_cents, expense_id) VALUES (1, 2500, 1)`).run();
+  db.prepare(`UPDATE clinic_expenses SET source_lab_payment_id = 1 WHERE id = 1`).run();
+
+  const expenseSnap = snapshotRow(db, 'clinic_expenses', 1);
+  const paySnap = snapshotRow(db, 'lab_case_payments', 1);
+  assert.equal(paySnap?.expenseUid, expenseSnap?.recordUid);
+  assert.equal(paySnap?.expenseId, undefined);
+  assert.equal(expenseSnap?.sourceLabPaymentUid, paySnap?.recordUid);
+  assert.equal(expenseSnap?.sourceLabPaymentId, undefined);
+
+  const other = new Database(':memory:');
+  other.exec(`
+    CREATE TABLE expense_categories (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT);
+    CREATE TABLE clinic_expenses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      expense_category_id INTEGER,
+      amount_cents INTEGER,
+      source_lab_payment_id INTEGER,
+      created_by_id INTEGER
+    );
+    CREATE TABLE lab_cases (id INTEGER PRIMARY KEY AUTOINCREMENT, lab_name TEXT);
+    CREATE TABLE lab_case_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      lab_case_id INTEGER,
+      amount_cents INTEGER,
+      expense_id INTEGER
+    );
+  `);
+  other.exec(fsRead038());
+  ensureSyncInfrastructure(other);
+  other.prepare(`INSERT INTO expense_categories (name) VALUES ('Lab')`).run();
+  applyChanges(other, [{ changeId: 'cat', entity: 'expense_categories', recordUid: snapshotRow(db, 'expense_categories', 1)!.recordUid as string, op: 'upsert', row: { name: 'Lab' } }], 'online');
+  applyChanges(
+    other,
+    [
+      { changeId: 'case', entity: 'lab_cases', recordUid: snapshotRow(db, 'lab_cases', 1)!.recordUid as string, op: 'upsert', row: { labName: 'Cairo' } },
+      { changeId: 'pay', entity: 'lab_case_payments', recordUid: paySnap!.recordUid as string, op: 'upsert', row: paySnap },
+      { changeId: 'exp', entity: 'clinic_expenses', recordUid: expenseSnap!.recordUid as string, op: 'upsert', row: expenseSnap },
+    ],
+    'online',
+  );
+  const remotePay = other.prepare(`SELECT id, expense_id FROM lab_case_payments`).get() as { id: number; expense_id: number };
+  const remoteExp = other.prepare(`SELECT id, source_lab_payment_id FROM clinic_expenses`).get() as {
+    id: number;
+    source_lab_payment_id: number;
+  };
+  assert.equal(remotePay.expense_id, remoteExp.id);
+  assert.equal(remoteExp.source_lab_payment_id, remotePay.id);
+  db.close();
+  other.close();
+});
+
 

@@ -170,6 +170,7 @@ export function LoginPage() {
             {t('auth.forgotPassword')}
           </Link>
         </div>
+        <p className="muted login-card__recovery-hint">{t('auth.forgotPasswordHint')}</p>
 
         {success && <div className="form-info-banner">{success}</div>}
         {error && <div className="form-error-banner">{error}</div>}

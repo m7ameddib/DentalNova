@@ -14,6 +14,12 @@ import { Readable } from 'stream';
 import { spawn } from 'child_process';
 import { APP_VERSION } from '../common/version';
 import { PathsService } from '../common/paths.service';
+import { assertInstallerChecksumPresent, assertSha256Match, missingInstallerChecksumMessage, parseSha256Text } from './installer-checksum.util';
+import {
+  assertAuthenticodeTrusted,
+  inspectAuthenticodePayload,
+  AuthenticodeInspection,
+} from './installer-authenticode.util';
 
 interface GitHubReleaseAsset {
   name: string;
@@ -147,6 +153,8 @@ export class UpdatesService {
     }
 
     const installerPath = status.downloadedPath;
+    this.assertLocalInstallerChecksum(installerPath, status.installerFileName || path.basename(installerPath));
+    await this.assertWindowsAuthenticode(installerPath, status.installerFileName || path.basename(installerPath));
     this.logger.log(`Launching update installer: ${installerPath}`);
 
     const child = spawn(installerPath, [], {
@@ -288,9 +296,15 @@ export class UpdatesService {
   ): Promise<void> {
     const checksumAssetName = `${installerFileName}.sha256`;
     const checksumAsset = release.assets.find((a) => a.name === checksumAssetName);
+    try {
+      assertInstallerChecksumPresent(Boolean(checksumAsset), installerFileName);
+    } catch (err) {
+      throw new InternalServerErrorException(
+        (err as Error).message || missingInstallerChecksumMessage(installerFileName),
+      );
+    }
     if (!checksumAsset) {
-      this.logger.warn(`No checksum asset ${checksumAssetName} on release; skipping verification.`);
-      return;
+      throw new InternalServerErrorException(missingInstallerChecksumMessage(installerFileName));
     }
 
     const res = await fetch(checksumAsset.browser_download_url, {
@@ -300,12 +314,81 @@ export class UpdatesService {
       throw new InternalServerErrorException('Failed to download installer checksum.');
     }
 
-    const expected = (await res.text()).trim().toLowerCase().split(/\s+/)[0];
+    const expected = parseSha256Text(await res.text());
     const actual = crypto.createHash('sha256').update(fs.readFileSync(installerPath)).digest('hex');
-    if (expected !== actual) {
+    try {
+      assertSha256Match(actual, expected, installerFileName);
+    } catch (err) {
       fs.unlinkSync(installerPath);
-      throw new InternalServerErrorException('Downloaded installer failed checksum verification.');
+      throw new InternalServerErrorException((err as Error).message);
     }
+    fs.writeFileSync(`${installerPath}.sha256`, `${expected}\n`, 'utf8');
+
+    if (process.platform === 'win32') {
+      await this.assertWindowsAuthenticode(installerPath, installerFileName);
+    }
+  }
+
+  private assertLocalInstallerChecksum(installerPath: string, installerFileName: string): void {
+    const sidecar = `${installerPath}.sha256`;
+    if (!fs.existsSync(sidecar)) {
+      throw new BadRequestException(missingInstallerChecksumMessage(installerFileName));
+    }
+    const expected = parseSha256Text(fs.readFileSync(sidecar, 'utf8'));
+    const actual = crypto.createHash('sha256').update(fs.readFileSync(installerPath)).digest('hex');
+    try {
+      assertSha256Match(actual, expected, installerFileName);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+  }
+
+  private async assertWindowsAuthenticode(installerPath: string, installerFileName: string): Promise<void> {
+    const allowUnsigned =
+      (this.config.get<string>('ALLOW_UNSIGNED_UPDATES') || '').trim() === '1' &&
+      (this.config.get<string>('NODE_ENV') || '').toLowerCase() !== 'production' &&
+      process.platform !== 'win32';
+    if (allowUnsigned) {
+      this.logger.warn('ALLOW_UNSIGNED_UPDATES=1 — skipping Authenticode (not for production).');
+      return;
+    }
+    const inspection = await this.readAuthenticodeSignature(installerPath);
+    try {
+      assertAuthenticodeTrusted(
+        inspection,
+        installerFileName,
+        this.config.get<string>('UPDATE_AUTHENTICODE_PUBLISHER'),
+      );
+    } catch (err) {
+      throw new BadRequestException((err as Error).message);
+    }
+  }
+
+  private readAuthenticodeSignature(installerPath: string): Promise<AuthenticodeInspection> {
+    return new Promise((resolve) => {
+      const child = spawn(
+        'powershell.exe',
+        [
+          '-NoProfile',
+          '-NonInteractive',
+          '-Command',
+          `Get-AuthenticodeSignature -FilePath ${JSON.stringify(installerPath)} | ConvertTo-Json -Compress`,
+        ],
+        { windowsHide: true },
+      );
+      let out = '';
+      child.stdout.on('data', (chunk) => {
+        out += String(chunk);
+      });
+      child.on('error', () => resolve({ status: 'UnknownError', signer: null }));
+      child.on('close', () => {
+        try {
+          resolve(inspectAuthenticodePayload(JSON.parse(out)));
+        } catch {
+          resolve({ status: 'UnknownError', signer: null });
+        }
+      });
+    });
   }
 
   private normalizeVersion(tag: string): string {
