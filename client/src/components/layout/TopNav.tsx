@@ -21,6 +21,7 @@ import { TrialRemainingChip } from '@/components/common/TrialRemainingChip';
 import { useAuthStore } from '@/store/auth.store';
 import { useUiStore } from '@/store/ui.store';
 import { usePermission } from '@/hooks/usePermission';
+import { useShowAiAssistant } from '@/hooks/useDeploymentMode';
 import { PERMISSIONS } from '@/constants/permissions';
 
 export function TopNav() {
@@ -38,7 +39,7 @@ export function TopNav() {
   const canViewLabCases = usePermission(PERMISSIONS.LAB_CASES_MANAGE);
   const canViewReports = usePermission(PERMISSIONS.REPORTS_VIEW);
   const canViewSettings = usePermission(PERMISSIONS.SETTINGS_VIEW);
-  const canUseAiAssistant = usePermission(PERMISSIONS.AI_ASSISTANT_USE);
+  const canUseAiAssistant = useShowAiAssistant(usePermission(PERMISSIONS.AI_ASSISTANT_USE));
 
   useEffect(() => {
     setMobileNavOpen(false);

@@ -10,6 +10,7 @@ import {
 import { settingsApi } from '@/api/settings.api';
 import { getErrorMessage } from '@/utils/errors';
 import { renderWhatsAppTemplate } from '@/utils/whatsappTemplates';
+import { formatReminderClockTime } from '@/utils/date';
 
 type TemplateFields = {
   appointmentReminderEn: string;
@@ -125,6 +126,7 @@ export function WhatsAppMessagesSection() {
     const samples = {
       ...WHATSAPP_PREVIEW_SAMPLES[whatsappLanguage],
       clinicName: clinicNamePreview,
+      appointmentTime: formatReminderClockTime(WHATSAPP_PREVIEW_SAMPLES[whatsappLanguage].appointmentTime),
     };
     const template = (key: WhatsAppTemplateKey) =>
       whatsappLanguage === 'ar'

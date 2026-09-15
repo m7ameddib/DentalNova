@@ -248,20 +248,30 @@ export function LandingPage() {
       <section className="dn-pricing" id="pricing">
         <h2>{t('landing.pricing.title')}</h2>
         <div className="dn-pricing__row">
-          <p>
+          <article>
             <span>{t('landing.pricing.offlineLabel')}</span>
-            <strong>{t('landing.price.offline')}</strong>
-          </p>
-          <p>
+            <p className="dn-price-row">
+              <s>{t('landing.pricing.offlineWas')}</s>
+              <strong>{t('landing.pricing.offlineNow')}</strong>
+            </p>
+            <b>{t('landing.pricing.offlineTerm')}</b>
+          </article>
+          <article>
             <span>{t('landing.pricing.onlineLabel')}</span>
-            <s>{t('landing.price.onlineWas')}</s>
-            <strong>{t('landing.price.onlineNow')}</strong>
-            <b>{t('landing.price.onlineMonth')}</b>
-          </p>
-          <p>
-            <span>{t('landing.pricing.trialLabel')}</span>
-            <strong>{t('landing.price.trial')}</strong>
-          </p>
+            <p className="dn-price-row">
+              <s>{t('landing.pricing.onlineWas')}</s>
+              <strong>{t('landing.pricing.onlineNow')}</strong>
+            </p>
+            <b>{t('landing.pricing.onlineTerm')}</b>
+          </article>
+          <article>
+            <span>{t('landing.pricing.comboLabel')}</span>
+            <p className="dn-price-row">
+              <s>{t('landing.pricing.comboWas')}</s>
+              <strong>{t('landing.pricing.comboNow')}</strong>
+            </p>
+            <b>{t('landing.pricing.comboTerm')}</b>
+          </article>
         </div>
       </section>
 

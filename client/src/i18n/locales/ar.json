@@ -107,7 +107,16 @@
       "title": "أسعار واضحة",
       "offlineLabel": "أوفلاين",
       "onlineLabel": "أونلاين",
-      "trialLabel": "تجربة"
+      "comboLabel": "أونلاين + أوفلاين",
+      "offlineWas": "700$",
+      "offlineNow": "600$",
+      "offlineTerm": "مدى الحياة",
+      "onlineWas": "600$",
+      "onlineNow": "480$",
+      "onlineTerm": "سنة واحدة",
+      "comboWas": "1,100$",
+      "comboNow": "800$",
+      "comboTerm": "أونلاين: سنة واحدة + أوفلاين: مدى الحياة"
     },
     "final": {
       "title": "ضع العيادة على Dental Nova.",

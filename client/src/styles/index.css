@@ -6874,6 +6874,21 @@ textarea {
   gap: 20px;
 }
 
+.dn-pricing__row article {
+  padding: 18px 16px 16px;
+  border: 1px solid #d7d0c6;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.dn-pricing__row .dn-price-row {
+  margin: 8px 0 0;
+}
+
+.dn-pricing__row strong {
+  margin-top: 0;
+}
+
 .dn-pricing__row span {
   display: block;
   font-size: 12px;
@@ -7047,35 +7062,6 @@ textarea {
   font-weight: 500;
 }
 
-.more-clinical {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.more-clinical__tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-.more-clinical__tab {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 7px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: 999px;
-  background: white;
-  color: var(--color-text-muted);
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-}
-.more-clinical__tab--active {
-  background: var(--color-primary-soft);
-  color: var(--color-primary);
-  border-color: transparent;
-}
-
 .settings-general__facts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -7185,57 +7171,6 @@ textarea {
 .appointment-card__time {
   overflow: visible;
   text-overflow: unset;
-}
-
-.mobile-day-agenda {
-  background: var(--color-surface);
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-md);
-  padding: 10px;
-}
-.mobile-day-agenda .week-agenda__mobile-strip {
-  display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr));
-  gap: 4px;
-  margin-bottom: 10px;
-}
-.mobile-day-agenda__title {
-  margin: 0 0 8px;
-  font-size: 15px;
-}
-.mobile-day-agenda__list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-.mobile-day-agenda__card {
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  padding: 10px 12px;
-  border: 1px solid var(--color-border);
-  border-radius: var(--radius-sm);
-  background: var(--color-bg);
-  text-align: start;
-  font: inherit;
-  cursor: pointer;
-}
-.mobile-day-agenda__time {
-  font-size: 13px;
-  font-weight: 700;
-}
-.mobile-day-agenda__name {
-  font-size: 15px;
-  font-weight: 700;
-}
-.mobile-day-agenda__reason {
-  font-size: 12px;
-  color: var(--color-text-muted);
 }
 
 .connection-status-chip--pending {

@@ -950,30 +950,6 @@ body.top-nav-menu-open {
     white-space: normal;
   }
 
-  .agenda-options-panel {
-    display: none;
-    position: fixed;
-    inset-inline-end: 0;
-    top: 0;
-    bottom: 0;
-    width: min(320px, 92vw);
-    z-index: 30;
-    background: var(--color-surface);
-    border-inline-start: 1px solid var(--color-border);
-    overflow: auto;
-    padding: 12px;
-  }
-  .agenda-options-panel--open {
-    display: block;
-  }
-  .agenda-options-backdrop {
-    position: fixed;
-    inset: 0;
-    border: 0;
-    background: rgba(15, 23, 42, 0.35);
-    z-index: 29;
-  }
-
   .week-agenda__mobile-strip {
     display: grid;
     grid-template-columns: repeat(7, minmax(0, 1fr));

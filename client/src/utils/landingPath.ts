@@ -11,7 +11,15 @@ const LANDING_ROUTES: { permission: string; path: string }[] = [
 ];
 
 /** First route the signed-in user is allowed to open. */
-export function defaultLandingPath(permissions: string[] | null | undefined): string {
+export function defaultLandingPath(
+  permissions: string[] | null | undefined,
+  deploymentMode?: 'online' | 'offline' | null,
+): string {
   if (!permissions?.length) return '/';
-  return LANDING_ROUTES.find((route) => permissions.includes(route.permission))?.path ?? '/';
+  return (
+    LANDING_ROUTES.find((route) => {
+      if (route.path === '/ai-assistant' && deploymentMode !== 'online') return false;
+      return permissions.includes(route.permission);
+    })?.path ?? '/'
+  );
 }

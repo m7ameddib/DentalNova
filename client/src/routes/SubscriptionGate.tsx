@@ -8,6 +8,7 @@ import { queryClient } from '@/queryClient';
 import { useOfflineStatusStore } from '@/offline/status.store';
 import { useAuthStore } from '@/store/auth.store';
 import { isCachedSubscriptionUsable } from '@/utils/subscription';
+import { StartupSplash } from '@/components/common/StartupSplash';
 
 const OFFLINE_SUBSCRIPTION_GRACE_MS = 48 * 60 * 60 * 1000;
 
@@ -56,7 +57,7 @@ export function SubscriptionGate({ children }: { children: ReactNode }) {
     if (offline) {
       return <Navigate to="/subscription-status" replace />;
     }
-    return <div className="page-loading" />;
+    return <StartupSplash />;
   }
 
   if (!subStatus?.canUseSystem) {

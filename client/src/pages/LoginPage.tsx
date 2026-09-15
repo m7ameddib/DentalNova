@@ -60,7 +60,10 @@ export function LoginPage() {
   }, [installReady, installStatus?.phase, isAuthenticated, logout]);
 
   if (installReady && isAuthenticated && clinicReady) {
-    const landing = defaultLandingPath(useAuthStore.getState().user?.permissions);
+    const landing = defaultLandingPath(
+      useAuthStore.getState().user?.permissions,
+      installStatus?.deploymentMode,
+    );
     return <Navigate to={landing} replace />;
   }
 
@@ -78,7 +81,7 @@ export function LoginPage() {
       setSession(accessToken, user, rememberMe);
       useOfflineStatusStore.getState().setNeedsReauth(false);
       void syncWhenOnline(apiClient);
-      navigate(defaultLandingPath(user.permissions), { replace: true });
+      navigate(defaultLandingPath(user.permissions, installStatus?.deploymentMode), { replace: true });
     } catch {
       setError(t('auth.invalidCredentials'));
     } finally {

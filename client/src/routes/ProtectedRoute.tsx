@@ -6,6 +6,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { installationApi } from '@/api/installation.api';
 import { LandingPage } from '@/pages/LandingPage';
 import { defaultLandingPath } from '@/utils/landingPath';
+import { StartupSplash } from '@/components/common/StartupSplash';
 
 export function ProtectedRoute({ permission }: { permission?: string | string[] }) {
   const { t } = useTranslation();
@@ -13,7 +14,7 @@ export function ProtectedRoute({ permission }: { permission?: string | string[] 
   const user = useAuthStore((s) => s.user);
   const allowed = usePermission(permission ?? []);
   const location = useLocation();
-  const { data: installStatus } = useQuery({
+  const { data: installStatus, isFetched } = useQuery({
     queryKey: ['installation-status'],
     queryFn: installationApi.status,
     staleTime: 60_000,
@@ -21,8 +22,10 @@ export function ProtectedRoute({ permission }: { permission?: string | string[] 
 
   if (!isAuthenticated) {
     if (!permission && location.pathname === '/') {
-      // Public website guests should see the landing page immediately.
-      // Only USB/offline clinics skip it — and only after we know the mode.
+      // Wait until deployment mode is known so Offline does not flash the landing page.
+      if (!isFetched && !installStatus) {
+        return <StartupSplash />;
+      }
       if (installStatus?.deploymentMode === 'offline') {
         return <Navigate to="/login" replace />;
       }
@@ -31,7 +34,7 @@ export function ProtectedRoute({ permission }: { permission?: string | string[] 
     return <Navigate to="/login" replace />;
   }
   if (permission && !allowed) {
-    const dest = defaultLandingPath(user?.permissions);
+    const dest = defaultLandingPath(user?.permissions, installStatus?.deploymentMode);
     if (dest === location.pathname) {
       return <p className="form-error-banner">{t('common.accessDenied')}</p>;
     }

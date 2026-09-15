@@ -38,7 +38,7 @@ import { LabAccountPage } from '@/pages/LabAccountPage';
 
 import { ClinicExpensesPage } from '@/pages/ClinicExpensesPage';
 
-import { AiAssistantPage } from '@/pages/AiAssistantPage';
+import { OnlineOnlyAiRoute } from '@/routes/OnlineOnlyAiRoute';
 
 import { SubscriptionGate } from '@/routes/SubscriptionGate';
 
@@ -52,12 +52,24 @@ import { OnlineStatusBanner } from '@/components/common/OnlineStatusBanner';
 import { PwaInstallBanner } from '@/components/common/PwaInstallBanner';
 import { useAuthStore } from '@/store/auth.store';
 import { defaultLandingPath } from '@/utils/landingPath';
+import { useQuery } from '@tanstack/react-query';
+import { installationApi } from '@/api/installation.api';
 
 function FallbackRedirect() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const user = useAuthStore((s) => s.user);
+  const { data: installStatus } = useQuery({
+    queryKey: ['installation-status'],
+    queryFn: installationApi.status,
+    staleTime: 60_000,
+  });
   if (!isAuthenticated) return <Navigate to="/" replace />;
-  return <Navigate to={defaultLandingPath(user?.permissions)} replace />;
+  return (
+    <Navigate
+      to={defaultLandingPath(user?.permissions, installStatus?.deploymentMode)}
+      replace
+    />
+  );
 }
 
 export default function App() {
@@ -167,7 +179,7 @@ export default function App() {
 
               <Route element={<ProtectedRoute permission={PERMISSIONS.AI_ASSISTANT_USE} />}>
 
-                <Route path="/ai-assistant" element={<AiAssistantPage />} />
+                <Route path="/ai-assistant" element={<OnlineOnlyAiRoute />} />
 
               </Route>
 

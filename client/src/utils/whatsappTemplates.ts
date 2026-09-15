@@ -4,6 +4,7 @@ import {
   WhatsAppTemplateKey,
 } from '@/constants/whatsappTemplates';
 import { ClinicSettings } from '@/types/domain';
+import { formatReminderClockTime } from '@/utils/date';
 
 /** Replaces `{variable}` placeholders safely; unknown keys become empty strings. */
 export function renderWhatsAppTemplate(
@@ -59,7 +60,10 @@ export function buildAppointmentReminderMessage(
   },
 ): string {
   const template = getWhatsAppTemplateText(settings, 'appointmentReminder');
-  return renderWhatsAppTemplate(template, variables);
+  return renderWhatsAppTemplate(template, {
+    ...variables,
+    appointmentTime: formatReminderClockTime(variables.appointmentTime),
+  });
 }
 
 export function buildClinicalFollowUpMessage(
