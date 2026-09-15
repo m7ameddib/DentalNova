@@ -345,7 +345,7 @@ export function AppointmentsPage() {
     const msgLocale = resolveWhatsAppMessageLanguage(clinicSettings) === 'ar' ? 'ar' : 'en';
     const message = buildAppointmentReminderMessage(clinicSettings, {
       clinicName: clinicSettings.clinicName?.trim() || t('app.name'),
-      patientName: managingAppt.patientName,
+      patientName: managingAppt.patientName ?? '',
       appointmentDate: formatDateDisplay(managingAppt.date, msgLocale),
       appointmentTime: managingAppt.time,
       appointmentReason: managingAppt.reason,
