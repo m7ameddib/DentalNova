@@ -2,10 +2,9 @@ import {
   ArgumentsHost,
   Catch,
   ExceptionFilter,
-  HttpException,
-  HttpStatus,
 } from '@nestjs/common';
 import { Response } from 'express';
+import { httpErrorFromUnknown } from './http-error.util';
 
 /**
  * Normalizes all thrown errors into a consistent { message, error, details? }
@@ -16,22 +15,13 @@ export class HttpExceptionFilter implements ExceptionFilter {
   catch(exception: unknown, host: ArgumentsHost) {
     const ctx = host.switchToHttp();
     const response = ctx.getResponse<Response>();
+    const { status, body } = httpErrorFromUnknown(exception);
 
-    if (exception instanceof HttpException) {
-      const status = exception.getStatus();
-      const body = exception.getResponse();
-      const normalized =
-        typeof body === 'string'
-          ? { message: body }
-          : (body as Record<string, unknown>);
-      response.status(status).json({ ...normalized });
-      return;
+    if (status >= 500) {
+      // eslint-disable-next-line no-console
+      console.error(exception);
     }
 
-    // eslint-disable-next-line no-console
-    console.error(exception);
-    response
-      .status(HttpStatus.INTERNAL_SERVER_ERROR)
-      .json({ message: 'Unexpected server error' });
+    response.status(status).json({ ...body });
   }
 }

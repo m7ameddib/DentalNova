@@ -73,16 +73,40 @@ export interface SyncConflictRow {
   resolution: string | null;
 }
 
+export interface SyncNowResult {
+  pushed: number;
+  pulled: number;
+  conflicts: number;
+  error?: string;
+}
+
+export const SYNC_CONNECT_TIMEOUT_MS = 60_000;
+export const SYNC_BOOTSTRAP_TIMEOUT_MS = 180_000;
+export const SYNC_NOW_TIMEOUT_MS = 120_000;
+
 export const syncApi = {
   status: () => apiClient.get<ClinicSyncStatus>('/sync/status').then((r) => r.data),
   startPairing: () => apiClient.post<PairingStartResult>('/sync/pairing/start').then((r) => r.data),
   previewConnect: (onlineUrl: string, pairingCode: string) =>
-    apiClient.post<PairingPreviewResult>('/sync/connect/preview', { onlineUrl, pairingCode }).then((r) => r.data),
+    apiClient
+      .post<PairingPreviewResult>(
+        '/sync/connect/preview',
+        { onlineUrl, pairingCode },
+        { timeout: SYNC_CONNECT_TIMEOUT_MS },
+      )
+      .then((r) => r.data),
   connect: (onlineUrl: string, pairingCode: string, deviceName?: string) =>
-    apiClient.post<PublicPeerInfo>('/sync/connect', { onlineUrl, pairingCode, deviceName }).then((r) => r.data),
-  disconnect: () => apiClient.post('/sync/disconnect').then((r) => r.data),
-  syncNow: () => apiClient.post('/sync/now').then((r) => r.data),
-  bootstrap: () => apiClient.post('/sync/bootstrap').then((r) => r.data),
+    apiClient
+      .post<PublicPeerInfo>(
+        '/sync/connect',
+        { onlineUrl, pairingCode, deviceName },
+        { timeout: SYNC_CONNECT_TIMEOUT_MS },
+      )
+      .then((r) => r.data),
+  disconnect: () => apiClient.post('/sync/disconnect', {}, { timeout: SYNC_CONNECT_TIMEOUT_MS }).then((r) => r.data),
+  syncNow: () =>
+    apiClient.post<SyncNowResult>('/sync/now', {}, { timeout: SYNC_NOW_TIMEOUT_MS }).then((r) => r.data),
+  bootstrap: () => apiClient.post('/sync/bootstrap', {}, { timeout: SYNC_BOOTSTRAP_TIMEOUT_MS }).then((r) => r.data),
   conflicts: () => apiClient.get<SyncConflictRow[]>('/sync/conflicts').then((r) => r.data),
   resolveConflict: (id: string, resolution: 'keep_local' | 'keep_remote') =>
     apiClient.post(`/sync/conflicts/${id}/resolve`, { resolution }).then((r) => r.data),

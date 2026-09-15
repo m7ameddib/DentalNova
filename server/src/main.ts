@@ -43,7 +43,14 @@ for (const stream of [process.stdout, process.stderr]) {
 
 async function bootstrap() {
 
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    cors: false,
+    // Default Express JSON limit is 100kb. Clinic sync push + base64 attachments exceed that
+    // and otherwise surface as opaque 500 "Unexpected server error".
+    bodyParser: false,
+  });
+  app.useBodyParser('json', { limit: '48mb' });
+  app.useBodyParser('urlencoded', { limit: '48mb', extended: true });
 
   const deployment = app.get(DeploymentService);
 

@@ -132,7 +132,9 @@ export class SyncController {
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   @Post('now')
   async syncNow() {
-    return this.engine.runOfflineCycle();
+    const result = await this.engine.runOfflineCycle();
+    if (result.error) throw new BadRequestException(result.error);
+    return result;
   }
 
   @UseGuards(JwtAuthGuard, PermissionsGuard)

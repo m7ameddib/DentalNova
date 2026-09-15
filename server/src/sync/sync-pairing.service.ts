@@ -35,6 +35,10 @@ import {
   StoredPeerConfig,
   toPublicPeerInfo,
 } from './pairing-public.util';
+import {
+  describeOnlineReachabilityError,
+  messageFromOnlineResponse,
+} from './online-reachability.util';
 
 export type { StoredPeerConfig, PublicPeerInfo } from './pairing-public.util';
 
@@ -112,20 +116,29 @@ export class SyncPairingService {
     }
     this.assertEmptyOffline();
     const base = this.requireOnlineUrl(input.onlineUrl);
-    const res = await fetch(`${base}/api/sync/pairing/preview`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-      body: JSON.stringify({ code: compactPairingCode(input.pairingCode) }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const body = (await res.json().catch(() => ({}))) as {
+    const res = await this.fetchOnline(
+      `${base}/api/sync/pairing/preview`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ code: compactPairingCode(input.pairingCode) }),
+      },
+      20_000,
+    );
+    const body = await this.readOnlineJson<{
       clinicId?: string;
       clinicName?: string;
       expiresAt?: string;
       message?: string;
-    };
+    }>(res);
     if (!res.ok || !body.clinicId || !body.clinicName) {
-      throw new BadRequestException(body.message || 'Could not find that pairing code. Check the Online address and code.');
+      throw new BadRequestException(
+        messageFromOnlineResponse(
+          res.status,
+          body,
+          'Could not find that pairing code. Check the Online address and code.',
+        ),
+      );
     }
     return {
       clinicId: body.clinicId,
@@ -192,27 +205,32 @@ export class SyncPairingService {
     const base = this.requireOnlineUrl(input.onlineUrl);
     const installationId = this.installation.get().installationId;
     const census = censusAttestationFromClinic(clinicOperationalCensus(this.db.connection));
-    const res = await fetch(`${base}/api/sync/pairing/complete`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        code: compactPairingCode(input.pairingCode),
-        deviceName: input.deviceName?.trim() || this.clinicSettings.get()?.clinicName || 'Offline clinic',
-        installationId,
-        emptyClinic: true,
-        census,
-      }),
-      signal: AbortSignal.timeout(20_000),
-    });
-    const body = (await res.json().catch(() => ({}))) as {
+    const res = await this.fetchOnline(
+      `${base}/api/sync/pairing/complete`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          code: compactPairingCode(input.pairingCode),
+          deviceName: input.deviceName?.trim() || this.clinicSettings.get()?.clinicName || 'Offline clinic',
+          installationId,
+          emptyClinic: true,
+          census,
+        }),
+      },
+      20_000,
+    );
+    const body = await this.readOnlineJson<{
       deviceId?: string;
       deviceSecret?: string;
       clinicId?: string;
       clinicName?: string;
       message?: string;
-    };
+    }>(res);
     if (!res.ok || !body.deviceId || !body.deviceSecret || !body.clinicId) {
-      throw new BadRequestException(body.message || 'Pairing failed. Check the code and Online URL.');
+      throw new BadRequestException(
+        messageFromOnlineResponse(res.status, body, 'Pairing failed. Check the code and Online URL.'),
+      );
     }
     const stored: StoredPeerConfig = {
       deviceId: body.deviceId,
@@ -316,6 +334,18 @@ export class SyncPairingService {
       }
       throw err;
     }
+  }
+
+  private async fetchOnline(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
+    try {
+      return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+    } catch (err) {
+      throw new BadRequestException(describeOnlineReachabilityError(err));
+    }
+  }
+
+  private async readOnlineJson<T>(res: Response): Promise<T & { message?: string }> {
+    return ((await res.json().catch(() => ({}))) as T & { message?: string }) ?? ({} as T & { message?: string });
   }
 
   private publicOnlineUrl(): string {

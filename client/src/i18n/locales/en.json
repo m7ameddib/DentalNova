@@ -1589,6 +1589,7 @@
       "keepLocalConfirm": "Keep the version on this computer and discard the Online version of this record.",
       "keepRemoteConfirm": "Keep the Online version and discard the version on this computer.",
       "statusError": "Could not load sync status.",
+      "opaqueServerError": "The clinic server had an unexpected error. Check the Online address, pairing code, and internet connection, then try again.",
       "states": {
         "SYNCED": "Synced",
         "SYNCING": "Syncing",
