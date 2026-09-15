@@ -58,7 +58,10 @@ export interface AppointmentReminderPhoneFields {
 }
 
 /** First non-empty phone string on the appointment, without WhatsApp normalization. */
-export function appointmentReminderRawPhone(appt: AppointmentReminderPhoneFields): string | null {
+export function appointmentReminderRawPhone(
+  appt: AppointmentReminderPhoneFields | null | undefined,
+): string | null {
+  if (!appt) return null;
   const candidates = [appt.patientPhone, appt.guestPhone, appt.phone, appt.patient_phone, appt.guest_phone];
   for (const value of candidates) {
     if (value == null) continue;
@@ -69,7 +72,9 @@ export function appointmentReminderRawPhone(appt: AppointmentReminderPhoneFields
 }
 
 /** Linked patient phone, or walk-in guest phone — whichever is actually present. */
-export function appointmentReminderPhone(appt: AppointmentReminderPhoneFields): string | null {
+export function appointmentReminderPhone(
+  appt: AppointmentReminderPhoneFields | null | undefined,
+): string | null {
   return normalizeWhatsAppPhone(appointmentReminderRawPhone(appt));
 }
 
