@@ -16,11 +16,14 @@ function change(i: number, padding = ''): SyncChangePayload {
 test('splitPushBatch respects item cap so 121 pending rows are sent in chunks', () => {
   const pending = Array.from({ length: 121 }, (_, i) => change(i));
   const first = splitPushBatch(pending, 40);
-  assert.equal(first.length, 40);
   const second = splitPushBatch(pending.slice(40), 40);
-  assert.equal(second.length, 40);
   const third = splitPushBatch(pending.slice(80), 40);
-  assert.equal(third.length, 41);
+  const fourth = splitPushBatch(pending.slice(120), 40);
+  assert.equal(first.length, 40);
+  assert.equal(second.length, 40);
+  assert.equal(third.length, 40);
+  assert.equal(fourth.length, 1);
+  assert.equal(first.length + second.length + third.length + fourth.length, 121);
 });
 
 test('splitPushBatch stays under the JSON byte budget', () => {
