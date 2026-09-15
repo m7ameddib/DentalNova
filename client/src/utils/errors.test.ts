@@ -43,6 +43,37 @@ test('axios timeout and network errors are user-facing', () => {
   );
 });
 
+test('fallback-offline code is not Something went wrong', () => {
+  assert.match(
+    getErrorMessage({ isAxiosError: true, code: 'ERR_FALLBACK_OFFLINE', message: 'offline' }, 'Something went wrong'),
+    /internet connection/i,
+  );
+});
+
+test('413 and 503 statuses get clearer copy when the body is opaque', () => {
+  assert.match(
+    getErrorMessage(
+      { isAxiosError: true, response: { status: 413, data: { message: 'Unexpected server error' } } },
+      'fallback',
+    ),
+    /too large/i,
+  );
+  assert.match(
+    getErrorMessage(
+      { isAxiosError: true, response: { status: 503, data: { message: 'Unexpected server error' } } },
+      'fallback',
+    ),
+    /temporarily unavailable/i,
+  );
+  assert.match(
+    getErrorMessage(
+      { isAxiosError: true, response: { status: 503, data: { message: 'AI Assistant cannot reach the AI service. Check the internet connection and try again.' } } },
+      'fallback',
+    ),
+    /AI Assistant cannot reach/,
+  );
+});
+
 test('getApiErrorCode reads Nest machine codes', () => {
   const err = {
     isAxiosError: true,

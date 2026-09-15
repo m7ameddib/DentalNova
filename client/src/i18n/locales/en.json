@@ -833,6 +833,7 @@
       "validation": {
         "fileRequired": "Choose a file to upload"
       },
+      "needsOnline": "File upload needs an internet connection. Clinic records still work offline.",
       "categories": {
         "XRAY": "X-ray",
         "PHOTO": "Photo",
@@ -1222,6 +1223,9 @@
     "subtitle": "Ask in your own words — search patients, draft records, or explain dental terms.",
     "emptyTitle": "How can I help?",
     "statusOn": "Ready",
+    "statusOffline": "Unavailable offline",
+    "unavailableOffline": "AI Assistant needs an internet connection. Clinic records still work offline.",
+    "requestFailed": "AI Assistant could not complete that request. Check the internet connection and try again.",
     "welcome": "Hello! I can help you search patients, prepare new records, treatments, payments, explain dental terms, and read doctor papers. What would you like to do?",
     "inputPlaceholder": "Type in Arabic, English, or both…",
     "thinking": "Thinking…",
@@ -1491,6 +1495,8 @@
       "validateFirst": "Validate backup",
       "valid": "Backup is valid",
       "invalid": "Invalid backup file",
+      "needsOnline": "Backup and restore need an internet connection.",
+      "downloadFailed": "Could not download the backup. Check the internet connection and try again.",
       "noBackups": "No backups yet",
       "selectFile": "Select backup file (.zip)",
       "size": "Size",

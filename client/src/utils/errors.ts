@@ -2,6 +2,14 @@ import { isAxiosError } from 'axios';
 
 export const OPAQUE_SERVER_ERROR = 'Unexpected server error';
 
+/** Keep in sync with `FALLBACK_OFFLINE_*` in `client/src/offline/core.ts`. */
+const FALLBACK_OFFLINE_CODE = 'ERR_FALLBACK_OFFLINE';
+const FALLBACK_OFFLINE_MESSAGE =
+  'This action needs an internet connection. Clinic records still work offline.';
+
+const SERVICE_UNAVAILABLE_MESSAGE =
+  'The clinic server is temporarily unavailable. Check the internet connection and try again.';
+
 function responseData(err: unknown): Record<string, unknown> | null {
   if (!isAxiosError(err) || !err.response?.data || typeof err.response.data !== 'object') return null;
   return err.response.data as Record<string, unknown>;
@@ -25,11 +33,24 @@ export function getApiErrorCode(err: unknown): string | undefined {
 
 function networkFailureMessage(err: unknown): string | null {
   if (!isAxiosError(err)) return null;
+  if (err.code === FALLBACK_OFFLINE_CODE) return FALLBACK_OFFLINE_MESSAGE;
   if (err.code === 'ECONNABORTED' || /timeout/i.test(err.message || '')) {
     return 'The request timed out. The Online clinic may be slow or unreachable.';
   }
   if (!err.response) {
     return 'Could not reach the clinic server. Check that DentalNova is running and the internet connection is working.';
+  }
+  return null;
+}
+
+function statusMessage(err: unknown): string | null {
+  if (!isAxiosError(err)) return null;
+  const status = err.response?.status;
+  if (status === 413) {
+    return 'This request is too large for the clinic server. Use a smaller file, or try again.';
+  }
+  if (status === 502 || status === 503 || status === 504) {
+    return SERVICE_UNAVAILABLE_MESSAGE;
   }
   return null;
 }
@@ -40,5 +61,7 @@ export function getErrorMessage(err: unknown, fallback: string): string {
   if (fromBody && fromBody !== OPAQUE_SERVER_ERROR) return fromBody;
   const network = networkFailureMessage(err);
   if (network) return network;
+  const fromStatus = statusMessage(err);
+  if (fromStatus) return fromStatus;
   return fallback;
 }

@@ -1,15 +1,20 @@
-import { AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
+import { AxiosError, AxiosInstance, AxiosResponse, InternalAxiosRequestConfig } from 'axios';
 import { useAuthStore } from '@/store/auth.store';
 import {
   buildOptimisticRecord,
   cachedAppointmentById,
   cachedPatientDetail,
   collectCachedTreatmentTypes,
+  FALLBACK_OFFLINE_CODE,
+  FALLBACK_OFFLINE_MESSAGE,
   isNetworkError,
+  isOnlineDependentApiPath,
   isQueueableWrite,
   isReadMethod,
   isWriteMethod,
   resolveFallbackTimeout,
+  shouldBlockWhenFallbackOffline,
+  shouldFailFastForFallback,
   parseAppointmentIdFromUrl,
   parsePatientIdFromUrl,
   parsePatientsQuery,
@@ -55,18 +60,30 @@ function persistSessionForFallback(): void {
 
 let installed = false;
 
+function fallbackOfflineAxiosError(config: InternalAxiosRequestConfig): AxiosError {
+  return new AxiosError(FALLBACK_OFFLINE_MESSAGE, FALLBACK_OFFLINE_CODE, config);
+}
+
 export function installOfflineFallback(api: AxiosInstance): void {
   if (installed) return;
   installed = true;
   api.interceptors.request.use((config) => {
     const state = useOfflineStatusStore.getState();
     if (state.enabled) {
+      const url = axiosRequestUrl(config);
+      const method = (config.method ?? 'get').toUpperCase();
+      if (state.connection === 'offline' && !config.skipOfflineFallback) {
+        if (shouldBlockWhenFallbackOffline(method, url, config.data)) {
+          throw fallbackOfflineAxiosError(config);
+        }
+      }
       config.headers = config.headers ?? {};
       const timeout = resolveFallbackTimeout({
         enabled: true,
         skipOfflineFallback: config.skipOfflineFallback,
         offlineOrPending: state.connection === 'offline' || state.pending > 0,
         isFormData: typeof FormData !== 'undefined' && config.data instanceof FormData,
+        failFast: shouldFailFastForFallback(method, url, config.data),
         configured: config.timeout,
       });
       if (timeout != null) config.timeout = timeout;
@@ -88,7 +105,7 @@ export function installOfflineFallback(api: AxiosInstance): void {
 
       const canCache =
         useOfflineStatusStore.getState().enabled || Boolean(useAuthStore.getState().token);
-      if (canCache && !response.config.skipOfflineFallback) {
+      if (canCache && !response.config.skipOfflineFallback && !isOnlineDependentApiPath(url)) {
         if (isReadMethod(method)) {
           await saveGetCache(method, url, response.status, response.data);
         } else if (isWriteMethod(method) && isQueueableWrite(method, url, response.config.data)) {
@@ -145,6 +162,9 @@ export function installOfflineFallback(api: AxiosInstance): void {
       const url = axiosRequestUrl(config);
 
       if (isReadMethod(method)) {
+        if (isOnlineDependentApiPath(url)) {
+          return Promise.reject(error);
+        }
         const cached = await readGetCache(method, url);
         if (cached) {
           return asAxiosResponse(cached.data, config, cached.status);

@@ -5,6 +5,7 @@ import { Download, HardDriveDownload, HardDriveUpload, ShieldCheck } from 'lucid
 import { backupApi } from '@/api/backup.api';
 import { getErrorMessage } from '@/utils/errors';
 import { useAuthStore } from '@/store/auth.store';
+import { useOfflineStatusStore } from '@/offline/status.store';
 
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -16,6 +17,7 @@ export function BackupSection() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const token = useAuthStore((s) => s.token);
+  const fallbackOffline = useOfflineStatusStore((s) => s.enabled && s.connection === 'offline');
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
@@ -25,6 +27,7 @@ export function BackupSection() {
   const { data: backups = [], refetch } = useQuery({
     queryKey: ['backups'],
     queryFn: () => backupApi.list(),
+    enabled: !fallbackOffline,
   });
 
   const createMutation = useMutation({
@@ -33,7 +36,7 @@ export function BackupSection() {
       refetch();
       setError(null);
     },
-    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+    onError: (err) => setError(getErrorMessage(err, t('settings.backup.needsOnline'))),
   });
 
   const validateMutation = useMutation({
@@ -42,9 +45,9 @@ export function BackupSection() {
       setValidationMessage(t('settings.backup.valid'));
       setError(null);
     },
-    onError: () => {
+    onError: (err) => {
       setValidationMessage(t('settings.backup.invalid'));
-      setError(t('settings.backup.invalid'));
+      setError(getErrorMessage(err, t('settings.backup.invalid')));
     },
   });
 
@@ -56,37 +59,46 @@ export function BackupSection() {
       setValidationMessage(null);
       queryClient.clear();
     },
-    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+    onError: (err) => setError(getErrorMessage(err, t('settings.backup.needsOnline'))),
   });
 
   async function handleDownload(filename: string) {
-    const url = backupApi.downloadUrl(filename);
-    const res = await fetch(url, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) {
-      setError(t('common.error'));
+    if (fallbackOffline) {
+      setError(t('settings.backup.needsOnline'));
       return;
     }
-    const blob = await res.blob();
-    const link = document.createElement('a');
-    link.href = URL.createObjectURL(blob);
-    link.download = filename;
-    link.click();
-    URL.revokeObjectURL(link.href);
+    try {
+      const url = backupApi.downloadUrl(filename);
+      const res = await fetch(url, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) {
+        setError(t('settings.backup.downloadFailed'));
+        return;
+      }
+      const blob = await res.blob();
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    } catch {
+      setError(t('settings.backup.downloadFailed'));
+    }
   }
 
   return (
     <section className="settings-section">
       <h2>{t('settings.backup.title')}</h2>
       <p className="muted">{t('settings.backup.description')}</p>
+      {fallbackOffline && <div className="form-error-banner">{t('settings.backup.needsOnline')}</div>}
 
       <div className="form-actions">
         <button
           type="button"
           className="btn btn--primary"
           onClick={() => createMutation.mutate()}
-          disabled={createMutation.isPending}
+          disabled={createMutation.isPending || fallbackOffline}
         >
           <HardDriveDownload size={14} />{' '}
           {createMutation.isPending ? t('settings.backup.creating') : t('settings.backup.create')}
@@ -110,7 +122,12 @@ export function BackupSection() {
                 <td>{new Date(b.createdAt).toLocaleString()}</td>
                 <td>{formatBytes(b.sizeBytes)}</td>
                 <td>
-                  <button type="button" className="btn btn--ghost btn--small" onClick={() => handleDownload(b.filename)}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--small"
+                    onClick={() => handleDownload(b.filename)}
+                    disabled={fallbackOffline}
+                  >
                     <Download size={14} /> {t('settings.backup.download')}
                   </button>
                 </td>
@@ -135,7 +152,12 @@ export function BackupSection() {
         }}
       />
       <div className="form-actions">
-        <button type="button" className="btn btn--ghost" onClick={() => fileInputRef.current?.click()}>
+        <button
+          type="button"
+          className="btn btn--ghost"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={fallbackOffline}
+        >
           {t('settings.backup.selectFile')}
         </button>
         {selectedFile && (
@@ -145,7 +167,7 @@ export function BackupSection() {
               type="button"
               className="btn btn--ghost btn--small"
               onClick={() => selectedFile && validateMutation.mutate(selectedFile)}
-              disabled={validateMutation.isPending}
+              disabled={validateMutation.isPending || fallbackOffline}
             >
               <ShieldCheck size={14} /> {t('settings.backup.validateFirst')}
             </button>
@@ -157,7 +179,7 @@ export function BackupSection() {
                 if (!window.confirm(t('settings.backup.restoreConfirm'))) return;
                 restoreMutation.mutate(selectedFile);
               }}
-              disabled={restoreMutation.isPending}
+              disabled={restoreMutation.isPending || fallbackOffline}
             >
               <HardDriveUpload size={14} /> {t('settings.backup.restore')}
             </button>

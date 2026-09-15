@@ -22,6 +22,9 @@ import {
   resolveFallbackTimeout,
   searchCachedPatients,
   seedPatientDetailCaches,
+  shouldBlockWhenFallbackOffline,
+  shouldFailFastForFallback,
+  isOnlineDependentApiPath,
 } from './core';
 
 test('cache keys and temp ids stay stable', () => {
@@ -38,6 +41,27 @@ test('only essential clinic writes are queued', () => {
   assert.equal(isQueueableWrite('POST', '/auth/login', { username: 'a' }), false);
   assert.equal(isQueueableWrite('POST', '/ai-assistant/chat', {}), false);
   assert.equal(isQueueableWrite('GET', '/patients', null), false);
+});
+
+test('AI / backup / updates are online-dependent and are blocked while fallback is Offline', () => {
+  assert.equal(isOnlineDependentApiPath('/ai-assistant/status'), true);
+  assert.equal(isOnlineDependentApiPath('/ai-assistant/chat'), true);
+  assert.equal(isOnlineDependentApiPath('/backup/create'), true);
+  assert.equal(isOnlineDependentApiPath('/patients'), false);
+  assert.equal(shouldBlockWhenFallbackOffline('POST', '/ai-assistant/chat', {}), true);
+  assert.equal(shouldBlockWhenFallbackOffline('GET', '/ai-assistant/status', null), true);
+  assert.equal(shouldBlockWhenFallbackOffline('POST', '/patients', { fullName: 'A' }), false);
+  assert.equal(shouldFailFastForFallback('GET', '/patients', null), true);
+  assert.equal(shouldFailFastForFallback('POST', '/ai-assistant/chat', {}), false);
+  assert.equal(shouldFailFastForFallback('POST', '/backup/create', {}), false);
+});
+
+test('file uploads are blocked while fallback is Offline', () => {
+  if (typeof FormData === 'undefined') return;
+  const form = new FormData();
+  form.append('file', 'x');
+  assert.equal(shouldBlockWhenFallbackOffline('POST', '/patients/4/attachments', form), true);
+  assert.equal(shouldFailFastForFallback('POST', '/patients/4/attachments', form), false);
 });
 
 test('fallback detection uses a short timeout except for live file uploads', () => {
@@ -63,6 +87,15 @@ test('fallback detection uses a short timeout except for live file uploads', () 
     4000,
   );
   assert.equal(resolveFallbackTimeout({ enabled: false, offlineOrPending: false, configured: 8000 }), 8000);
+  assert.equal(
+    resolveFallbackTimeout({
+      enabled: true,
+      offlineOrPending: false,
+      failFast: false,
+      configured: 90_000,
+    }),
+    90_000,
+  );
 });
 
 test('network errors are distinguished from HTTP errors', () => {
