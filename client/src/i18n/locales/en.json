@@ -107,7 +107,16 @@
       "title": "Simple pricing",
       "offlineLabel": "Offline",
       "onlineLabel": "Online",
-      "trialLabel": "Trial"
+      "comboLabel": "Online + Offline",
+      "offlineWas": "$700",
+      "offlineNow": "$600",
+      "offlineTerm": "Lifetime",
+      "onlineWas": "$600",
+      "onlineNow": "$480",
+      "onlineTerm": "1 Year",
+      "comboWas": "$1,100",
+      "comboNow": "$800",
+      "comboTerm": "Online: 1 Year + Offline: Lifetime"
     },
     "final": {
       "title": "Put the clinic on Dental Nova.",

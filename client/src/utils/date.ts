@@ -56,6 +56,21 @@ export function calculateAge(dateOfBirthIso: string): number {
   return age;
 }
 
+/**
+ * Formats a stored 24-hour `HH:mm` appointment time for reminder message text only
+ * (e.g. 16:00 → 4:00 PM). Does not change database storage or scheduling values.
+ */
+export function formatReminderClockTime(time: string): string {
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(time.trim());
+  if (!match) return time;
+  const hour24 = Number(match[1]);
+  const minute = match[2];
+  if (!Number.isInteger(hour24) || hour24 > 23 || Number(minute) > 59) return time;
+  const suffix = hour24 >= 12 ? 'PM' : 'AM';
+  const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+  return `${hour12}:${minute} ${suffix}`;
+}
+
 export function formatTimeDisplay(isoTimestamp: string, locale: string): string {
   try {
     return new Date(isoTimestamp.replace(' ', 'T') + 'Z').toLocaleTimeString(locale, {

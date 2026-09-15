@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { installationApi, checkServerHealth, InstallationStatus } from '@/api/installation.api';
 import { isClientMode } from '@/api/api-config';
 import { BrandLogo } from '@/components/common/BrandLogo';
+import { StartupSplash } from '@/components/common/StartupSplash';
 import { isGuestHomePath, isPublicEntryPath } from '@/routes/public-entry-routes';
 import { useAuthStore } from '@/store/auth.store';
 import { getCachedInstallation, getCachedSubscription } from '@/offline/storage';
@@ -41,8 +42,6 @@ export function InstallationGate({ children }: { children: ReactNode }) {
         queryClient.setQueryData(['installation-status'], cached);
         const sub = await getCachedSubscription();
         if (sub) queryClient.setQueryData(['subscription-status'], sub);
-        setCachedOnlineReady(true);
-        setFallbackChecked(true);
       }
     })();
     checkServerHealth().then((ok) => {
@@ -98,15 +97,7 @@ export function InstallationGate({ children }: { children: ReactNode }) {
   }, [serverUp]);
 
   if (serverUp === false && !fallbackChecked) {
-    if (isPublic) return <>{children}</>;
-    return (
-      <div className="startup-splash" role="status">
-        <BrandLogo variant="auth" />
-        <h1 className="startup-splash__title">DentalNova</h1>
-        <p className="startup-splash__text">{t('installation.opening')}</p>
-        <div className="startup-splash__spinner" aria-hidden />
-      </div>
-    );
+    return <StartupSplash />;
   }
 
   if (serverUp === false && !cachedOnlineReady) {
@@ -136,27 +127,11 @@ export function InstallationGate({ children }: { children: ReactNode }) {
   }
 
   if (serverUp === null) {
-    if (isPublic || cachedOnlineReady) return <>{children}</>;
-    return (
-      <div className="startup-splash" role="status">
-        <BrandLogo variant="auth" />
-        <h1 className="startup-splash__title">DentalNova</h1>
-        <p className="startup-splash__text">{t('installation.opening')}</p>
-        <div className="startup-splash__spinner" aria-hidden />
-      </div>
-    );
+    return <StartupSplash />;
   }
 
   if ((isLoading || !isFetched) && !status) {
-    if (isPublic) return <>{children}</>;
-    return (
-      <div className="startup-splash" role="status">
-        <BrandLogo variant="auth" />
-        <h1 className="startup-splash__title">DentalNova</h1>
-        <p className="startup-splash__text">{t('installation.opening')}</p>
-        <div className="startup-splash__spinner" aria-hidden />
-      </div>
-    );
+    return <StartupSplash />;
   }
 
   if ((isError || !status) && !isPublic) {

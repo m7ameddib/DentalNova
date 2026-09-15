@@ -2,6 +2,7 @@ import { NavLink, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { CalendarDays, ClipboardList, BarChart3, Users, Sparkles, Settings } from 'lucide-react';
 import { usePermission } from '@/hooks/usePermission';
+import { useShowAiAssistant } from '@/hooks/useDeploymentMode';
 import { PERMISSIONS } from '@/constants/permissions';
 
 export function BottomNav() {
@@ -14,7 +15,7 @@ export function BottomNav() {
   const canViewAppointments = usePermission(PERMISSIONS.APPOINTMENTS_VIEW);
   const canViewFollowUps = usePermission(PERMISSIONS.FOLLOWUPS_MANAGE);
   const canViewReports = usePermission(PERMISSIONS.REPORTS_VIEW);
-  const canUseAiAssistant = usePermission(PERMISSIONS.AI_ASSISTANT_USE);
+  const canUseAiAssistant = useShowAiAssistant(usePermission(PERMISSIONS.AI_ASSISTANT_USE));
   const canViewSettings = usePermission(PERMISSIONS.SETTINGS_VIEW);
 
   return (

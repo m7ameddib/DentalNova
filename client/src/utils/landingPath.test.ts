@@ -12,6 +12,12 @@ test('falls back to the first permitted module', () => {
   assert.equal(defaultLandingPath(['settings.view']), '/settings');
 });
 
+test('hides AI assistant as a landing path unless deployment is Online', () => {
+  assert.equal(defaultLandingPath(['ai.assistant.use']), '/');
+  assert.equal(defaultLandingPath(['ai.assistant.use'], 'offline'), '/');
+  assert.equal(defaultLandingPath(['ai.assistant.use'], 'online'), '/ai-assistant');
+});
+
 test('returns home when no matching permission exists', () => {
   assert.equal(defaultLandingPath([]), '/');
   assert.equal(defaultLandingPath(undefined), '/');

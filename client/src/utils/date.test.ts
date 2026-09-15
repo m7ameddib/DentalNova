@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDaysIso, calculateAge, formatDateTimeDisplay, localAddDaysIso, localMonthStartIso } from './date';
+import { addDaysIso, calculateAge, formatDateTimeDisplay, formatReminderClockTime, localAddDaysIso, localMonthStartIso } from './date';
 
 test('addDaysIso stays on the local calendar and matches localAddDaysIso', () => {
   assert.equal(addDaysIso('2026-03-08', 1), '2026-03-09');
@@ -18,6 +18,15 @@ test('formatDateTimeDisplay skips invalid timestamps instead of Invalid Date', (
   assert.equal(formatDateTimeDisplay('', 'en'), '');
   assert.equal(formatDateTimeDisplay('not-a-date', 'en'), '');
   assert.match(formatDateTimeDisplay('2026-09-13T12:30:00.000Z', 'en'), /2026/);
+});
+
+test('formatReminderClockTime is 12-hour AM/PM for reminder strings', () => {
+  assert.equal(formatReminderClockTime('16:00'), '4:00 PM');
+  assert.equal(formatReminderClockTime('08:15'), '8:15 AM');
+  assert.equal(formatReminderClockTime('00:00'), '12:00 AM');
+  assert.equal(formatReminderClockTime('12:00'), '12:00 PM');
+  assert.equal(formatReminderClockTime('23:59'), '11:59 PM');
+  assert.equal(formatReminderClockTime('4:00 PM'), '4:00 PM');
 });
 
 test('calculateAge uses the local calendar date of birth', () => {
