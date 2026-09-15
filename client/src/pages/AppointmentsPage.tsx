@@ -33,11 +33,11 @@ import { PERMISSIONS } from '@/constants/permissions';
 import { usePrintStore } from '@/store/print.store';
 import { useUiStore } from '@/store/ui.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
-import { currentTimeRounded, formatDateDisplay, formatTimeDisplay, localAddDaysIso, todayIso } from '@/utils/date';
+import { currentTimeRounded, formatDateDisplay, formatReminderClockTime, formatTimeDisplay, localAddDaysIso, todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { buildWeekDays, expandSlotTimes, startOfWeekIso, timeToMinutes, trimTimesFromWorkingDayStart, weekRangeLabel } from '@/utils/calendar';
 import { getErrorMessage } from '@/utils/errors';
-import { openWhatsApp, openWhatsAppPreferred } from '@/utils/whatsapp';
+import { appointmentReminderPhone, openWhatsApp, openWhatsAppPreferred } from '@/utils/whatsapp';
 import { buildAppointmentReminderMessage, resolveWhatsAppMessageLanguage } from '@/utils/whatsappTemplates';
 import { AppointmentStatus, AppointmentWithPatient, DaySchedule, Patient } from '@/types/domain';
 /** Fallback slot times shown while the first day's schedule is still loading. */
@@ -340,17 +340,34 @@ export function AppointmentsPage() {
       (outsideHoursPrompt.kind === 'update' && editMode));
 
   function handleSendReminder() {
-    if (!managingAppt || !clinicSettings) return;
-    const phone = managingAppt.patientId ? managingAppt.patientPhone : managingAppt.guestPhone;
-    const msgLocale = resolveWhatsAppMessageLanguage(clinicSettings) === 'ar' ? 'ar' : 'en';
-    const message = buildAppointmentReminderMessage(clinicSettings, {
-      clinicName: clinicSettings.clinicName?.trim() || t('app.name'),
-      patientName: managingAppt.patientName ?? '',
-      appointmentDate: formatDateDisplay(managingAppt.date, msgLocale),
-      appointmentTime: managingAppt.time,
-      appointmentReason: managingAppt.reason,
-    });
-    if (!openWhatsAppPreferred(phone, message)) return;
+    if (!managingAppt) return;
+    const phone = managingAppt.patientPhone || managingAppt.guestPhone;
+    const msgLocale =
+      clinicSettings && resolveWhatsAppMessageLanguage(clinicSettings) === 'ar'
+        ? 'ar'
+        : language === 'ar'
+          ? 'ar'
+          : 'en';
+    let message = '';
+    try {
+      message = clinicSettings
+        ? buildAppointmentReminderMessage(clinicSettings, {
+            clinicName: clinicSettings.clinicName?.trim() || t('app.name'),
+            patientName: managingAppt.patientName ?? '',
+            appointmentDate: formatDateDisplay(managingAppt.date, msgLocale),
+            appointmentTime: managingAppt.time,
+            appointmentReason: managingAppt.reason,
+          })
+        : [t('app.name'), managingAppt.patientName ?? '', formatDateDisplay(managingAppt.date, msgLocale), formatReminderClockTime(managingAppt.time)]
+            .filter(Boolean)
+            .join(' — ');
+    } catch {
+      message = formatReminderClockTime(managingAppt.time);
+    }
+    if (!openWhatsAppPreferred(phone, message)) {
+      setError(t('whatsapp.noPhone'));
+      return;
+    }
     reminderMutation.mutate(managingAppt.id);
   }
 
@@ -1304,10 +1321,7 @@ export function AppointmentsPage() {
                     type="button"
                     className="btn btn--ghost btn--small btn--whatsapp"
                     onClick={handleSendReminder}
-                    disabled={
-                      reminderMutation.isPending ||
-                      !(managingAppt.patientId ? managingAppt.patientPhone : managingAppt.guestPhone)
-                    }
+                    disabled={reminderMutation.isPending || !appointmentReminderPhone(managingAppt)}
                   >
                     <MessageCircle size={13} /> {t('whatsapp.sendReminder')}
                   </button>
