@@ -206,6 +206,7 @@ async function main() {
     assert(previewAgain.data.clinicId === clinicA.data.user.clinicId, 'preview must not consume the pairing code');
     const badPreview = await request('POST', '/sync/pairing/preview', { body: { code: 'NOPECODE' } });
     assert(badPreview.status === 401 || badPreview.status === 400, `unknown pairing code must fail (got ${badPreview.status})`);
+    assert(String(badPreview.data?.message || '').toLowerCase() !== 'unexpected server error', 'unknown pairing code must not 500');
     const connectOnOnline = await request('POST', '/sync/connect', {
       token: tokenA,
       body: { onlineUrl: 'https://dentalnova.dibnova.com', pairingCode: pairing.data.code },
@@ -256,6 +257,32 @@ async function main() {
       (c) => c.entity === 'patients' && c.row && String(c.row.fullName || '').includes('Sync Patient A'),
     );
     assert(hasPatient, 'snapshot must include clinic A patient');
+
+    const bulky = [];
+    for (let i = 0; i < 80; i += 1) {
+      bulky.push({
+        changeId: `bulk-${i}`,
+        entity: 'patients',
+        recordUid: `00000000-0000-4000-8000-${String(i).padStart(12, '0')}`,
+        op: 'upsert',
+        row: {
+          fullName: `Bulk ${i} ${'n'.repeat(1200)}`,
+          phone: `0793${String(i).padStart(6, '0')}`,
+          gender: 'MALE',
+          fileNumber: `P-B${i}`,
+        },
+      });
+    }
+    const bulkyPush = await request('POST', '/sync/push', {
+      token: deviceToken,
+      body: { changes: bulky },
+    });
+    assert(
+      bulkyPush.status === 200 || bulkyPush.status === 201,
+      `121-scale bulky push must not 500 (got ${bulkyPush.status}): ${JSON.stringify(bulkyPush.data)}`,
+    );
+    assert(bulkyPush.data.accepted || bulkyPush.data.skipped || bulkyPush.data.conflicts, 'bulky push must return apply result');
+    assert(String(bulkyPush.data.message || '') !== 'Unexpected server error', 'bulky push must not be opaque 500');
 
     const pushBait = await request('POST', '/sync/push', {
       token: deviceToken,

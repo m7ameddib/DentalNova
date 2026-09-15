@@ -51,7 +51,7 @@ export function ClinicSyncSection({ mode }: { mode: 'online' | 'offline' }) {
       setError(t('settings.clinicSync.populatedBlocked'));
       return;
     }
-    setError(getErrorMessage(err, t('common.error')));
+    setError(getErrorMessage(err, t('settings.clinicSync.opaqueServerError')));
   }
 
   async function refreshSync() {
@@ -92,7 +92,7 @@ export function ClinicSyncSection({ mode }: { mode: 'online' | 'offline' }) {
       {status && (mode === 'offline' || status.paired) && (
         <SyncStatusCard status={status} locale={locale} />
       )}
-      {status?.lastError ? <div className="form-error-banner">{status.lastError}</div> : null}
+      {status?.lastError && !error ? <div className="form-error-banner">{status.lastError}</div> : null}
 
       {mode === 'online' && (
         <OnlinePairingPanel
@@ -429,7 +429,12 @@ function OfflinePairingPanel({
 
   const syncNowMutation = useMutation({
     mutationFn: syncApi.syncNow,
-    onSuccess: () => {
+    onSuccess: (data) => {
+      if (data?.error) {
+        onError({ isAxiosError: true, response: { data: { message: data.error } } });
+        onChanged();
+        return;
+      }
       onSuccess(t('settings.clinicSync.syncComplete'));
       onChanged();
     },

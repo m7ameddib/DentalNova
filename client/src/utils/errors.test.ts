@@ -21,6 +21,28 @@ test('getErrorMessage reads string and array Nest messages', () => {
   assert.equal(getErrorMessage(new Error('nope'), 'fallback'), 'fallback');
 });
 
+test('opaque Unexpected server error uses the fallback instead of the 500 string', () => {
+  const err = {
+    isAxiosError: true,
+    response: { data: { message: 'Unexpected server error' } },
+  };
+  assert.equal(
+    getErrorMessage(err, 'Check the Online address and pairing code.'),
+    'Check the Online address and pairing code.',
+  );
+});
+
+test('axios timeout and network errors are user-facing', () => {
+  assert.match(
+    getErrorMessage({ isAxiosError: true, code: 'ECONNABORTED', message: 'timeout of 8000ms exceeded' }, 'fallback'),
+    /timed out/i,
+  );
+  assert.match(
+    getErrorMessage({ isAxiosError: true, message: 'Network Error' }, 'fallback'),
+    /Could not reach the clinic server/,
+  );
+});
+
 test('getApiErrorCode reads Nest machine codes', () => {
   const err = {
     isAxiosError: true,
