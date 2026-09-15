@@ -2,9 +2,9 @@ import {
   WHATSAPP_TEMPLATE_DEFAULTS,
   WhatsAppMessageLanguage,
   WhatsAppTemplateKey,
-} from '@/constants/whatsappTemplates';
-import { ClinicSettings } from '@/types/domain';
-import { formatReminderClockTime } from '@/utils/date';
+} from '../constants/whatsappTemplates';
+import { ClinicSettings } from '../types/domain';
+import { formatReminderClockTime } from './date';
 
 /** Replaces `{variable}` placeholders safely; unknown keys become empty strings. */
 export function renderWhatsAppTemplate(
@@ -55,7 +55,7 @@ export function buildAppointmentReminderMessage(
     clinicName: string;
     patientName: string;
     appointmentDate: string;
-    appointmentTime: string;
+    appointmentTime: string | null | undefined;
     appointmentReason?: string | null;
   },
 ): string {

@@ -27,6 +27,16 @@ test('formatReminderClockTime is 12-hour AM/PM for reminder strings', () => {
   assert.equal(formatReminderClockTime('12:00'), '12:00 PM');
   assert.equal(formatReminderClockTime('23:59'), '11:59 PM');
   assert.equal(formatReminderClockTime('4:00 PM'), '4:00 PM');
+  assert.equal(formatReminderClockTime('16:00:00'), '4:00 PM');
+  assert.equal(formatReminderClockTime('16:00:00.000'), '4:00 PM');
+});
+
+test('formatReminderClockTime never throws on missing or odd clock values', () => {
+  assert.equal(formatReminderClockTime(undefined), '');
+  assert.equal(formatReminderClockTime(null), '');
+  assert.equal(formatReminderClockTime(''), '');
+  assert.equal(formatReminderClockTime('  '), '');
+  assert.equal(formatReminderClockTime(16 as unknown as string), '16');
 });
 
 test('calculateAge uses the local calendar date of birth', () => {

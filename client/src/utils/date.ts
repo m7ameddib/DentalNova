@@ -59,13 +59,19 @@ export function calculateAge(dateOfBirthIso: string): number {
 /**
  * Formats a stored 24-hour `HH:mm` appointment time for reminder message text only
  * (e.g. 16:00 → 4:00 PM). Does not change database storage or scheduling values.
+ *
+ * Must never throw: it runs inside the WhatsApp reminder click handler before
+ * `window.open` / `wa.me`, so a TypeError on `.trim()` would swallow the open.
  */
-export function formatReminderClockTime(time: string): string {
-  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(time.trim());
-  if (!match) return time;
+export function formatReminderClockTime(time: string | null | undefined): string {
+  if (time == null) return '';
+  const raw = String(time).trim();
+  if (!raw) return '';
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2}(?:\.\d+)?)?$/.exec(raw);
+  if (!match) return raw;
   const hour24 = Number(match[1]);
   const minute = match[2];
-  if (!Number.isInteger(hour24) || hour24 > 23 || Number(minute) > 59) return time;
+  if (!Number.isInteger(hour24) || hour24 < 0 || hour24 > 23 || Number(minute) > 59) return raw;
   const suffix = hour24 >= 12 ? 'PM' : 'AM';
   const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
   return `${hour12}:${minute} ${suffix}`;
