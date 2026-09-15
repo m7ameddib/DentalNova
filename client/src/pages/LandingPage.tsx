@@ -230,7 +230,11 @@ export function LandingPage() {
           <article>
             <h3>{t('landing.editions.offlineTitle')}</h3>
             <p>{t('landing.editions.offlineText')}</p>
-            <strong>{t('landing.price.offline')}</strong>
+            <p className="dn-price-row">
+              <s>{t('landing.pricing.offlineWas')}</s>
+              <strong>{t('landing.pricing.offlineNow')}</strong>
+              <span>{t('landing.pricing.offlineTerm')}</span>
+            </p>
           </article>
           <article>
             <h3>{t('landing.editions.onlineTitle')}</h3>

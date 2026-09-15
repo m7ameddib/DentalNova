@@ -29,6 +29,8 @@ export interface PasswordResetJwtPayload {
   username: string;
   purpose: 'password_reset';
   clinicId?: string;
+  /** SHA-256 prefix of the password hash at issue time — invalid after a successful reset. */
+  passwordTag?: string;
 }
 
 export interface AuthenticatedUser {

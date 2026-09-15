@@ -1,5 +1,5 @@
-import { AppointmentStatus, AppointmentWithPatient } from '@/types/domain';
-import { timeToMinutes } from '@/utils/calendar';
+import { AppointmentStatus } from '../../types/domain';
+import { timeToMinutes } from '../../utils/calendar';
 
 export type CalendarViewMode = 'week' | 'month';
 
@@ -53,7 +53,13 @@ export function snapMinute(minute: number, step = 5): number {
 
 /** True when [startMinute, startMinute + duration) intersects another active appointment. */
 export function appointmentOverlaps(
-  appointments: AppointmentWithPatient[],
+  appointments: Array<{
+    id: number;
+    time: string;
+    durationMin?: number;
+    status: string;
+    appointmentType: string;
+  }>,
   startMinute: number,
   durationMin: number,
   excludeId?: number,
@@ -63,7 +69,7 @@ export function appointmentOverlaps(
   return appointments.some((a) => {
     if (excludeId != null && a.id === excludeId) return false;
     if (isEmergencyAppointment(a)) return false;
-    if (a.status === 'CANCELLED') return false;
+    if (a.status === 'CANCELLED' || a.status === 'COMPLETED') return false;
     const start = timeToMinutes(a.time);
     const end = start + (a.durationMin || DEFAULT_DURATION);
     return newStart < end && start < newEnd;

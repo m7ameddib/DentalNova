@@ -44,13 +44,9 @@ export class AppointmentsService {
     const appointments = this.appointmentsRepo.findByDate(date);
     const resolved = this.workingSchedule.resolveForDate(date);
     const slotDefs = this.workingSchedule.buildSlotsForDate(date);
-    const bookedTimes = new Set(
-      appointments
-        .filter(
-          (a: { status: string; appointmentType?: string }) =>
-            a.status !== 'CANCELLED' && a.status !== 'COMPLETED' && a.appointmentType !== 'EMERGENCY',
-        )
-        .map((a: { time: string }) => a.time),
+    const activeAppointments = appointments.filter(
+      (a: { status: string; appointmentType?: string }) =>
+        a.status !== 'CANCELLED' && a.status !== 'COMPLETED' && a.appointmentType !== 'EMERGENCY',
     );
     const enrichedAppointments = appointments.map((a: any) => ({
       ...a,
@@ -66,11 +62,20 @@ export class AppointmentsService {
       isClosed: resolved.isClosed,
       isException: resolved.isException,
       exceptionNote: resolved.exceptionNote,
-      slots: slotDefs.map((s) => ({
-        time: s.time,
-        booked: bookedTimes.has(s.time),
-        withinWorkingHours: s.withinWorkingHours,
-      })),
+      slots: slotDefs.map((s) => {
+        const slotStart = this.toMinutes(s.time);
+        const slotEnd = slotStart + SLOT_STEP_MIN;
+        const booked = activeAppointments.some((a: { time: string; durationMin?: number }) => {
+          const start = this.toMinutes(a.time);
+          const end = start + (a.durationMin ?? 30);
+          return slotStart < end && start < slotEnd;
+        });
+        return {
+          time: s.time,
+          booked,
+          withinWorkingHours: s.withinWorkingHours,
+        };
+      }),
       appointments: enrichedAppointments,
     };
   }

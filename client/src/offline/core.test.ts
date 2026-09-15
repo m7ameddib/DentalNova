@@ -419,6 +419,40 @@ test('offline void payment reverses the cached paid amount', () => {
   assert.equal(accountSummary(afterVoid).remainingCents, 20000);
 });
 
+test('offline account discount updates remaining without waiting for reconnect', () => {
+  const result = buildOptimisticRecord(
+    'POST',
+    '/account-discounts',
+    { patientId: 4, amount: 20, date: '2026-09-15' },
+    -30,
+  );
+  const next = applyMutationToCaches(
+    {
+      'GET /patients/4/account-summary': {
+        key: 'GET /patients/4/account-summary',
+        status: 200,
+        data: {
+          subtotalCents: 10000,
+          accountDiscountCents: 0,
+          totalCostCents: 10000,
+          totalPaidCents: 0,
+          remainingCents: 10000,
+        },
+        cachedAt: '',
+      },
+    },
+    { method: 'POST', url: '/account-discounts', body: { patientId: 4, amount: 20 }, result, tempId: -30 },
+  );
+  const summary = next['GET /patients/4/account-summary'].data as {
+    accountDiscountCents: number;
+    totalCostCents: number;
+    remainingCents: number;
+  };
+  assert.equal(summary.accountDiscountCents, 2000);
+  assert.equal(summary.totalCostCents, 8000);
+  assert.equal(summary.remainingCents, 8000);
+});
+
 test('pending count ignores finished conflicts', () => {
   assert.equal(
     pendingCount([

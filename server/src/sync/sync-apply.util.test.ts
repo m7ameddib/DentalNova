@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import { ensureSyncInfrastructure } from './sync-schema';
-import { applyChanges, pendingOutbound, snapshotRow, clinicSnapshot } from './sync-apply.util';
+import { applyChanges, pendingOutbound, snapshotRow, clinicSnapshot, markAcked, pendingCount, resolveConflict, canAdvancePullCheckpoint } from './sync-apply.util';
 import { paymentFingerprint, rowsDiffer } from './sync.entities';
 
 function memoryClinic(): Database.Database {
@@ -559,6 +559,57 @@ test('lab payment expense circular FKs sync as UIDs, not local integers', () => 
   assert.equal(remoteExp.source_lab_payment_id, remotePay.id);
   db.close();
   other.close();
+});
+
+test('acking the latest local change also acks superseded rows for the same record', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('A', '1')`).run();
+  db.prepare(`UPDATE patients SET full_name = 'B' WHERE id = 1`).run();
+  const pending = pendingOutbound(db);
+  assert.equal(pending.length, 1);
+  assert.ok(pendingCount(db) >= 1);
+  markAcked(db, [pending[0].changeId]);
+  assert.equal(pendingOutbound(db).length, 0);
+  assert.equal(pendingCount(db), 0);
+  db.close();
+});
+
+test('keep_local enqueues an outbound upsert so Online receives the chosen row', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('Local', '1')`).run();
+  const uid = db.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'patients' AND local_id = 1`).get() as {
+    uid: string;
+  };
+  db.prepare(
+    `INSERT INTO sync_conflicts (conflict_id, entity, record_uid, local_json, remote_json, reason)
+     VALUES ('c1', 'patients', ?, '{"fullName":"Local"}', '{"fullName":"Remote"}', 'concurrent-edit')`,
+  ).run(uid.uid);
+  db.prepare(`UPDATE sync_change_log SET acked_at = datetime('now') WHERE entity = 'patients'`).run();
+  resolveConflict(db, 'c1', 'keep_local');
+  const pending = pendingOutbound(db).filter((c) => c.entity === 'patients' && c.recordUid === uid.uid);
+  assert.equal(pending.length, 1);
+  assert.equal(pending[0].row?.fullName, 'Local');
+  db.close();
+});
+
+test('apply-error conflicts block pull checkpoint advance', () => {
+  assert.equal(canAdvancePullCheckpoint({ accepted: ['a'], skipped: [], conflicts: [] }), true);
+  assert.equal(
+    canAdvancePullCheckpoint({
+      accepted: ['a'],
+      skipped: [],
+      conflicts: [{ changeId: 'b', entity: 'patients', recordUid: 'u', reason: 'concurrent-edit' }],
+    }),
+    true,
+  );
+  assert.equal(
+    canAdvancePullCheckpoint({
+      accepted: [],
+      skipped: [],
+      conflicts: [{ changeId: 'c', entity: 'patients', recordUid: 'u', reason: 'apply-error' }],
+    }),
+    false,
+  );
 });
 
 

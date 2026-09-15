@@ -5,6 +5,7 @@ import { PlatformService } from '../platform/platform.service';
 import { SyncPairingService } from './sync-pairing.service';
 import {
   applyChanges,
+  canAdvancePullCheckpoint,
   changesSince,
   clinicSnapshot,
   currentCheckpoint,
@@ -163,7 +164,6 @@ export class SyncEngineService {
         const done = [
           ...data.accepted,
           ...(data.skipped ?? []),
-          ...(data.conflicts ?? []).map((c) => c.changeId).filter(Boolean),
         ];
         markAcked(this.db.connection, done);
         pushed = data.accepted.length;
@@ -179,6 +179,9 @@ export class SyncEngineService {
         if (batch.length === 0) break;
         const applied = applyChanges(this.db.connection, batch, 'online-server');
         pulled += applied.accepted.length;
+        if (!canAdvancePullCheckpoint(applied)) {
+          break;
+        }
         since = data.until ?? since;
         setCheckpoint(this.db.connection, since);
         if (!data.hasMore) break;
@@ -314,36 +317,43 @@ export class SyncEngineService {
     token: string,
     row: { storedPath: string; mimeType: string | null },
   ): Promise<void> {
-    const already = this.tableExists('sync_file_objects')
-      ? (this.db.connection
-          .prepare(`SELECT uploaded_at AS uploadedAt FROM sync_file_objects WHERE record_uid = ?`)
-          .get(row.storedPath) as { uploadedAt?: string } | undefined)
-      : undefined;
-    const local = await this.objectStorage.getObject(row.storedPath);
-    if (local && local.length > 0) {
-      if (already?.uploadedAt) return;
-      const encoded = local.toString('base64');
-      const res = await this.onlineFetch(peer, token, '/api/sync/files', {
-        method: 'POST',
-        body: JSON.stringify({
-          relativePath: row.storedPath,
-          contentBase64: encoded,
-          mimeType: row.mimeType,
-        }),
-      });
-      if (res.ok) this.markFileUploaded(row.storedPath, local.length, row.mimeType);
-      return;
-    }
-    const res = await this.onlineFetch(
-      peer,
-      token,
-      `/api/sync/files?path=${encodeURIComponent(row.storedPath)}`,
-      { method: 'GET' },
-    );
-    const data = (await res.json().catch(() => ({}))) as { found?: boolean; contentBase64?: string };
-    if (res.ok && data.found && data.contentBase64) {
-      await this.objectStorage.putObject(row.storedPath, Buffer.from(data.contentBase64, 'base64'), row.mimeType);
-      this.markFileUploaded(row.storedPath, Buffer.from(data.contentBase64, 'base64').length, row.mimeType);
+    try {
+      const already = this.tableExists('sync_file_objects')
+        ? (this.db.connection
+            .prepare(`SELECT uploaded_at AS uploadedAt FROM sync_file_objects WHERE record_uid = ?`)
+            .get(row.storedPath) as { uploadedAt?: string } | undefined)
+        : undefined;
+      const local = await this.objectStorage.getObject(row.storedPath);
+      if (local && local.length > 0) {
+        if (already?.uploadedAt) return;
+        const encoded = local.toString('base64');
+        const res = await this.onlineFetch(peer, token, '/api/sync/files', {
+          method: 'POST',
+          body: JSON.stringify({
+            relativePath: row.storedPath,
+            contentBase64: encoded,
+            mimeType: row.mimeType,
+          }),
+        });
+        if (res.ok) this.markFileUploaded(row.storedPath, local.length, row.mimeType);
+        else this.markFileError(row.storedPath, `upload-${res.status}`);
+        return;
+      }
+      const res = await this.onlineFetch(
+        peer,
+        token,
+        `/api/sync/files?path=${encodeURIComponent(row.storedPath)}`,
+        { method: 'GET' },
+      );
+      const data = (await res.json().catch(() => ({}))) as { found?: boolean; contentBase64?: string };
+      if (res.ok && data.found && data.contentBase64) {
+        await this.objectStorage.putObject(row.storedPath, Buffer.from(data.contentBase64, 'base64'), row.mimeType);
+        this.markFileUploaded(row.storedPath, Buffer.from(data.contentBase64, 'base64').length, row.mimeType);
+        return;
+      }
+      if (!res.ok) this.markFileError(row.storedPath, `download-${res.status}`);
+    } catch (err) {
+      this.markFileError(row.storedPath, (err as Error).message || 'sync-failed');
     }
   }
 
@@ -351,15 +361,27 @@ export class SyncEngineService {
     if (!this.tableExists('sync_file_objects')) return;
     this.db.connection
       .prepare(
-        `INSERT INTO sync_file_objects (record_uid, relative_path, mime_type, byte_size, uploaded_at)
-         VALUES (?, ?, ?, ?, datetime('now'))
+        `INSERT INTO sync_file_objects (record_uid, relative_path, mime_type, byte_size, uploaded_at, last_error)
+         VALUES (?, ?, ?, ?, datetime('now'), NULL)
          ON CONFLICT(record_uid) DO UPDATE SET
            relative_path = excluded.relative_path,
            mime_type = excluded.mime_type,
            byte_size = excluded.byte_size,
-           uploaded_at = excluded.uploaded_at`,
+           uploaded_at = excluded.uploaded_at,
+           last_error = NULL`,
       )
       .run(relativePath, relativePath, mimeType, byteSize);
+  }
+
+  private markFileError(relativePath: string, error: string): void {
+    if (!this.tableExists('sync_file_objects')) return;
+    this.db.connection
+      .prepare(
+        `INSERT INTO sync_file_objects (record_uid, relative_path, last_error)
+         VALUES (?, ?, ?)
+         ON CONFLICT(record_uid) DO UPDATE SET last_error = excluded.last_error`,
+      )
+      .run(relativePath, relativePath, error.slice(0, 300));
   }
 
   private tableExists(name: string): boolean {

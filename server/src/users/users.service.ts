@@ -6,6 +6,7 @@ import { CreateUserDto } from './dto/create-user.dto';
 import { UpdateUserDto } from './dto/update-user.dto';
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { wouldRemoveLastDoctor } from './last-doctor.util';
 
 @Injectable()
 export class UsersService {
@@ -77,6 +78,23 @@ export class UsersService {
       const role = this.rolesRepo.findByName(dto.roleName);
       if (!role) throw new BadRequestException(`Unknown role "${dto.roleName}"`);
       roleId = role.id;
+    }
+    const currentRole = this.rolesRepo.findById(existing.roleId);
+    const nextRole = roleId != null ? this.rolesRepo.findById(roleId) : currentRole;
+    const doctorRole = this.rolesRepo.findByName('doctor');
+    const otherActiveDoctorCount = doctorRole
+      ? this.usersRepo.findAll().filter((u) => u.id !== id && u.isActive && u.roleId === doctorRole.id).length
+      : 0;
+    if (
+      wouldRemoveLastDoctor({
+        existingRoleName: currentRole?.name,
+        existingIsActive: existing.isActive,
+        nextRoleName: nextRole?.name,
+        nextIsActive: dto.isActive ?? existing.isActive,
+        otherActiveDoctorCount,
+      })
+    ) {
+      throw new BadRequestException('Cannot deactivate or demote the last active doctor for this clinic.');
     }
     const passwordHash = dto.password ? await bcrypt.hash(dto.password, 10) : undefined;
 
