@@ -20,13 +20,32 @@ export const ONLINE_UNAUTHORIZED_MESSAGE =
 
 export const GENERIC_UNEXPECTED_MESSAGE = 'Unexpected server error';
 
-export function describeOnlineReachabilityError(err: unknown): string {
+export type ReachabilityKind = 'timeout' | 'tls' | 'network';
+
+const FETCH_NETWORK_CODES = [
+  'econnrefused',
+  'enotfound',
+  'eai_again',
+  'enetunreach',
+  'etimedout',
+  'econnreset',
+  'und_err_connect_timeout',
+  'und_err_socket',
+  'und_err_headers_timeout',
+  'und_err_body_timeout',
+];
+
+function reachabilityHaystack(err: unknown): { name: string; combined: string } {
   const rec = err as { name?: string; message?: string; cause?: { code?: string; message?: string } };
   const name = String(rec?.name || '');
   const message = String(rec?.message || '');
   const cause = `${rec?.cause?.code || ''} ${rec?.cause?.message || ''}`;
-  const combined = `${name} ${message} ${cause}`.toLowerCase();
+  return { name, combined: `${name} ${message} ${cause}`.toLowerCase() };
+}
 
+/** Classifies fetch/undici-style failures. Unknown errors are treated as network. */
+export function classifyReachabilityFailure(err: unknown): ReachabilityKind {
+  const { name, combined } = reachabilityHaystack(err);
   if (
     name === 'TimeoutError' ||
     name === 'AbortError' ||
@@ -34,7 +53,7 @@ export function describeOnlineReachabilityError(err: unknown): string {
     combined.includes('timeout') ||
     combined.includes('timed out')
   ) {
-    return ONLINE_TIMEOUT_MESSAGE;
+    return 'timeout';
   }
   if (
     combined.includes('cert') ||
@@ -43,19 +62,29 @@ export function describeOnlineReachabilityError(err: unknown): string {
     combined.includes('err_tls') ||
     combined.includes('self-signed')
   ) {
-    return ONLINE_TLS_MESSAGE;
+    return 'tls';
   }
-  if (
-    combined.includes('fetch failed') ||
-    combined.includes('econnrefused') ||
-    combined.includes('enotfound') ||
-    combined.includes('eai_again') ||
-    combined.includes('enetunreach') ||
-    combined.includes('network') ||
-    combined.includes('socket')
-  ) {
-    return ONLINE_UNREACHABLE_MESSAGE;
-  }
+  return 'network';
+}
+
+/**
+ * True only for fetch/undici/timeout signatures — not every thrown Error.
+ * Used as a safety net in the HTTP filter so Gemini/proxy fetch failures
+ * do not become opaque 500 "Unexpected server error".
+ */
+export function isExternalFetchFailure(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const { name, combined } = reachabilityHaystack(err);
+  if (name === 'TimeoutError' || name === 'AbortError') return true;
+  if (combined.includes('fetch failed')) return true;
+  if (name === 'TypeError' && combined.includes('fetch')) return true;
+  return FETCH_NETWORK_CODES.some((code) => combined.includes(code));
+}
+
+export function describeOnlineReachabilityError(err: unknown): string {
+  const kind = classifyReachabilityFailure(err);
+  if (kind === 'timeout') return ONLINE_TIMEOUT_MESSAGE;
+  if (kind === 'tls') return ONLINE_TLS_MESSAGE;
   return ONLINE_UNREACHABLE_MESSAGE;
 }
 

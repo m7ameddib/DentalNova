@@ -66,10 +66,13 @@ export const aiAssistantApi = {
     imageBase64?: string;
     imageMimeType?: string;
     clientSentAt?: number;
-  }) => apiClient.post<AiChatResponse>('/ai-assistant/chat', payload).then((r) => r.data),
+  }) =>
+    apiClient
+      .post<AiChatResponse>('/ai-assistant/chat', payload, { timeout: 90_000 })
+      .then((r) => r.data),
 
   executeAction: (action: string, params: Record<string, unknown>) =>
     apiClient
-      .post<AiExecuteResponse>('/ai-assistant/execute-action', { action, params })
+      .post<AiExecuteResponse>('/ai-assistant/execute-action', { action, params }, { timeout: 20_000 })
       .then((r) => r.data),
 };

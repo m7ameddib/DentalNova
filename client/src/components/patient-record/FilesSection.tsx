@@ -10,6 +10,7 @@ import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { getErrorMessage } from '@/utils/errors';
 import { useUiStore } from '@/store/ui.store';
+import { useOfflineStatusStore } from '@/offline/status.store';
 import { formatDateTimeDisplay, formatDateDisplay } from '@/utils/date';
 import { AttachmentCategory, PatientAttachment } from '@/types/domain';
 
@@ -20,6 +21,7 @@ export function FilesSection({ patientId }: { patientId: number }) {
   const { language } = useUiStore();
   const queryClient = useQueryClient();
   const canEdit = usePermission(PERMISSIONS.PATIENTS_EDIT);
+  const fallbackOffline = useOfflineStatusStore((s) => s.enabled && s.connection === 'offline');
 
   const [adding, setAdding] = useState(false);
   const [file, setFile] = useState<File | null>(null);
@@ -65,7 +67,7 @@ export function FilesSection({ patientId }: { patientId: number }) {
       queryClient.invalidateQueries({ queryKey: ['patient-attachments', patientId] });
       resetForm();
     },
-    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+    onError: (err) => setError(getErrorMessage(err, t('patientRecord.files.needsOnline'))),
   });
 
   const deleteMutation = useMutation({
@@ -89,6 +91,10 @@ export function FilesSection({ patientId }: { patientId: number }) {
   }
 
   function handleSave() {
+    if (fallbackOffline) {
+      setError(t('patientRecord.files.needsOnline'));
+      return;
+    }
     if (!file) {
       setError(t('patientRecord.files.validation.fileRequired'));
       return;
@@ -97,10 +103,14 @@ export function FilesSection({ patientId }: { patientId: number }) {
   }
 
   async function handleOpen(attachment: PatientAttachment) {
-    const blob = await attachmentsApi.fetchFileBlob(patientId, attachment.id);
-    const url = URL.createObjectURL(blob);
-    window.open(url, '_blank', 'noopener,noreferrer');
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
+    try {
+      const blob = await attachmentsApi.fetchFileBlob(patientId, attachment.id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, '_blank', 'noopener,noreferrer');
+      setTimeout(() => URL.revokeObjectURL(url), 30000);
+    } catch (err) {
+      setError(getErrorMessage(err, t('patientRecord.files.needsOnline')));
+    }
   }
 
   function formatLinkMeta(a: PatientAttachment): string | null {
@@ -115,10 +125,11 @@ export function FilesSection({ patientId }: { patientId: number }) {
     <SectionCard
       title={t('patientRecord.sections.files')}
       icon={<Paperclip size={16} />}
-      onAdd={canEdit ? () => setAdding((v) => !v) : undefined}
+      onAdd={canEdit && !fallbackOffline ? () => setAdding((v) => !v) : undefined}
       addTitle={t('patientRecord.files.uploadTitle') ?? ''}
       className="section-card--files"
     >
+      {fallbackOffline && <div className="form-error-banner">{t('patientRecord.files.needsOnline')}</div>}
       {adding && (
         <div className="inline-form">
           <label className="form-field">
@@ -190,7 +201,7 @@ export function FilesSection({ patientId }: { patientId: number }) {
               type="button"
               className="btn btn--primary"
               onClick={handleSave}
-              disabled={uploadMutation.isPending}
+              disabled={uploadMutation.isPending || fallbackOffline}
             >
               {t('common.upload')}
             </button>

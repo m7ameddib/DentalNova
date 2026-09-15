@@ -39,6 +39,35 @@ const BLOCKED_WRITE_PREFIXES = [
   '/health',
 ];
 
+/** Axios/network code when Online fallback is already Offline and the action cannot run locally. */
+export const FALLBACK_OFFLINE_CODE = 'ERR_FALLBACK_OFFLINE';
+
+export const FALLBACK_OFFLINE_MESSAGE =
+  'This action needs an internet connection. Clinic records still work offline.';
+
+const ONLINE_DEPENDENT_PREFIXES = ['/ai-assistant', '/ai-provider', '/backup', '/updates'];
+
+export function isOnlineDependentApiPath(url: string): boolean {
+  const path = normalizePath(url);
+  return ONLINE_DEPENDENT_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`));
+}
+
+export function isFormDataBody(data: unknown): boolean {
+  return typeof FormData !== 'undefined' && data instanceof FormData;
+}
+
+/** Fail-fast (2s) only when we can cache the GET or queue the write. */
+export function shouldFailFastForFallback(method?: string, url?: string, data?: unknown): boolean {
+  if (isReadMethod(method)) return !isOnlineDependentApiPath(url ?? '');
+  return isQueueableWrite(method, url ?? '', data);
+}
+
+/** AI, backup, updates, and file uploads cannot run from local fallback. */
+export function shouldBlockWhenFallbackOffline(method?: string, url?: string, data?: unknown): boolean {
+  if (isOnlineDependentApiPath(url ?? '')) return true;
+  return isWriteMethod(method) && isFormDataBody(data);
+}
+
 export function normalizePath(url: string): string {
   const withoutOrigin = url.replace(/^https?:\/\/[^/]+/i, '');
   const pathOnly = withoutOrigin.split('?')[0] ?? withoutOrigin;
@@ -68,10 +97,12 @@ export function resolveFallbackTimeout(args: {
   skipOfflineFallback?: boolean;
   offlineOrPending: boolean;
   isFormData?: boolean;
+  failFast?: boolean;
   configured?: number;
 }): number | undefined {
   if (!args.enabled || args.skipOfflineFallback) return args.configured;
   if (args.isFormData && !args.offlineOrPending) return args.configured;
+  if (args.failFast === false) return args.configured;
   return Math.min(args.configured ?? DEFAULT_API_TIMEOUT_MS, FALLBACK_DETECT_TIMEOUT_MS);
 }
 

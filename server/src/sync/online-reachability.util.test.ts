@@ -4,6 +4,7 @@ import {
   describeOnlineReachabilityError,
   friendlyStoredSyncError,
   GENERIC_UNEXPECTED_MESSAGE,
+  isExternalFetchFailure,
   messageFromOnlineResponse,
   ONLINE_NOT_FOUND_MESSAGE,
   ONLINE_SERVER_ERROR_MESSAGE,
@@ -22,6 +23,13 @@ test('TLS and DNS/connection failures map to clear Online reachability copy', ()
   assert.equal(describeOnlineReachabilityError({ message: 'unable to verify the first certificate' }), ONLINE_TLS_MESSAGE);
   assert.equal(describeOnlineReachabilityError({ message: 'fetch failed', cause: { code: 'ENOTFOUND' } }), ONLINE_UNREACHABLE_MESSAGE);
   assert.equal(describeOnlineReachabilityError({ message: 'fetch failed', cause: { code: 'ECONNREFUSED' } }), ONLINE_UNREACHABLE_MESSAGE);
+});
+
+test('isExternalFetchFailure is conservative (not every Error)', () => {
+  assert.equal(isExternalFetchFailure({ name: 'TypeError', message: 'fetch failed' }), true);
+  assert.equal(isExternalFetchFailure({ name: 'TimeoutError', message: 'aborted' }), true);
+  assert.equal(isExternalFetchFailure({ message: 'random boom' }), false);
+  assert.equal(isExternalFetchFailure(new Error('SQLITE_ERROR: no such table')), false);
 });
 
 test('Online 500 Unexpected server error is not forwarded verbatim', () => {

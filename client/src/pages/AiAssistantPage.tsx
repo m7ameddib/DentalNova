@@ -8,7 +8,9 @@ import { useUiStore } from '@/store/ui.store';
 import { useAuthStore } from '@/store/auth.store';
 import { useAiAssistantStore } from '@/store/ai-assistant.store';
 import { getErrorMessage } from '@/utils/errors';
+import { isAiComposerEnabled, resolveAiUiState } from '@/utils/ai-availability';
 import { runAiClientPrint } from '@/utils/aiPrintExecutor';
+import { useOfflineStatusStore } from '@/offline/status.store';
 
 function fileToBase64(file: File): Promise<{ base64: string; mime: string; preview: string }> {
   return new Promise((resolve, reject) => {
@@ -106,6 +108,7 @@ export function AiAssistantPage() {
   const hydrate = useAiAssistantStore((s) => s.hydrate);
   const hydrated = useAiAssistantStore((s) => s.hydrated);
 
+  const fallbackOffline = useOfflineStatusStore((s) => s.enabled && s.connection === 'offline');
   const [pendingImage, setPendingImage] = useState<{ base64: string; mime: string; preview: string } | null>(
     null,
   );
@@ -124,6 +127,7 @@ export function AiAssistantPage() {
     queryKey: ['ai-assistant-status'],
     queryFn: () => aiAssistantApi.status(),
     staleTime: 60_000,
+    enabled: !fallbackOffline,
   });
 
   const chatMutation = useMutation({
@@ -167,7 +171,10 @@ export function AiAssistantPage() {
       setError(null);
       setTimeout(() => chatEndRef.current?.scrollIntoView({ behavior: 'smooth' }), 100);
     },
-    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+    onError: (err) =>
+      setError(
+        getErrorMessage(err, fallbackOffline ? t('aiAssistant.unavailableOffline') : t('aiAssistant.requestFailed')),
+      ),
   });
 
   const executeMutation = useMutation({
@@ -182,14 +189,17 @@ export function AiAssistantPage() {
             t,
           });
         } catch (err) {
-          setError(getErrorMessage(err, t('common.error')));
+          setError(getErrorMessage(err, t('aiAssistant.requestFailed')));
         }
       }
       setMessages((prev) => [...prev, { role: 'assistant', content: result.message }]);
       setActiveConfirmation(null);
       if (!result.clientPrint) setError(null);
     },
-    onError: (err) => setError(getErrorMessage(err, t('common.error'))),
+    onError: (err) =>
+      setError(
+        getErrorMessage(err, fallbackOffline ? t('aiAssistant.unavailableOffline') : t('aiAssistant.requestFailed')),
+      ),
   });
 
   async function handleImageSelect(file: File | null) {
@@ -198,8 +208,14 @@ export function AiAssistantPage() {
     setPendingImage(encoded);
   }
 
+  const isLoading = chatMutation.isPending || executeMutation.isPending;
+  const isFresh = messages.length <= 1 && !activeConfirmation;
+  const aiUi = resolveAiUiState({ fallbackOffline, configured: status?.configured });
+  const composerEnabled = isAiComposerEnabled(aiUi, isLoading);
+
   function handleSend() {
     if (!input.trim() && !pendingImage) return;
+    if (!composerEnabled) return;
     const history = messages
       .filter((m) => m.role === 'user' || m.role === 'assistant')
       .slice(-12)
@@ -221,9 +237,6 @@ export function AiAssistantPage() {
     }
   }
 
-  const isLoading = chatMutation.isPending || executeMutation.isPending;
-  const isFresh = messages.length <= 1 && !activeConfirmation;
-
   if (!user?.id || !hydrated) {
     return <p className="muted">{t('common.loading')}</p>;
   }
@@ -235,14 +248,19 @@ export function AiAssistantPage() {
           <h1>{t('aiAssistant.title')}</h1>
           <p>{t('aiAssistant.subtitle')}</p>
         </div>
-        {status && (
-          <span className={`ops-status-chip${status.configured ? ' on' : ''}`}>
-            {status.configured ? t('aiAssistant.statusOn') : t('aiAssistant.statusNotConfigured')}
+        {(aiUi === 'offline' || status) && (
+          <span className={`ops-status-chip${aiUi === 'ready' ? ' on' : ''}`}>
+            {aiUi === 'offline'
+              ? t('aiAssistant.statusOffline')
+              : aiUi === 'ready'
+                ? t('aiAssistant.statusOn')
+                : t('aiAssistant.statusNotConfigured')}
           </span>
         )}
       </header>
 
-      {!status?.configured && <div className="ops-banner is-warn">{t('aiAssistant.configureHint')}</div>}
+      {aiUi === 'offline' && <div className="ops-banner is-warn">{t('aiAssistant.unavailableOffline')}</div>}
+      {aiUi === 'not-configured' && <div className="ops-banner is-warn">{t('aiAssistant.configureHint')}</div>}
 
       <div className="ops-ai-layout">
         <div className="ops-ai-thread">
@@ -257,6 +275,7 @@ export function AiAssistantPage() {
                       key={n}
                       type="button"
                       onClick={() => setInput(t(`aiAssistant.example${n}`))}
+                      disabled={!composerEnabled}
                     >
                       {t(`aiAssistant.example${n}`)}
                     </button>
@@ -283,7 +302,7 @@ export function AiAssistantPage() {
                   })
                 }
                 onCancel={() => setActiveConfirmation(null)}
-                isPending={executeMutation.isPending}
+                isPending={executeMutation.isPending || aiUi === 'offline'}
                 t={t}
               />
             )}
@@ -297,7 +316,7 @@ export function AiAssistantPage() {
             <div ref={chatEndRef} />
           </div>
 
-          {error && <div className="ops-banner is-warn ops-ai-error">{error}</div>}
+          {error && aiUi !== 'offline' && <div className="ops-banner is-warn ops-ai-error">{error}</div>}
 
           {pendingImage && (
             <div className="ops-ai-preview">
@@ -313,9 +332,13 @@ export function AiAssistantPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={t('aiAssistant.inputPlaceholder') ?? ''}
+              placeholder={
+                aiUi === 'offline'
+                  ? t('aiAssistant.unavailableOffline')
+                  : t('aiAssistant.inputPlaceholder') ?? ''
+              }
               rows={3}
-              disabled={isLoading}
+              disabled={!composerEnabled}
             />
             <div className="ops-ai-tools">
               <button
@@ -323,7 +346,7 @@ export function AiAssistantPage() {
                 className="btn btn--ghost btn--small"
                 title={t('aiAssistant.uploadImage') ?? ''}
                 onClick={() => fileInputRef.current?.click()}
-                disabled={isLoading}
+                disabled={!composerEnabled}
               >
                 <ImagePlus size={16} /> {t('aiAssistant.uploadImage')}
               </button>
@@ -332,7 +355,7 @@ export function AiAssistantPage() {
                 className="btn btn--ghost btn--small"
                 title={t('aiAssistant.camera') ?? ''}
                 onClick={() => cameraInputRef.current?.click()}
-                disabled={isLoading}
+                disabled={!composerEnabled}
               >
                 <Camera size={16} /> {t('aiAssistant.camera')}
               </button>
@@ -348,7 +371,7 @@ export function AiAssistantPage() {
                 type="button"
                 className="btn btn--primary ops-ai-send"
                 onClick={handleSend}
-                disabled={isLoading || (!input.trim() && !pendingImage)}
+                disabled={!composerEnabled || (!input.trim() && !pendingImage)}
               >
                 {isLoading ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
               </button>

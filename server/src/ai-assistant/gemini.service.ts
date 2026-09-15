@@ -2,6 +2,13 @@ import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common'
 import { ConfigService } from '@nestjs/config';
 import { AiChatMessage } from './ai-action.types';
 import { isInsecureAiServiceSecret, PUBLIC_DEFAULT_AI_SERVICE_SECRET } from '../common/ai-service-secret.util';
+import {
+  AI_EMPTY_RESPONSE_MESSAGE,
+  AI_FETCH_TIMEOUT_MS,
+  AI_UNREADABLE_RESPONSE_MESSAGE,
+  describeAiHttpStatus,
+  mapAiFetchFailure,
+} from './ai-reachability.util';
 
 interface GeminiContent {
   role: 'user' | 'model';
@@ -114,32 +121,44 @@ export class GeminiService {
     const roundLabel = options?.round != null ? ` (round ${options.round})` : '';
     this.logger.log(`Gemini request started${roundLabel}`);
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-goog-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        systemInstruction: { parts: [{ text: systemPrompt }] },
-        contents,
-        generationConfig: {
-          temperature: 0.3,
-          responseMimeType: 'application/json',
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-goog-api-key': apiKey,
         },
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new ServiceUnavailableException(
-        `Gemini API error: ${response.status} ${this.sanitizeError(errText).slice(0, 200)}`,
-      );
+        signal: AbortSignal.timeout(AI_FETCH_TIMEOUT_MS),
+        body: JSON.stringify({
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          contents,
+          generationConfig: {
+            temperature: 0.3,
+            responseMimeType: 'application/json',
+          },
+        }),
+      });
+    } catch (err) {
+      this.logger.warn(`Gemini fetch failed${roundLabel}: ${(err as Error).message}`);
+      throw new ServiceUnavailableException(mapAiFetchFailure(err));
     }
 
-    const data = (await response.json()) as GeminiGenerateResponse;
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      this.logger.warn(`Gemini HTTP ${response.status}${roundLabel}: ${this.sanitizeError(errText).slice(0, 200)}`);
+      throw new ServiceUnavailableException(describeAiHttpStatus(response.status));
+    }
+
+    let data: GeminiGenerateResponse;
+    try {
+      data = (await response.json()) as GeminiGenerateResponse;
+    } catch {
+      throw new ServiceUnavailableException(AI_UNREADABLE_RESPONSE_MESSAGE);
+    }
     if (data.error?.message) {
-      throw new ServiceUnavailableException(`Gemini API error: ${data.error.message}`);
+      this.logger.warn(`Gemini API error${roundLabel}: ${this.sanitizeError(data.error.message).slice(0, 200)}`);
+      throw new ServiceUnavailableException(describeAiHttpStatus(data.error.code ?? 503));
     }
 
     const text = data.candidates?.[0]?.content?.parts
@@ -148,7 +167,7 @@ export class GeminiService {
       .trim();
 
     if (!text) {
-      throw new ServiceUnavailableException('Empty response from Gemini');
+      throw new ServiceUnavailableException(AI_EMPTY_RESPONSE_MESSAGE);
     }
 
     const durationMs = Date.now() - geminiStart;
@@ -171,30 +190,41 @@ export class GeminiService {
     this.logger.log(`AI service proxy started${roundLabel}`);
     const started = Date.now();
 
-    const response = await fetch(`${baseUrl}/api/ai-provider/generate`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-dentalnova-ai-key': this.getAiServiceSecret(),
-      },
-      body: JSON.stringify({
-        systemPrompt,
-        messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
-        imageBase64: options?.imageBase64,
-        imageMimeType: options?.imageMimeType,
-      }),
-    });
-
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new ServiceUnavailableException(
-        `AI service error: ${response.status} ${this.sanitizeError(errText).slice(0, 200)}`,
-      );
+    let response: Response;
+    try {
+      response = await fetch(`${baseUrl}/api/ai-provider/generate`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-dentalnova-ai-key': this.getAiServiceSecret(),
+        },
+        signal: AbortSignal.timeout(AI_FETCH_TIMEOUT_MS),
+        body: JSON.stringify({
+          systemPrompt,
+          messages: messages.map((m) => ({ role: m.role === 'assistant' ? 'assistant' : 'user', content: m.content })),
+          imageBase64: options?.imageBase64,
+          imageMimeType: options?.imageMimeType,
+        }),
+      });
+    } catch (err) {
+      this.logger.warn(`AI service proxy fetch failed${roundLabel}: ${(err as Error).message}`);
+      throw new ServiceUnavailableException(mapAiFetchFailure(err));
     }
 
-    const data = (await response.json()) as ProviderGenerateResponse;
+    if (!response.ok) {
+      const errText = await response.text().catch(() => '');
+      this.logger.warn(`AI service HTTP ${response.status}${roundLabel}: ${this.sanitizeError(errText).slice(0, 200)}`);
+      throw new ServiceUnavailableException(describeAiHttpStatus(response.status));
+    }
+
+    let data: ProviderGenerateResponse;
+    try {
+      data = (await response.json()) as ProviderGenerateResponse;
+    } catch {
+      throw new ServiceUnavailableException(AI_UNREADABLE_RESPONSE_MESSAGE);
+    }
     if (!data.text?.trim()) {
-      throw new ServiceUnavailableException('Empty response from AI service');
+      throw new ServiceUnavailableException(AI_EMPTY_RESPONSE_MESSAGE);
     }
 
     const durationMs = data.durationMs ?? Date.now() - started;
