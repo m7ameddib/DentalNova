@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  appointmentReminderButtonState,
   appointmentReminderPhone,
+  appointmentReminderRawPhone,
   buildWhatsAppUrl,
   normalizeWhatsAppPhone,
   openReservedWhatsAppFallback,
@@ -21,6 +23,59 @@ test('appointment reminder uses linked patient phone, else guest phone', () => {
   assert.equal(appointmentReminderPhone({ patientPhone: null, guestPhone: '81858501' }), '96181858501');
   assert.equal(appointmentReminderPhone({ patientPhone: '', guestPhone: '+96181858501' }), '96181858501');
   assert.equal(appointmentReminderPhone({ patientPhone: null, guestPhone: null }), null);
+});
+
+test('appointment reminder reads snake_case and generic phone when patientPhone is missing', () => {
+  assert.equal(appointmentReminderPhone({ patient_phone: '81858501' }), '96181858501');
+  assert.equal(appointmentReminderPhone({ guest_phone: '70 000 000' }), '96170000000');
+  assert.equal(appointmentReminderPhone({ phone: '+96181858501' }), '96181858501');
+  assert.equal(appointmentReminderRawPhone({ patientPhone: '  ', guestPhone: null, phone: '81858501' }), '81858501');
+});
+
+test('normalizeWhatsAppPhone accepts Arabic-Indic digits', () => {
+  assert.equal(normalizeWhatsAppPhone('٨١٨٥٨٥٠١'), '96181858501');
+  assert.equal(normalizeWhatsAppPhone('۰۳۱۲۳۴۵۶۷'), '96131234567');
+});
+
+test('appointmentReminderButtonState enables when a usable phone exists', () => {
+  assert.deepEqual(appointmentReminderButtonState({ patientPhone: '81858501' }), {
+    phone: '96181858501',
+    disabled: false,
+    reason: null,
+  });
+  assert.deepEqual(appointmentReminderButtonState({ patientPhone: null, guestPhone: '81858501' }), {
+    phone: '96181858501',
+    disabled: false,
+    reason: null,
+  });
+  assert.deepEqual(appointmentReminderButtonState({ patientPhone: '81858501' }, { mutationPending: true }), {
+    phone: null,
+    disabled: true,
+    reason: 'pending',
+  });
+});
+
+test('appointmentReminderButtonState explains missing vs invalid vs looking-up', () => {
+  assert.deepEqual(appointmentReminderButtonState({ patientPhone: null, guestPhone: null }), {
+    phone: null,
+    disabled: true,
+    reason: 'missing',
+  });
+  assert.deepEqual(appointmentReminderButtonState({ patientPhone: 'n/a', guestPhone: '' }), {
+    phone: null,
+    disabled: true,
+    reason: 'invalid',
+  });
+  assert.deepEqual(appointmentReminderButtonState({ patientPhone: null }, { lookingUp: true }), {
+    phone: null,
+    disabled: true,
+    reason: 'lookingUp',
+  });
+  assert.deepEqual(appointmentReminderButtonState(null), {
+    phone: null,
+    disabled: true,
+    reason: 'missing',
+  });
 });
 
 test('delayed wa.me is assigned onto the click-reserved tab, not a second window.open', () => {
