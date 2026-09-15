@@ -1,7 +1,11 @@
 import { isAxiosError } from 'axios';
-import { FALLBACK_OFFLINE_CODE, FALLBACK_OFFLINE_MESSAGE } from '@/offline/core';
 
 export const OPAQUE_SERVER_ERROR = 'Unexpected server error';
+
+/** Keep in sync with `FALLBACK_OFFLINE_*` in `client/src/offline/core.ts`. */
+const FALLBACK_OFFLINE_CODE = 'ERR_FALLBACK_OFFLINE';
+const FALLBACK_OFFLINE_MESSAGE =
+  'This action needs an internet connection. Clinic records still work offline.';
 
 const SERVICE_UNAVAILABLE_MESSAGE =
   'The clinic server is temporarily unavailable. Check the internet connection and try again.';

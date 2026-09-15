@@ -39,7 +39,8 @@ const BLOCKED_WRITE_PREFIXES = [
   '/health',
 ];
 
-/** Axios/network code when Online fallback is already Offline and the action cannot run locally. */
+/** Axios/network code when Online fallback is already Offline and the action cannot run locally.
+ *  Keep the code/message in sync with `client/src/utils/errors.ts`. */
 export const FALLBACK_OFFLINE_CODE = 'ERR_FALLBACK_OFFLINE';
 
 export const FALLBACK_OFFLINE_MESSAGE =
