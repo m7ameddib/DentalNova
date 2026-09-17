@@ -52,5 +52,6 @@ test('pairing census attestation is empty only when every operational count is z
   db.exec(`CREATE TABLE patients (id INTEGER PRIMARY KEY, full_name TEXT, archived_at TEXT);`);
   const attestation = censusAttestationFromClinic(clinicOperationalCensus(db));
   assert.equal(attestation.total, 0);
+  assert.equal(attestation.expenses, 0);
   db.close();
 });

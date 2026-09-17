@@ -5,6 +5,7 @@ import {
   MAX_BOOTSTRAP_PAGES,
   bootstrapSnapshotFinished,
   shouldFinalizeBootstrap,
+  snapshotOpeningCheckpoint,
 } from './bootstrap.util';
 
 test('incomplete snapshot pages must not be marked bootstrapped', () => {
@@ -20,4 +21,6 @@ test('empty, short, or final snapshot page completes bootstrap', () => {
   assert.equal(bootstrapSnapshotFinished({ changesLength: 12, hasMore: false }), true);
   assert.equal(bootstrapSnapshotFinished({ changesLength: 12 }), true);
   assert.equal(shouldFinalizeBootstrap(true), true);
+  assert.equal(snapshotOpeningCheckpoint(0), 0);
+  assert.equal(snapshotOpeningCheckpoint(41), 41);
 });

@@ -17,3 +17,8 @@ export function bootstrapSnapshotFinished(page: {
 export function shouldFinalizeBootstrap(complete: boolean): boolean {
   return complete;
 }
+
+/** Capture maxSeq before reading snapshot rows so concurrent inserts are not skipped. */
+export function snapshotOpeningCheckpoint(maxSeqNow: number): number {
+  return Number(maxSeqNow) || 0;
+}

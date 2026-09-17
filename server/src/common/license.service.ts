@@ -25,7 +25,8 @@ export class LicenseService {
   private loadPublicKeys(): string[] {
     if (this.publicKeysPem) return this.publicKeysPem;
 
-    const keysDir = path.join(process.cwd(), 'keys');
+    const keysDir =
+      this.config.get<string>('LICENSE_KEYS_DIR')?.trim() || path.join(process.cwd(), 'keys');
     if (!fs.existsSync(keysDir)) {
       throw new BadRequestException('License verification key is not configured on this server.');
     }

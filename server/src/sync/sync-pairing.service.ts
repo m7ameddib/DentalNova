@@ -39,6 +39,18 @@ import {
   describeOnlineReachabilityError,
   messageFromOnlineResponse,
 } from './online-reachability.util';
+import {
+  CENSUS_PROOF_INVALID,
+  CensusProofInput,
+  challengesMatch,
+  isCompatibleSyncProtocol,
+  parseSyncProtocolVersion,
+  signCensusProof,
+  SYNC_PROTOCOL_MISMATCH,
+  SYNC_PROTOCOL_VERSION,
+  syncProtocolHeaders,
+  verifyCensusProof,
+} from './sync-protocol.util';
 
 export type { StoredPeerConfig, PublicPeerInfo } from './pairing-public.util';
 
@@ -63,6 +75,8 @@ export class SyncPairingService {
     clinicId: string;
     onlineUrl: string;
     ttlMinutes: number;
+    challenge: string;
+    protocolVersion: number;
   } {
     if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
       throw new BadRequestException('Pairing codes are created on the Online clinic.');
@@ -71,7 +85,7 @@ export class SyncPairingService {
     if (!clinicId) throw new ForbiddenException('Clinic context required');
     const clinic = this.platform.requireClinic(clinicId);
     const ttlMinutes = 10;
-    const { code, expiresAt } = this.platform.createPairingCode(clinicId, user.id, ttlMinutes);
+    const { code, expiresAt, challenge } = this.platform.createPairingCode(clinicId, user.id, ttlMinutes);
     this.platform.logEvent(clinicId, 'PAIRING_CODE', `user ${user.id}`);
     return {
       code,
@@ -80,14 +94,23 @@ export class SyncPairingService {
       clinicId,
       onlineUrl: this.publicOnlineUrl(),
       ttlMinutes,
+      challenge,
+      protocolVersion: SYNC_PROTOCOL_VERSION,
     };
   }
 
-  previewFromOnline(code: string): { clinicId: string; clinicName: string; expiresAt: string; onlineUrl: string } {
+  previewFromOnline(code: string): {
+    clinicId: string;
+    clinicName: string;
+    expiresAt: string;
+    onlineUrl: string;
+    challenge: string;
+    protocolVersion: number;
+  } {
     if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
       throw new BadRequestException('Pairing must be previewed against the Online server.');
     }
-    let peeked: { clinicId: string; expiresAt: string };
+    let peeked: { clinicId: string; expiresAt: string; challenge: string };
     try {
       peeked = this.platform.peekPairingCode(compactPairingCode(code));
     } catch {
@@ -99,6 +122,8 @@ export class SyncPairingService {
       clinicName: clinic.name,
       expiresAt: peeked.expiresAt,
       onlineUrl: this.publicOnlineUrl(),
+      challenge: peeked.challenge,
+      protocolVersion: SYNC_PROTOCOL_VERSION,
     };
   }
 
@@ -107,6 +132,8 @@ export class SyncPairingService {
     clinicName: string;
     expiresAt: string;
     onlineUrl: string;
+    challenge: string;
+    protocolVersion: number;
   }> {
     if (!this.deployment.isOffline()) {
       throw new BadRequestException('Connect to Online from the Offline Windows app.');
@@ -120,7 +147,7 @@ export class SyncPairingService {
       `${base}/api/sync/pairing/preview`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', ...syncProtocolHeaders() },
         body: JSON.stringify({ code: compactPairingCode(input.pairingCode) }),
       },
       20_000,
@@ -129,9 +156,11 @@ export class SyncPairingService {
       clinicId?: string;
       clinicName?: string;
       expiresAt?: string;
+      challenge?: string;
+      protocolVersion?: number;
       message?: string;
     }>(res);
-    if (!res.ok || !body.clinicId || !body.clinicName) {
+    if (!res.ok || !body.clinicId || !body.clinicName || !body.challenge) {
       throw new BadRequestException(
         messageFromOnlineResponse(
           res.status,
@@ -140,11 +169,16 @@ export class SyncPairingService {
         ),
       );
     }
+    if (!isCompatibleSyncProtocol(parseSyncProtocolVersion(body.protocolVersion))) {
+      throw new BadRequestException(SYNC_PROTOCOL_MISMATCH);
+    }
     return {
       clinicId: body.clinicId,
       clinicName: body.clinicName,
       expiresAt: body.expiresAt || '',
       onlineUrl: base,
+      challenge: body.challenge,
+      protocolVersion: parseSyncProtocolVersion(body.protocolVersion) || SYNC_PROTOCOL_VERSION,
     };
   }
 
@@ -153,25 +187,62 @@ export class SyncPairingService {
     deviceName: string;
     installationId?: string;
     emptyClinic: boolean;
-    census?: { patients: number; payments: number; treatments: number; appointments: number; total: number };
+    census?: {
+      patients: number;
+      payments: number;
+      treatments: number;
+      appointments: number;
+      total: number;
+      expenses?: number;
+      labCases?: number;
+      prescriptions?: number;
+      notes?: number;
+    };
+    protocolVersion?: number;
+    challenge?: string;
+    censusProof?: string;
   }): {
     deviceId: string;
     deviceSecret: string;
     clinicId: string;
     clinicName: string;
     onlineBaseUrl: string;
+    protocolVersion: number;
   } {
     if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
       throw new BadRequestException('Pairing must be completed against the Online server.');
+    }
+    if (!isCompatibleSyncProtocol(parseSyncProtocolVersion(input.protocolVersion))) {
+      throw new BadRequestException({ statusCode: 400, message: SYNC_PROTOCOL_MISMATCH, code: 'SYNC_PROTOCOL_MISMATCH' });
     }
     if (input.emptyClinic !== true || !isEmptyCensusAttestation(input.census)) {
       throw new BadRequestException(
         'Automatic pairing requires an empty Offline clinic (emptyClinic + zero census). Two populated databases cannot be merged. Online cannot inspect the Offline disk — the official Offline app attests this from SQLite.',
       );
     }
+    const compact = compactPairingCode(input.code);
+    let peeked: { clinicId: string; expiresAt: string; challenge: string };
+    try {
+      peeked = this.platform.peekPairingCode(compact);
+    } catch {
+      throw new UnauthorizedException('Invalid or expired pairing code.');
+    }
+    if (!peeked.challenge || !challengesMatch(peeked.challenge, input.challenge)) {
+      throw new BadRequestException({ statusCode: 400, message: CENSUS_PROOF_INVALID, code: 'CENSUS_PROOF_INVALID' });
+    }
+    const proofInput: CensusProofInput = {
+      protocolVersion: parseSyncProtocolVersion(input.protocolVersion),
+      challenge: peeked.challenge,
+      installationId: input.installationId || '',
+      emptyClinic: true,
+      census: input.census!,
+    };
+    if (!verifyCensusProof(compact, proofInput, input.censusProof || '')) {
+      throw new BadRequestException({ statusCode: 400, message: CENSUS_PROOF_INVALID, code: 'CENSUS_PROOF_INVALID' });
+    }
     let clinicId: string;
     try {
-      clinicId = this.platform.consumePairingCode(compactPairingCode(input.code));
+      clinicId = this.platform.consumePairingCode(compact);
     } catch {
       throw new UnauthorizedException('Invalid or expired pairing code.');
     }
@@ -191,6 +262,7 @@ export class SyncPairingService {
       clinicId,
       clinicName: clinic.name,
       onlineBaseUrl: this.publicOnlineUrl(),
+      protocolVersion: SYNC_PROTOCOL_VERSION,
     };
   }
 
@@ -202,20 +274,33 @@ export class SyncPairingService {
       throw new BadRequestException('This Offline installation is already paired. Disconnect first before pairing again.');
     }
     this.assertEmptyOffline();
-    const base = this.requireOnlineUrl(input.onlineUrl);
+    const preview = await this.previewOffline(input);
+    const base = preview.onlineUrl;
     const installationId = this.installation.get().installationId;
     const census = censusAttestationFromClinic(clinicOperationalCensus(this.db.connection));
+    const compact = compactPairingCode(input.pairingCode);
+    const proofInput: CensusProofInput = {
+      protocolVersion: SYNC_PROTOCOL_VERSION,
+      challenge: preview.challenge,
+      installationId,
+      emptyClinic: true,
+      census,
+    };
+    const censusProof = signCensusProof(compact, proofInput);
     const res = await this.fetchOnline(
       `${base}/api/sync/pairing/complete`,
       {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...syncProtocolHeaders() },
         body: JSON.stringify({
-          code: compactPairingCode(input.pairingCode),
+          code: compact,
           deviceName: input.deviceName?.trim() || this.clinicSettings.get()?.clinicName || 'Offline clinic',
           installationId,
           emptyClinic: true,
           census,
+          protocolVersion: SYNC_PROTOCOL_VERSION,
+          challenge: preview.challenge,
+          censusProof,
         }),
       },
       20_000,
@@ -285,7 +370,7 @@ export class SyncPairingService {
       try {
         const tokenRes = await fetch(`${peer.onlineBaseUrl}/api/sync/token`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...syncProtocolHeaders() },
           body: JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret }),
           signal: AbortSignal.timeout(10_000),
         });
@@ -293,7 +378,11 @@ export class SyncPairingService {
         if (tokenRes.ok && data.accessToken) {
           await fetch(`${peer.onlineBaseUrl}/api/sync/device/revoke-self`, {
             method: 'POST',
-            headers: { Authorization: `Bearer ${data.accessToken}`, 'Content-Type': 'application/json' },
+            headers: {
+              Authorization: `Bearer ${data.accessToken}`,
+              'Content-Type': 'application/json',
+              ...syncProtocolHeaders(),
+            },
             signal: AbortSignal.timeout(10_000),
           });
         }
@@ -338,7 +427,14 @@ export class SyncPairingService {
 
   private async fetchOnline(url: string, init: RequestInit, timeoutMs: number): Promise<Response> {
     try {
-      return await fetch(url, { ...init, signal: AbortSignal.timeout(timeoutMs) });
+      return await fetch(url, {
+        ...init,
+        headers: {
+          ...syncProtocolHeaders(),
+          ...(init.headers || {}),
+        },
+        signal: AbortSignal.timeout(timeoutMs),
+      });
     } catch (err) {
       throw new BadRequestException(describeOnlineReachabilityError(err));
     }

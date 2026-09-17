@@ -28,6 +28,9 @@ import { requestClientIp } from '../common/loopback.util';
 import {
   ConnectOnlineDto,
   DeviceTokenDto,
+  FileBeginDto,
+  FileChunkDto,
+  FileFinishDto,
   PairingCompleteDto,
   PairingPreviewDto,
   PushChangesDto,
@@ -35,6 +38,15 @@ import {
 } from './dto/sync.dto';
 import { PlatformService } from '../platform/platform.service';
 import { getTenantClinicId } from '../platform/tenant-context';
+import {
+  decodeFileChunkBase64,
+  FILE_INLINE_MAX_BYTES,
+} from './sync-files.util';
+import {
+  isCompatibleSyncProtocol,
+  protocolVersionFromHeaders,
+  SYNC_PROTOCOL_MISMATCH,
+} from './sync-protocol.util';
 
 @Controller('sync')
 export class SyncController {
@@ -78,6 +90,7 @@ export class SyncController {
   @SetMetadata(SKIP_INSTALLATION_GUARD, true)
   @Post('pairing/complete')
   completePairing(@Body() dto: PairingCompleteDto, @Req() req: Request) {
+    this.assertSyncProtocol(req);
     const key = `pair:${requestClientIp(req)}`;
     this.rateLimit.assertAllowed(key, 8, 15 * 60 * 1000);
     try {
@@ -94,6 +107,7 @@ export class SyncController {
   @SetMetadata(SKIP_INSTALLATION_GUARD, true)
   @Post('token')
   token(@Body() dto: DeviceTokenDto, @Req() req: Request) {
+    this.assertSyncProtocol(req);
     const key = `sync-token:${requestClientIp(req)}:${dto.deviceId}`;
     this.rateLimit.assertAllowed(key, 20, 15 * 60 * 1000);
     try {
@@ -132,7 +146,7 @@ export class SyncController {
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   @Post('now')
   async syncNow() {
-    const result = await this.engine.runOfflineCycle();
+    const result = await this.engine.runOfflineCycle({ forceAttachments: true });
     if (result.error) throw new BadRequestException(result.error);
     return result;
   }
@@ -223,9 +237,14 @@ export class SyncController {
     @Body() body: { relativePath: string; contentBase64: string; mimeType?: string },
   ) {
     if (!body?.relativePath || !body.contentBase64) throw new BadRequestException('File payload required');
-    if (body.contentBase64.length > 36_000_000) throw new BadRequestException('File is too large');
+    if (body.contentBase64.length > 400_000) {
+      throw new BadRequestException('File is too large for a single request. Upload it in 256 KiB chunks.');
+    }
     try {
       const bytes = Buffer.from(body.contentBase64, 'base64');
+      if (bytes.length > FILE_INLINE_MAX_BYTES) {
+        throw new BadRequestException('File is too large for a single request. Upload it in 256 KiB chunks.');
+      }
       return await this.engine.putFileFromDevice(body.relativePath, bytes, body.mimeType);
     } catch (err) {
       throw new BadRequestException((err as Error).message || 'File store failed');
@@ -234,11 +253,54 @@ export class SyncController {
 
   @UseGuards(DeviceAuthGuard)
   @SkipSubscriptionGuard()
+  @Post('files/begin')
+  async beginFile(@Body() body: FileBeginDto) {
+    try {
+      return await this.engine.beginFileFromDevice(body.relativePath, body.byteSize, body.mimeType, body.sha256);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message || 'File upload could not start');
+    }
+  }
+
+  @UseGuards(DeviceAuthGuard)
+  @SkipSubscriptionGuard()
+  @Post('files/chunk')
+  async chunkFile(@Body() body: FileChunkDto) {
+    try {
+      const bytes = decodeFileChunkBase64(body.contentBase64);
+      return await this.engine.putFileChunkFromDevice(body.relativePath, body.offset, bytes);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message || 'File chunk failed');
+    }
+  }
+
+  @UseGuards(DeviceAuthGuard)
+  @SkipSubscriptionGuard()
+  @Post('files/finish')
+  async finishFile(@Body() body: FileFinishDto) {
+    try {
+      return await this.engine.finishFileFromDevice(body.relativePath, body.sha256, body.mimeType);
+    } catch (err) {
+      throw new BadRequestException((err as Error).message || 'File upload could not finish');
+    }
+  }
+
+  @UseGuards(DeviceAuthGuard)
+  @SkipSubscriptionGuard()
   @Get('files')
-  async downloadFile(@Query('path') relativePath: string) {
-    const bytes = await this.engine.getFileForDevice(relativePath);
-    if (!bytes) return { found: false };
-    return { found: true, contentBase64: bytes.toString('base64') };
+  async downloadFile(
+    @Query('path') relativePath: string,
+    @Query('offset') offsetRaw?: string,
+    @Query('limit') limitRaw?: string,
+  ) {
+    if (offsetRaw != null || limitRaw != null) {
+      return this.engine.getFileChunkForDevice(
+        relativePath,
+        Number(offsetRaw ?? 0) || 0,
+        Number(limitRaw ?? 0) || 0,
+      );
+    }
+    return this.engine.getFileMetaOrInlineForDevice(relativePath);
   }
 
   @UseGuards(DeviceAuthGuard)
@@ -246,5 +308,12 @@ export class SyncController {
   @Post('checkpoint')
   checkpoint(@Req() req: Request & { syncDevice?: SyncDevicePrincipal }, @Body() body: { seq: number }) {
     return this.engine.ackDeviceCheckpoint(req.syncDevice!.deviceId, Number(body.seq) || 0);
+  }
+
+  private assertSyncProtocol(req: Request): void {
+    const version = protocolVersionFromHeaders(req.headers as Record<string, unknown>);
+    if (!isCompatibleSyncProtocol(version)) {
+      throw new BadRequestException({ statusCode: 400, message: SYNC_PROTOCOL_MISMATCH, code: 'SYNC_PROTOCOL_MISMATCH' });
+    }
   }
 }

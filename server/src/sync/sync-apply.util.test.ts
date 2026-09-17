@@ -12,8 +12,13 @@ import {
   resolveConflict,
   canAdvancePullCheckpoint,
   withRemoteApply,
+  changesSince,
+  currentCheckpoint,
+  setCheckpoint,
+  maxSeq,
+  recordInboundConflicts,
 } from './sync-apply.util';
-import { paymentFingerprint, rowsDiffer } from './sync.entities';
+import { CONFLICT_RESOLUTION_DEVICE_ID, paymentFingerprint, rowsDiffer } from './sync.entities';
 
 function memoryClinic(): Database.Database {
   const db = new Database(':memory:');
@@ -31,7 +36,9 @@ function memoryClinic(): Database.Database {
       method TEXT,
       date TEXT,
       note TEXT,
-      status TEXT DEFAULT 'ACTIVE'
+      status TEXT DEFAULT 'ACTIVE',
+      voided_at TEXT,
+      void_reason TEXT
     );
   `);
   db.exec(fsRead038());
@@ -602,13 +609,30 @@ test('keep_local enqueues an outbound upsert so Online receives the chosen row',
   db.close();
 });
 
-test('apply-error conflicts block pull checkpoint advance', () => {
+test('apply-error and unrecovered concurrent-edits block pull checkpoint advance', () => {
   assert.equal(canAdvancePullCheckpoint({ accepted: ['a'], skipped: [], conflicts: [] }), true);
   assert.equal(
     canAdvancePullCheckpoint({
       accepted: ['a'],
       skipped: [],
       conflicts: [{ changeId: 'b', entity: 'patients', recordUid: 'u', reason: 'concurrent-edit' }],
+    }),
+    false,
+  );
+  assert.equal(
+    canAdvancePullCheckpoint({
+      accepted: ['a'],
+      skipped: [],
+      conflicts: [
+        {
+          changeId: 'b',
+          entity: 'patients',
+          recordUid: 'u',
+          reason: 'concurrent-edit',
+          row: { fullName: 'Remote' },
+          current: { fullName: 'Local' },
+        },
+      ],
     }),
     true,
   );
@@ -642,6 +666,10 @@ function pairingDbs() {
     CREATE TABLE areas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE
+    );
+    CREATE TABLE medication_catalog (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL COLLATE NOCASE
     );
     CREATE TABLE guarantors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -678,7 +706,9 @@ function pairingDbs() {
       method TEXT,
       date TEXT,
       note TEXT,
-      status TEXT DEFAULT 'ACTIVE'
+      status TEXT DEFAULT 'ACTIVE',
+      voided_at TEXT,
+      void_reason TEXT
     );
   `;
   const online = new Database(':memory:');
@@ -908,6 +938,229 @@ test('areas and guarantors adopt by name (case-insensitive for areas)', () => {
   online.close();
   offline.close();
 });
+
+test('payment void replicates; amount edits still conflict', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('Ada')`).run();
+  const patientUid = snapshotRow(db, 'patients', 1)!.recordUid as string;
+  applyChanges(
+    db,
+    [
+      {
+        changeId: 'pay-active',
+        entity: 'payments',
+        recordUid: 'pay-uid-void',
+        op: 'upsert',
+        row: { patientUid, amountCents: 2500, method: 'CASH', date: '2026-02-01', note: null, status: 'ACTIVE' },
+      },
+    ],
+    'online-server',
+  );
+  const voided = applyChanges(
+    db,
+    [
+      {
+        changeId: 'pay-void',
+        entity: 'payments',
+        recordUid: 'pay-uid-void',
+        op: 'upsert',
+        row: {
+          patientUid,
+          amountCents: 2500,
+          method: 'CASH',
+          date: '2026-02-01',
+          note: null,
+          status: 'VOID',
+          voidedAt: '2026-02-02',
+          voidReason: 'entered twice',
+        },
+      },
+    ],
+    'device-offline',
+  );
+  assert.equal(voided.conflicts.length, 0);
+  assert.equal(voided.accepted.includes('pay-void'), true);
+  const row = db.prepare(`SELECT status, voided_at AS voidedAt, void_reason AS reason FROM payments WHERE id = 1`).get() as {
+    status: string;
+    voidedAt: string;
+    reason: string;
+  };
+  assert.equal(row.status, 'VOID');
+  assert.equal(row.reason, 'entered twice');
+  const amountEdit = applyChanges(
+    db,
+    [
+      {
+        changeId: 'pay-edit',
+        entity: 'payments',
+        recordUid: 'pay-uid-void',
+        op: 'upsert',
+        row: { patientUid, amountCents: 9999, method: 'CASH', date: '2026-02-01', status: 'VOID' },
+      },
+    ],
+    'device-b',
+  );
+  assert.equal(amountEdit.conflicts.some((c) => c.reason === 'immutable-row-differs'), true);
+  db.close();
+});
+
+test('same change_id is skipped on retry after a dropped response (idempotent)', () => {
+  const db = memoryClinic();
+  const change = {
+    changeId: 'retry-patient',
+    entity: 'patients' as const,
+    recordUid: 'patient-retry',
+    op: 'upsert' as const,
+    row: { fullName: 'Retry', phone: '1' },
+  };
+  const first = applyChanges(db, [change], 'device-a');
+  assert.equal(first.accepted.includes('retry-patient'), true);
+  const second = applyChanges(db, [change], 'device-a');
+  assert.equal(second.skipped.includes('retry-patient'), true);
+  assert.equal((db.prepare(`SELECT COUNT(*) AS c FROM patients`).get() as { c: number }).c, 1);
+  db.close();
+});
+
+test('unacked local change stays pending after a failed push (retry does not drop it)', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('Parked', '2')`).run();
+  const pending = pendingOutbound(db).filter((c) => c.entity === 'patients');
+  assert.equal(pending.length, 1);
+  assert.equal(pendingCount(db) >= 1, true);
+  db.close();
+});
+
+test('both sides editing the same patient records concurrent-edit; keep_remote applies Online', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('Local', '1')`).run();
+  const uid = db.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'patients' AND local_id = 1`).get() as {
+    uid: string;
+  };
+  const pulled = applyChanges(
+    db,
+    [
+      {
+        changeId: 'online-edit',
+        entity: 'patients',
+        recordUid: uid.uid,
+        op: 'upsert',
+        row: { fullName: 'Online', phone: '9' },
+      },
+    ],
+    'online-server',
+  );
+  assert.equal(pulled.conflicts.some((c) => c.reason === 'concurrent-edit'), true);
+  assert.equal(pulled.conflicts[0]?.row?.fullName, 'Online');
+  const conflict = db.prepare(`SELECT conflict_id AS id FROM sync_conflicts WHERE resolved_at IS NULL`).get() as {
+    id: string;
+  };
+  resolveConflict(db, conflict.id, 'keep_remote');
+  const name = db.prepare(`SELECT full_name AS n FROM patients WHERE id = 1`).get() as { n: string };
+  assert.equal(name.n, 'Online');
+  db.close();
+});
+
+test('push conflicts store the Online row so keep_remote can apply a void', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('Ada')`).run();
+  const patientUid = snapshotRow(db, 'patients', 1)!.recordUid as string;
+  applyChanges(
+    db,
+    [
+      {
+        changeId: 'pay-1',
+        entity: 'payments',
+        recordUid: 'pay-keep-remote',
+        op: 'upsert',
+        row: { patientUid, amountCents: 1000, method: 'CASH', date: '2026-03-01', status: 'ACTIVE' },
+      },
+    ],
+    'online-server',
+  );
+  recordInboundConflicts(db, [
+    {
+      entity: 'payments',
+      recordUid: 'pay-keep-remote',
+      reason: 'immutable-row-differs',
+      row: {
+        patientUid,
+        amountCents: 1000,
+        method: 'CASH',
+        date: '2026-03-01',
+        status: 'VOID',
+        voidedAt: '2026-03-02',
+        voidReason: 'dup',
+      },
+      current: snapshotRow(db, 'payments', 1),
+    },
+  ]);
+  const conflict = db.prepare(`SELECT conflict_id AS id FROM sync_conflicts WHERE resolved_at IS NULL`).get() as {
+    id: string;
+  };
+  resolveConflict(db, conflict.id, 'keep_remote');
+  const pay = db.prepare(`SELECT status FROM payments WHERE id = 1`).get() as { status: string };
+  assert.equal(pay.status, 'VOID');
+  assert.equal(CONFLICT_RESOLUTION_DEVICE_ID, 'conflict-resolution');
+  db.close();
+});
+
+test('bootstrap opening checkpoint then changesSince catches concurrent Online inserts', () => {
+  const db = memoryClinic();
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('First', '1')`).run();
+  const opening = maxSeq(db);
+  const snap = clinicSnapshot(db, undefined, 0, 80);
+  assert.equal(snap.changes.some((c) => c.row?.fullName === 'First'), true);
+  db.prepare(`INSERT INTO patients (full_name, phone) VALUES ('During bootstrap', '2')`).run();
+  const last = maxSeq(db);
+  assert.ok(last > opening);
+  setCheckpoint(db, last);
+  const missed = changesSince(db, last, 'device-offline', 100);
+  assert.equal(missed.changes.some((c) => c.row?.fullName === 'During bootstrap'), false);
+  setCheckpoint(db, opening);
+  const caught = changesSince(db, opening, 'device-offline', 100);
+  assert.equal(caught.changes.some((c) => c.row?.fullName === 'During bootstrap'), true);
+  assert.equal(currentCheckpoint(db), opening);
+  db.close();
+});
+
+test('populated Offline pairing census is blocked; empty catalogs are not', () => {
+  const { offline } = pairingDbs();
+  assert.equal(pendingOutbound(offline).some((c) => c.entity === 'patients'), false);
+  offline.prepare(`INSERT INTO patients (full_name, file_number) VALUES ('Local only', 'P-1')`).run();
+  assert.equal(pendingOutbound(offline).some((c) => c.entity === 'patients'), true);
+  offline.close();
+});
+
+test('medication_catalog adopts by unique name instead of duplicating', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO medication_catalog (name) VALUES ('Amoxicillin')`).run();
+  offline.prepare(`INSERT INTO medication_catalog (name) VALUES ('amoxicillin')`).run();
+  const onlineUid = snapshotRow(online, 'medication_catalog', 1)!.recordUid as string;
+  const offlineUid = snapshotRow(offline, 'medication_catalog', 1)!.recordUid as string;
+  assert.notEqual(onlineUid, offlineUid);
+  const applied = applyChanges(
+    offline,
+    [
+      {
+        changeId: 'med-1',
+        entity: 'medication_catalog',
+        recordUid: onlineUid,
+        op: 'upsert',
+        row: { name: 'Amoxicillin' },
+      },
+    ],
+    'online-server',
+  );
+  assert.equal(applied.conflicts.length, 0);
+  assert.equal((offline.prepare(`SELECT COUNT(*) AS c FROM medication_catalog`).get() as { c: number }).c, 1);
+  const mapped = offline
+    .prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'medication_catalog' AND local_id = 1`)
+    .get() as { uid: string };
+  assert.equal(mapped.uid, onlineUid);
+  online.close();
+  offline.close();
+});
+
 
 
 

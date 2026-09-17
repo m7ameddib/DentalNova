@@ -6,6 +6,7 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const crypto = require('crypto');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const MAIN = path.join(ROOT, 'server', 'dist', 'main.js');
@@ -17,8 +18,11 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
-async function request(method, urlPath, { token, body, expected, headers } = {}) {
+async function request(method, urlPath, { token, body, expected, headers, protocol } = {}) {
   const hdrs = { Accept: 'application/json', ...(headers || {}) };
+  if (protocol !== false) {
+    hdrs['x-dentalnova-sync-protocol'] = String(protocol == null ? 2 : protocol);
+  }
   if (body !== undefined) hdrs['Content-Type'] = 'application/json';
   if (token) hdrs.Authorization = `Bearer ${token}`;
   const res = await fetch(`${BASE}${urlPath}`, {
@@ -56,6 +60,65 @@ async function collectSnapshot(token) {
     if (!afterEntity && !afterId) break;
   }
   return all;
+}
+
+function compactPairingCode(raw) {
+  return String(raw || '')
+    .replace(/[^A-Za-z0-9]/g, '')
+    .toUpperCase();
+}
+
+function signCensusProof(pairingCode, input) {
+  const census = {
+    appointments: Number(input.census.appointments) || 0,
+    expenses: Number(input.census.expenses) || 0,
+    labCases: Number(input.census.labCases) || 0,
+    notes: Number(input.census.notes) || 0,
+    patients: Number(input.census.patients) || 0,
+    payments: Number(input.census.payments) || 0,
+    prescriptions: Number(input.census.prescriptions) || 0,
+    total: Number(input.census.total) || 0,
+    treatments: Number(input.census.treatments) || 0,
+  };
+  const payload = JSON.stringify({
+    census,
+    challenge: String(input.challenge || ''),
+    emptyClinic: input.emptyClinic === true,
+    installationId: String(input.installationId || ''),
+    protocolVersion: Number(input.protocolVersion) || 0,
+  });
+  return crypto.createHmac('sha256', compactPairingCode(pairingCode)).update(payload).digest('hex');
+}
+
+function emptyCensus() {
+  return { patients: 0, payments: 0, treatments: 0, appointments: 0, total: 0 };
+}
+
+function pairingCompleteBody(code, extra = {}) {
+  const census = extra.census || emptyCensus();
+  const challenge = extra.challenge;
+  const installationId = extra.installationId || '';
+  const protocolVersion = extra.protocolVersion == null ? 2 : extra.protocolVersion;
+  const proofInput = {
+    protocolVersion,
+    challenge,
+    installationId,
+    emptyClinic: extra.emptyClinic !== false,
+    census,
+  };
+  const body = {
+    code,
+    deviceName: extra.deviceName || 'Test PC',
+    installationId,
+    emptyClinic: extra.emptyClinic !== false,
+    census,
+    protocolVersion,
+    challenge,
+    censusProof: extra.censusProof || signCensusProof(code, proofInput),
+  };
+  if (extra.omitProof) delete body.censusProof;
+  if (extra.omitChallenge) delete body.challenge;
+  return body;
 }
 
 function setupPayload(clinicName, username) {
@@ -189,6 +252,8 @@ async function main() {
 
     const pairing = await request('POST', '/sync/pairing/start', { token: tokenA, expected: [200, 201] });
     assert(pairing.data.code, 'pairing code missing');
+    assert(pairing.data.challenge, 'pairing start must issue a census challenge');
+    assert(pairing.data.protocolVersion === 2, 'pairing start must advertise protocol v2');
     assert(pairing.data.clinicName === 'Sync Clinic A', 'pairing start must show clinic name');
     assert(pairing.data.clinicId === clinicA.data.user.clinicId, 'pairing start must show clinic id');
     assert(pairing.data.onlineUrl, 'pairing start must show Online URL');
@@ -198,6 +263,7 @@ async function main() {
     });
     assert(preview.data.clinicName === 'Sync Clinic A', 'preview must confirm clinic name');
     assert(preview.data.clinicId === clinicA.data.user.clinicId, 'preview must confirm clinic id');
+    assert(preview.data.challenge === pairing.data.challenge, 'preview must return the pairing challenge');
     assert(!preview.data.deviceSecret && !preview.data.deviceId, 'preview must not issue device credentials');
     const previewAgain = await request('POST', '/sync/pairing/preview', {
       body: { code: pairing.data.code },
@@ -212,7 +278,7 @@ async function main() {
       body: { onlineUrl: 'https://dentalnova.dibnova.com', pairingCode: pairing.data.code },
     });
     assert(connectOnOnline.status === 400, `Online server must not accept Offline connect (got ${connectOnOnline.status})`);
-    const emptyCensus = { patients: 0, payments: 0, treatments: 0, appointments: 0, total: 0 };
+    const emptyCensusPayload = emptyCensus();
     const refusePopulated = await request('POST', '/sync/pairing/complete', {
       body: { code: pairing.data.code, deviceName: 'Test PC', emptyClinic: false },
     });
@@ -222,16 +288,35 @@ async function main() {
     });
     assert(refuseNoCensus.status === 400, `pairing without census must be rejected (got ${refuseNoCensus.status})`);
     const refuseNonZeroCensus = await request('POST', '/sync/pairing/complete', {
-      body: {
-        code: pairing.data.code,
-        deviceName: 'Test PC',
-        emptyClinic: true,
+      body: pairingCompleteBody(pairing.data.code, {
+        challenge: pairing.data.challenge,
         census: { patients: 2, payments: 0, treatments: 0, appointments: 0, total: 2 },
-      },
+      }),
     });
     assert(refuseNonZeroCensus.status === 400, `non-zero census must be rejected (got ${refuseNonZeroCensus.status})`);
+    const refuseBadProof = await request('POST', '/sync/pairing/complete', {
+      body: pairingCompleteBody(pairing.data.code, {
+        challenge: pairing.data.challenge,
+        census: emptyCensusPayload,
+        censusProof: 'aa'.repeat(32),
+      }),
+    });
+    assert(refuseBadProof.status === 400, `forged census proof must be rejected (got ${refuseBadProof.status})`);
+    const refuseNoProof = await request('POST', '/sync/pairing/complete', {
+      body: pairingCompleteBody(pairing.data.code, {
+        challenge: pairing.data.challenge,
+        census: emptyCensusPayload,
+        omitProof: true,
+      }),
+    });
+    assert(refuseNoProof.status === 400, `pairing without censusProof must be rejected (got ${refuseNoProof.status})`);
     const complete = await request('POST', '/sync/pairing/complete', {
-      body: { code: pairing.data.code, deviceName: 'Test PC', installationId: 'inst-a', emptyClinic: true, census: emptyCensus },
+      body: pairingCompleteBody(pairing.data.code, {
+        challenge: pairing.data.challenge,
+        installationId: 'inst-a',
+        census: emptyCensusPayload,
+        deviceName: 'Test PC',
+      }),
       expected: [200, 201],
     });
     assert(complete.data.deviceId && complete.data.deviceSecret, 'device credentials missing');
@@ -244,6 +329,18 @@ async function main() {
       expected: [200, 201],
     });
     const deviceToken = deviceTok.data.accessToken;
+    const oldProtocol = await request('GET', '/sync/changes?since=0', { token: deviceToken, protocol: 1 });
+    assert(oldProtocol.status === 400, `incompatible sync protocol must be refused (got ${oldProtocol.status})`);
+    assert(
+      String(oldProtocol.data?.code || oldProtocol.data?.message || '').includes('PROTOCOL') ||
+        String(oldProtocol.data?.message || '').toLowerCase().includes('incompatible'),
+      'protocol mismatch must be a clear error',
+    );
+    const noProtocol = await request('POST', '/sync/token', {
+      body: { deviceId: complete.data.deviceId, deviceSecret: complete.data.deviceSecret },
+      protocol: false,
+    });
+    assert(noProtocol.status === 400, `token without protocol header must be refused (got ${noProtocol.status})`);
     const meDevice = await request('GET', '/auth/me', { token: deviceToken });
     assert(meDevice.status === 401, 'device JWT must not be a doctor session');
     const statusA = await request('GET', '/sync/status', { token: tokenA, expected: 200 });
@@ -308,12 +405,11 @@ async function main() {
 
     const pairingB = await request('POST', '/sync/pairing/start', { token: tokenB, expected: [200, 201] });
     const completeB = await request('POST', '/sync/pairing/complete', {
-      body: {
-        code: pairingB.data.code,
+      body: pairingCompleteBody(pairingB.data.code, {
+        challenge: pairingB.data.challenge,
         deviceName: 'PC B',
-        emptyClinic: true,
-        census: { patients: 0, payments: 0, treatments: 0, appointments: 0, total: 0 },
-      },
+        census: emptyCensus(),
+      }),
       expected: [200, 201],
     });
     const tokB = await request('POST', '/sync/token', {

@@ -46,6 +46,10 @@ export type EmptyClinicCensusPayload = {
   payments: number;
   treatments: number;
   appointments: number;
+  expenses?: number;
+  labCases?: number;
+  prescriptions?: number;
+  notes?: number;
   total: number;
 };
 
@@ -55,19 +59,18 @@ export function censusAttestationFromClinic(census: ClinicCensus): EmptyClinicCe
     payments: census.counts.payments ?? 0,
     treatments: census.counts.patient_treatments ?? 0,
     appointments: census.counts.appointments ?? 0,
+    expenses: census.counts.clinic_expenses ?? 0,
+    labCases: census.counts.lab_cases ?? 0,
+    prescriptions: census.counts.prescriptions ?? 0,
+    notes: census.counts.clinical_visit_notes ?? 0,
     total: census.total,
   };
 }
 
 export function isEmptyCensusAttestation(census: EmptyClinicCensusPayload | null | undefined): boolean {
   if (!census) return false;
-  return (
-    Number(census.patients) === 0 &&
-    Number(census.payments) === 0 &&
-    Number(census.treatments) === 0 &&
-    Number(census.appointments) === 0 &&
-    Number(census.total) === 0
-  );
+  const values = Object.values(census).map((v) => Number(v) || 0);
+  return values.length > 0 && values.every((n) => n === 0);
 }
 
 export const POPULATED_OFFLINE_CODE = 'POPULATED_OFFLINE_BLOCKED';

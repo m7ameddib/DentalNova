@@ -116,6 +116,90 @@ export class ObjectStorageService implements OnModuleInit {
     return null;
   }
 
+  localStat(relativePath: string): { bytes: number; sha256: string } | null {
+    const local = this.uploads.resolveManagedPath(relativePath);
+    if (!local || !fs.existsSync(local)) return null;
+    const bytes = fs.readFileSync(local);
+    return { bytes: bytes.length, sha256: createHash('sha256').update(bytes).digest('hex') };
+  }
+
+  readRange(relativePath: string, offset: number, length: number): Buffer | null {
+    const local = this.uploads.resolveManagedPath(relativePath);
+    if (!local || !fs.existsSync(local)) return null;
+    const fd = fs.openSync(local, 'r');
+    try {
+      const size = fs.fstatSync(fd).size;
+      if (offset < 0 || offset >= size) return Buffer.alloc(0);
+      const take = Math.min(length, size - offset);
+      const buf = Buffer.alloc(take);
+      fs.readSync(fd, buf, 0, take, offset);
+      return buf;
+    } finally {
+      fs.closeSync(fd);
+    }
+  }
+
+  beginPartial(relativePath: string, byteSize: number): void {
+    const part = this.partialPath(relativePath);
+    if (!part) throw new Error('Invalid storage path');
+    fs.mkdirSync(path.dirname(part), { recursive: true });
+    const fd = fs.openSync(part, 'w');
+    try {
+      fs.ftruncateSync(fd, byteSize);
+    } finally {
+      fs.closeSync(fd);
+    }
+    fs.writeFileSync(`${part}.meta.json`, JSON.stringify({ relativePath, byteSize, received: 0 }));
+  }
+
+  writePartialRange(relativePath: string, offset: number, chunk: Buffer, expectedSize: number): { received: number } {
+    const part = this.partialPath(relativePath);
+    if (!part) throw new Error('Invalid storage path');
+    if (!fs.existsSync(part)) throw new Error('File upload has not started');
+    if (offset < 0 || offset + chunk.length > expectedSize) throw new Error('File chunk is out of range');
+    const fd = fs.openSync(part, 'r+');
+    try {
+      fs.writeSync(fd, chunk, 0, chunk.length, offset);
+    } finally {
+      fs.closeSync(fd);
+    }
+    const metaFile = `${part}.meta.json`;
+    let received = chunk.length;
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8')) as { received?: number };
+      received = (Number(meta.received) || 0) + chunk.length;
+    } catch {
+      /* first chunk */
+    }
+    fs.writeFileSync(metaFile, JSON.stringify({ relativePath, byteSize: expectedSize, received }));
+    return { received };
+  }
+
+  async finalizePartial(relativePath: string, sha256: string, mimeType?: string | null): Promise<{ bytes: number; sha256: string }> {
+    const part = this.partialPath(relativePath);
+    const local = this.uploads.resolveManagedPath(relativePath);
+    if (!part || !local) throw new Error('Invalid storage path');
+    if (!fs.existsSync(part)) throw new Error('File upload has not started');
+    const bytes = fs.readFileSync(part);
+    const digest = createHash('sha256').update(bytes).digest('hex');
+    if (digest !== sha256) {
+      throw new Error('File checksum did not match');
+    }
+    fs.mkdirSync(path.dirname(local), { recursive: true });
+    fs.renameSync(part, local);
+    try {
+      fs.unlinkSync(`${part}.meta.json`);
+    } catch {
+      /* ignore */
+    }
+    await this.putObject(relativePath, bytes, mimeType);
+    return { bytes: bytes.length, sha256: digest };
+  }
+
+  private partialPath(relativePath: string): string | null {
+    return this.uploads.resolveManagedPath(`${relativePath}.part`);
+  }
+
   async deleteObject(relativePath: string): Promise<void> {
     this.uploads.deleteManagedFile(relativePath);
     if (this.s3) {

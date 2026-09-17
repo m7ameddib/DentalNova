@@ -865,6 +865,7 @@ export class PlatformService implements OnModuleInit {
         created_by_user_id INTEGER,
         expires_at TEXT NOT NULL,
         used_at TEXT,
+        challenge TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now'))
       );
       CREATE TABLE IF NOT EXISTS sync_registered_devices (
@@ -900,6 +901,7 @@ export class PlatformService implements OnModuleInit {
     `);
     this.addColumnIfMissing('clinics', 'trial_type', 'TEXT');
     this.addColumnIfMissing('clinics', 'doctor_name', 'TEXT');
+    this.addColumnIfMissing('sync_pairing_codes', 'challenge', 'TEXT');
     this.migrateTrialPasswords();
   }
 
@@ -951,32 +953,38 @@ export class PlatformService implements OnModuleInit {
     this.db.prepare(`UPDATE clinic_signup_invites SET used_at = datetime('now') WHERE id = ?`).run(row.id);
   }
 
-  createPairingCode(clinicId: string, createdByUserId: number, ttlMinutes = 10): { code: string; expiresAt: string } {
+  createPairingCode(clinicId: string, createdByUserId: number, ttlMinutes = 10): {
+    code: string;
+    expiresAt: string;
+    challenge: string;
+  } {
     this.assertEnabled();
     this.requireClinic(clinicId);
     const alphabet = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     let code = '';
     for (let i = 0; i < 8; i += 1) code += alphabet[crypto.randomInt(0, alphabet.length)];
     const expiresAt = new Date(Date.now() + ttlMinutes * 60 * 1000).toISOString();
+    const challenge = crypto.randomBytes(32).toString('hex');
     this.db
       .prepare(
-        `INSERT INTO sync_pairing_codes (code_hash, clinic_id, created_by_user_id, expires_at) VALUES (?, ?, ?, ?)`,
+        `INSERT INTO sync_pairing_codes (code_hash, clinic_id, created_by_user_id, expires_at, challenge)
+         VALUES (?, ?, ?, ?, ?)`,
       )
-      .run(this.hashToken(code), clinicId, createdByUserId, expiresAt);
-    return { code, expiresAt };
+      .run(this.hashToken(code), clinicId, createdByUserId, expiresAt, challenge);
+    return { code, expiresAt, challenge };
   }
 
-  peekPairingCode(code: string): { clinicId: string; expiresAt: string } {
+  peekPairingCode(code: string): { clinicId: string; expiresAt: string; challenge: string } {
     this.assertEnabled();
     const row = this.db
-      .prepare(`SELECT clinic_id, expires_at, used_at FROM sync_pairing_codes WHERE code_hash = ?`)
+      .prepare(`SELECT clinic_id, expires_at, used_at, challenge FROM sync_pairing_codes WHERE code_hash = ?`)
       .get(this.hashToken(code.trim().toUpperCase())) as
-      | { clinic_id: string; expires_at: string; used_at: string | null }
+      | { clinic_id: string; expires_at: string; used_at: string | null; challenge: string | null }
       | undefined;
     if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
       throw new Error('INVALID_PAIRING');
     }
-    return { clinicId: row.clinic_id, expiresAt: row.expires_at };
+    return { clinicId: row.clinic_id, expiresAt: row.expires_at, challenge: row.challenge || '' };
   }
 
   consumePairingCode(code: string): string {
