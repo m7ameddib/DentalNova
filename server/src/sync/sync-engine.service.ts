@@ -19,18 +19,18 @@ import {
   setCheckpoint,
   unresolvedConflictCount,
 } from './sync-apply.util';
-import { SyncChangePayload } from './sync.entities';
+import { SyncChangePayload, SYNC_ENTITY_BY_NAME, IDENTITY_RECONCILE_ENTITY_SET } from './sync.entities';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { clinicOperationalCensus, OPERATIONAL_TABLES, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
 import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished } from './bootstrap.util';
-import { SYNC_ENTITY_BY_NAME } from './sync.entities';
+import { ackPreBootstrapHoldOutbound } from './sync-schema';
 import {
   describeOnlineReachabilityError,
   friendlyStoredSyncError,
   messageFromOnlineResponse,
 } from './online-reachability.util';
-import { PUSH_BATCH_MAX_ITEMS, PUSH_BATCH_MAX_JSON_BYTES, PUSH_MAX_ROUNDS, splitPushBatch } from './push-batch.util';
+import { PUSH_BATCH_MAX_ITEMS, PUSH_BATCH_MAX_JSON_BYTES, PUSH_MAX_ROUNDS, pushRoundFollowUp, splitPushBatch } from './push-batch.util';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
@@ -168,11 +168,13 @@ export class SyncEngineService {
     this.writePeerValue('last_error', '');
     try {
       const token = await this.deviceToken(peer);
+      await this.reconcileCatalogIdentity(peer, token);
       let pushed = 0;
       let maxItems = PUSH_BATCH_MAX_ITEMS;
       let maxBytes = PUSH_BATCH_MAX_JSON_BYTES;
+      const skipThisCycle = new Set<string>();
       for (let round = 0; round < PUSH_MAX_ROUNDS; round += 1) {
-        const outbound = pendingOutbound(this.db.connection, 200);
+        const outbound = pendingOutbound(this.db.connection, 200, skipThisCycle);
         if (outbound.length === 0) break;
         const batch = splitPushBatch(outbound, maxItems, maxBytes);
         const res = await this.onlineFetch(peer, token, '/api/sync/push', {
@@ -199,10 +201,14 @@ export class SyncEngineService {
         if (data.conflicts?.length) {
           recordInboundConflicts(this.db.connection, data.conflicts);
         }
-        const done = [...data.accepted, ...(data.skipped ?? [])];
-        markAcked(this.db.connection, done);
+        const follow = pushRoundFollowUp({
+          batchIds: batch.map((change) => change.changeId),
+          accepted: data.accepted,
+          skipped: data.skipped ?? [],
+        });
+        markAcked(this.db.connection, follow.acked);
         pushed += data.accepted.length;
-        if (done.length === 0) break;
+        for (const id of follow.skipThisCycle) skipThisCycle.add(id);
       }
 
       let pulled = 0;
@@ -303,8 +309,8 @@ export class SyncEngineService {
         }
         const batch = data.changes ?? [];
         if (batch.length > 0) {
-          applyChanges(this.db.connection, batch, 'online-server');
-          pulled += batch.length;
+          const applied = applyChanges(this.db.connection, batch, 'online-server');
+          pulled += applied.accepted.length;
           afterEntity = data.nextAfterEntity;
           afterId = data.nextAfterId;
           if (afterEntity) this.writePeerValue('bootstrap_after_entity', afterEntity);
@@ -328,6 +334,8 @@ export class SyncEngineService {
         );
       }
       if (onlineCheckpoint != null) setCheckpoint(this.db.connection, onlineCheckpoint);
+      ackPreBootstrapHoldOutbound(this.db.connection);
+      this.writePeerValue('catalog_uids_reconciled', '1');
       await this.syncAttachmentBlobs(peer, token);
       const checkpoint = currentCheckpoint(this.db.connection);
       await this.reportCheckpoint(peer, token, checkpoint);
@@ -452,6 +460,47 @@ export class SyncEngineService {
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`)
       .get(name);
     return Boolean(row);
+  }
+
+  private async reconcileCatalogIdentity(
+    peer: { onlineBaseUrl: string },
+    token: string,
+  ): Promise<void> {
+    if (this.readPeerValue('catalog_uids_reconciled') === '1') return;
+    let afterEntity: string | undefined;
+    let afterId: number | undefined;
+    for (let i = 0; i < MAX_BOOTSTRAP_PAGES; i += 1) {
+      const qs = new URLSearchParams();
+      if (afterEntity) qs.set('afterEntity', afterEntity);
+      if (afterId != null) qs.set('afterId', String(afterId));
+      qs.set('limit', String(BOOTSTRAP_PAGE_SIZE));
+      const res = await this.onlineFetch(peer, token, `/api/sync/snapshot?${qs.toString()}`, { method: 'GET' });
+      const data = await this.readOnlineJson<{
+        changes?: SyncChangePayload[];
+        hasMore?: boolean;
+        nextAfterEntity?: string;
+        nextAfterId?: number;
+      }>(res);
+      if (!res.ok) {
+        throw new Error(
+          messageFromOnlineResponse(res.status, data, `Could not reconcile clinic catalogs (HTTP ${res.status}).`),
+        );
+      }
+      const batch = (data.changes ?? []).filter((change) => IDENTITY_RECONCILE_ENTITY_SET.has(change.entity));
+      if (batch.length > 0) applyChanges(this.db.connection, batch, 'online-server');
+      afterEntity = data.nextAfterEntity;
+      afterId = data.nextAfterId;
+      const finished = bootstrapSnapshotFinished({
+        changesLength: data.changes?.length ?? 0,
+        hasMore: data.hasMore,
+        pageSize: BOOTSTRAP_PAGE_SIZE,
+      });
+      const pastCatalogs =
+        Boolean(afterEntity) && !IDENTITY_RECONCILE_ENTITY_SET.has(afterEntity as string) && batch.length === 0;
+      if (finished || pastCatalogs) break;
+    }
+    ackPreBootstrapHoldOutbound(this.db.connection);
+    this.writePeerValue('catalog_uids_reconciled', '1');
   }
 
   private async reportCheckpoint(
