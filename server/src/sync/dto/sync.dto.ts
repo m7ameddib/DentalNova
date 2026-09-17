@@ -32,6 +32,26 @@ export class PairingCensusDto {
   @IsInt()
   @Min(0)
   total!: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  expenses?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  labCases?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  prescriptions?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  notes?: number;
 }
 
 export class PairingPreviewDto {
@@ -69,6 +89,20 @@ export class PairingCompleteDto {
   @ValidateNested()
   @Type(() => PairingCensusDto)
   census!: PairingCensusDto;
+
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  protocolVersion!: number;
+
+  @IsString()
+  @MinLength(16)
+  challenge!: string;
+
+  /** HMAC-SHA256 hex of the canonical empty-census payload, keyed by the pairing code. */
+  @IsString()
+  @MinLength(64)
+  censusProof!: string;
 }
 
 export class ConnectOnlineDto {
@@ -106,4 +140,48 @@ export class PushChangesDto {
 export class ResolveConflictDto {
   @IsString()
   resolution!: 'keep_local' | 'keep_remote';
+}
+
+export class FileBeginDto {
+  @IsString()
+  relativePath!: string;
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+
+  @IsInt()
+  @Min(1)
+  @Type(() => Number)
+  byteSize!: number;
+
+  @IsOptional()
+  @IsString()
+  sha256?: string;
+}
+
+export class FileChunkDto {
+  @IsString()
+  relativePath!: string;
+
+  @IsInt()
+  @Min(0)
+  @Type(() => Number)
+  offset!: number;
+
+  @IsString()
+  contentBase64!: string;
+}
+
+export class FileFinishDto {
+  @IsString()
+  relativePath!: string;
+
+  @IsString()
+  @MinLength(64)
+  sha256!: string;
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
 }

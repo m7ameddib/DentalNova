@@ -306,9 +306,16 @@ export function applyChanges(
   return { accepted, skipped, conflicts };
 }
 
-/** Transient apply failures must be retried; do not advance the pull checkpoint past them. */
+/** Transient apply failures must be retried; do not advance the pull checkpoint past them.
+ * Other conflicts may advance only when the remote row is stored for review. */
+export function conflictIsRecoverable(conflict: ApplyConflict): boolean {
+  if (conflict.reason === 'apply-error') return false;
+  if (conflict.reason === 'file-number-collision') return true;
+  return Boolean(conflict.row || conflict.current);
+}
+
 export function canAdvancePullCheckpoint(applied: ApplyResult): boolean {
-  return !applied.conflicts.some((c) => c.reason === 'apply-error');
+  return applied.conflicts.every((conflict) => conflictIsRecoverable(conflict));
 }
 
 export function recordInboundConflicts(
@@ -477,6 +484,7 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
       const snap = snapshotRow(db, 'payments', cand.local_id);
       if (snap && paymentFingerprint(snap) === fp) {
         recordConflict(db, 'payments', change.recordUid, 'duplicate-payment-fingerprint', snap, change.row);
+        appendRemoteLog(db, change, deviceId, cand.local_id);
         return 'duplicate-payment-fingerprint';
       }
     }
@@ -492,6 +500,7 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
       const current = snapshotRow(db, change.entity, localId);
       if (current && rowsDiffer(current, change.row, def.skipColumns)) {
         recordConflict(db, change.entity, change.recordUid, 'concurrent-edit', current, change.row);
+        appendRemoteLog(db, change, deviceId, localId);
         return 'concurrent-edit';
       }
     }

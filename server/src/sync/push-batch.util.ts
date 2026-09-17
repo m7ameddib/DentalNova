@@ -3,7 +3,7 @@ import { SyncChangePayload } from './sync.entities';
 /** Stay under Express/Nest default 100kb and typical reverse-proxy limits. */
 export const PUSH_BATCH_MAX_ITEMS = 40;
 export const PUSH_BATCH_MAX_JSON_BYTES = 80_000;
-export const PUSH_MAX_ROUNDS = 50;
+export const PUSH_MAX_ROUNDS = 500;
 
 export function jsonBytes(value: unknown): number {
   return Buffer.byteLength(JSON.stringify(value));

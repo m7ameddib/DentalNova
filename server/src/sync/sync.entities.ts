@@ -38,7 +38,13 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
     conflict: 'lww-safe',
   },
   { name: 'disease_catalog', table: 'disease_catalog', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['name'], collateNocase: true } },
-  { name: 'medication_catalog', table: 'medication_catalog', fks: {}, conflict: 'lww-safe' },
+  {
+    name: 'medication_catalog',
+    table: 'medication_catalog',
+    fks: {},
+    conflict: 'lww-safe',
+    naturalKey: { columns: ['name'], collateNocase: true },
+  },
   {
     name: 'users',
     table: 'users',

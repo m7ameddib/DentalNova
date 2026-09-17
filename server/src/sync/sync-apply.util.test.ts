@@ -609,13 +609,30 @@ test('keep_local enqueues an outbound upsert so Online receives the chosen row',
   db.close();
 });
 
-test('apply-error conflicts block pull checkpoint advance', () => {
+test('apply-error and unrecovered concurrent-edits block pull checkpoint advance', () => {
   assert.equal(canAdvancePullCheckpoint({ accepted: ['a'], skipped: [], conflicts: [] }), true);
   assert.equal(
     canAdvancePullCheckpoint({
       accepted: ['a'],
       skipped: [],
       conflicts: [{ changeId: 'b', entity: 'patients', recordUid: 'u', reason: 'concurrent-edit' }],
+    }),
+    false,
+  );
+  assert.equal(
+    canAdvancePullCheckpoint({
+      accepted: ['a'],
+      skipped: [],
+      conflicts: [
+        {
+          changeId: 'b',
+          entity: 'patients',
+          recordUid: 'u',
+          reason: 'concurrent-edit',
+          row: { fullName: 'Remote' },
+          current: { fullName: 'Local' },
+        },
+      ],
     }),
     true,
   );
@@ -649,6 +666,10 @@ function pairingDbs() {
     CREATE TABLE areas (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL UNIQUE COLLATE NOCASE
+    );
+    CREATE TABLE medication_catalog (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL COLLATE NOCASE
     );
     CREATE TABLE guarantors (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1107,6 +1128,36 @@ test('populated Offline pairing census is blocked; empty catalogs are not', () =
   assert.equal(pendingOutbound(offline).some((c) => c.entity === 'patients'), false);
   offline.prepare(`INSERT INTO patients (full_name, file_number) VALUES ('Local only', 'P-1')`).run();
   assert.equal(pendingOutbound(offline).some((c) => c.entity === 'patients'), true);
+  offline.close();
+});
+
+test('medication_catalog adopts by unique name instead of duplicating', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO medication_catalog (name) VALUES ('Amoxicillin')`).run();
+  offline.prepare(`INSERT INTO medication_catalog (name) VALUES ('amoxicillin')`).run();
+  const onlineUid = snapshotRow(online, 'medication_catalog', 1)!.recordUid as string;
+  const offlineUid = snapshotRow(offline, 'medication_catalog', 1)!.recordUid as string;
+  assert.notEqual(onlineUid, offlineUid);
+  const applied = applyChanges(
+    offline,
+    [
+      {
+        changeId: 'med-1',
+        entity: 'medication_catalog',
+        recordUid: onlineUid,
+        op: 'upsert',
+        row: { name: 'Amoxicillin' },
+      },
+    ],
+    'online-server',
+  );
+  assert.equal(applied.conflicts.length, 0);
+  assert.equal((offline.prepare(`SELECT COUNT(*) AS c FROM medication_catalog`).get() as { c: number }).c, 1);
+  const mapped = offline
+    .prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'medication_catalog' AND local_id = 1`)
+    .get() as { uid: string };
+  assert.equal(mapped.uid, onlineUid);
+  online.close();
   offline.close();
 });
 

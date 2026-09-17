@@ -26,17 +26,28 @@ import { clinicOperationalCensus, OPERATIONAL_TABLES, POPULATED_OFFLINE_CODE, po
 import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished, snapshotOpeningCheckpoint } from './bootstrap.util';
 import { ackPreBootstrapHoldOutbound } from './sync-schema';
 import {
-  canResumeIncompleteBootstrap,
-  rememberOpeningCheckpoint,
-  shouldRefreshDeviceToken,
-  shouldRunBootstrapBeforeCycle,
-} from './sync-cycle.util';
-import {
   describeOnlineReachabilityError,
   friendlyStoredSyncError,
   messageFromOnlineResponse,
 } from './online-reachability.util';
 import { PUSH_BATCH_MAX_ITEMS, PUSH_BATCH_MAX_JSON_BYTES, PUSH_MAX_ROUNDS, pushRoundFollowUp, splitPushBatch } from './push-batch.util';
+import {
+  canResumeIncompleteBootstrap,
+  PULL_MAX_PAGES,
+  rememberOpeningCheckpoint,
+  shouldContinueSyncLoop,
+  shouldRefreshDeviceToken,
+  shouldRunBootstrapBeforeCycle,
+} from './sync-cycle.util';
+import {
+  FILE_CHUNK_BYTES,
+  FILE_INLINE_MAX_BYTES,
+  FILE_MAX_BYTES,
+  nextAttachmentRetryAt,
+  sha256Hex,
+  shouldRetryAttachment,
+} from './sync-files.util';
+import { syncProtocolHeaders } from './sync-protocol.util';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
@@ -158,7 +169,7 @@ export class SyncEngineService {
     return { ok: true };
   }
 
-  async runOfflineCycle(): Promise<{ pushed: number; pulled: number; conflicts: number; error?: string }> {
+  async runOfflineCycle(opts?: { forceAttachments?: boolean }): Promise<{ pushed: number; pulled: number; conflicts: number; error?: string }> {
     if (this.running) {
       return {
         pushed: 0,
@@ -180,6 +191,7 @@ export class SyncEngineService {
     this.writePeerValue('last_error', '');
     let pushed = 0;
     let pulled = 0;
+    const cycleStarted = Date.now();
     try {
       const session = await this.newDeviceSession(peer);
       if (shouldRunBootstrapBeforeCycle(this.readPeerValue('bootstrapped_at'))) {
@@ -193,6 +205,18 @@ export class SyncEngineService {
       let maxBytes = PUSH_BATCH_MAX_JSON_BYTES;
       const skipThisCycle = new Set<string>();
       for (let round = 0; round < PUSH_MAX_ROUNDS; round += 1) {
+        if (
+          !shouldContinueSyncLoop({
+            startedAtMs: cycleStarted,
+            nowMs: Date.now(),
+            round,
+            maxRounds: PUSH_MAX_ROUNDS,
+            madeProgress: true,
+            exhausted: false,
+          })
+        ) {
+          break;
+        }
         await this.refreshDeviceSession(peer, session);
         const outbound = pendingOutbound(this.db.connection, 200, skipThisCycle);
         if (outbound.length === 0) break;
@@ -238,10 +262,10 @@ export class SyncEngineService {
         for (const id of follow.skipThisCycle) skipThisCycle.add(id);
       }
 
-      pulled += await this.pullRemoteChanges(peer, session);
+      pulled += await this.pullRemoteChanges(peer, session, cycleStarted);
       const since = currentCheckpoint(this.db.connection);
       await this.reportCheckpoint(peer, session.token, since);
-      await this.syncAttachmentBlobs(peer, session.token);
+      await this.syncAttachmentBlobs(peer, session.token, Boolean(opts?.forceAttachments));
       this.writePeerValue('last_synced_at', new Date().toISOString());
       return { pushed, pulled, conflicts: unresolvedConflictCount(this.db.connection) };
     } catch (err) {
@@ -366,7 +390,7 @@ export class SyncEngineService {
     pulled += await this.pullRemoteChanges(peer, session);
     ackPreBootstrapHoldOutbound(this.db.connection);
     this.writePeerValue('catalog_uids_reconciled', '1');
-    await this.syncAttachmentBlobs(peer, session.token);
+    await this.syncAttachmentBlobs(peer, session.token, true);
     const checkpoint = currentCheckpoint(this.db.connection);
     await this.reportCheckpoint(peer, session.token, checkpoint);
     this.writePeerValue('last_synced_at', new Date().toISOString());
@@ -381,10 +405,22 @@ export class SyncEngineService {
     }
   }
 
-  private async pullRemoteChanges(peer: DevicePeer, session: DeviceSession): Promise<number> {
+  private async pullRemoteChanges(peer: DevicePeer, session: DeviceSession, cycleStartedMs = Date.now()): Promise<number> {
     let pulled = 0;
     let since = currentCheckpoint(this.db.connection);
-    for (let i = 0; i < 20; i += 1) {
+    for (let round = 0; round < PULL_MAX_PAGES; round += 1) {
+      if (
+        !shouldContinueSyncLoop({
+          startedAtMs: cycleStartedMs,
+          nowMs: Date.now(),
+          round,
+          maxRounds: PULL_MAX_PAGES,
+          madeProgress: true,
+          exhausted: false,
+        })
+      ) {
+        break;
+      }
       await this.refreshDeviceSession(peer, session);
       const res = await this.onlineFetch(peer, session.token, `/api/sync/changes?since=${since}&limit=100`, {
         method: 'GET',
@@ -426,17 +462,95 @@ export class SyncEngineService {
 
   async putFileFromDevice(relativePath: string, bytes: Buffer, mimeType?: string) {
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
+    if (bytes.length > FILE_INLINE_MAX_BYTES) throw new Error('File is too large for a single request');
     await this.objectStorage.putObject(relativePath, bytes, mimeType);
-    return { stored: relativePath, bytes: bytes.length };
+    return { stored: relativePath, bytes: bytes.length, sha256: sha256Hex(bytes) };
+  }
+
+  async beginFileFromDevice(relativePath: string, byteSize: number, mimeType?: string, sha256?: string) {
+    if (!relativePath?.trim()) throw new Error('Invalid storage path');
+    if (!Number.isFinite(byteSize) || byteSize < 1 || byteSize > FILE_MAX_BYTES) {
+      throw new Error('File size is not allowed');
+    }
+    this.objectStorage.beginPartial(relativePath, byteSize);
+    return { started: relativePath, byteSize, mimeType: mimeType || null, sha256: sha256 || null };
+  }
+
+  async putFileChunkFromDevice(relativePath: string, offset: number, bytes: Buffer) {
+    if (!relativePath?.trim()) throw new Error('Invalid storage path');
+    const expected = this.partialExpectedSize(relativePath);
+    const result = this.objectStorage.writePartialRange(relativePath, offset, bytes, expected);
+    return { stored: relativePath, offset, bytes: bytes.length, received: result.received };
+  }
+
+  async finishFileFromDevice(relativePath: string, sha256: string, mimeType?: string) {
+    if (!relativePath?.trim()) throw new Error('Invalid storage path');
+    const result = await this.objectStorage.finalizePartial(relativePath, sha256, mimeType);
+    return { stored: relativePath, bytes: result.bytes, sha256: result.sha256 };
   }
 
   async getFileForDevice(relativePath: string) {
     return this.objectStorage.getObject(relativePath);
   }
 
+  async getFileMetaOrInlineForDevice(relativePath: string) {
+    const stat = this.objectStorage.localStat(relativePath);
+    if (!stat) {
+      const bytes = await this.objectStorage.getObject(relativePath);
+      if (!bytes) return { found: false };
+      if (bytes.length > FILE_INLINE_MAX_BYTES) {
+        return { found: true, byteSize: bytes.length, sha256: sha256Hex(bytes), chunked: true };
+      }
+      return { found: true, byteSize: bytes.length, sha256: sha256Hex(bytes), contentBase64: bytes.toString('base64') };
+    }
+    if (stat.bytes > FILE_INLINE_MAX_BYTES) {
+      return { found: true, byteSize: stat.bytes, sha256: stat.sha256, chunked: true };
+    }
+    const bytes = await this.objectStorage.getObject(relativePath);
+    if (!bytes) return { found: false };
+    return { found: true, byteSize: bytes.length, sha256: sha256Hex(bytes), contentBase64: bytes.toString('base64') };
+  }
+
+  async getFileChunkForDevice(relativePath: string, offset: number, limit: number) {
+    const stat = this.objectStorage.localStat(relativePath);
+    if (!stat) {
+      const full = await this.objectStorage.getObject(relativePath);
+      if (!full) return { found: false };
+      const take = Math.min(limit > 0 ? limit : FILE_CHUNK_BYTES, FILE_CHUNK_BYTES, Math.max(0, full.length - offset));
+      const slice = full.subarray(offset, offset + take);
+      return {
+        found: true,
+        offset,
+        byteSize: full.length,
+        sha256: sha256Hex(full),
+        contentBase64: slice.toString('base64'),
+        hasMore: offset + slice.length < full.length,
+      };
+    }
+    const take = Math.min(limit > 0 ? limit : FILE_CHUNK_BYTES, FILE_CHUNK_BYTES);
+    const slice = this.objectStorage.readRange(relativePath, offset, take);
+    if (slice == null) return { found: false };
+    return {
+      found: true,
+      offset,
+      byteSize: stat.bytes,
+      sha256: stat.sha256,
+      contentBase64: slice.toString('base64'),
+      hasMore: offset + slice.length < stat.bytes,
+    };
+  }
+
+  private partialExpectedSize(relativePath: string): number {
+    const part = `${relativePath}.part`;
+    const metaPath = this.objectStorage.localStat(part);
+    if (metaPath) return metaPath.bytes;
+    throw new Error('File upload has not started');
+  }
+
   private async syncAttachmentBlobs(
     peer: { onlineBaseUrl: string },
     token: string,
+    force = false,
   ): Promise<void> {
     if (!this.tableExists('patient_attachments')) return;
     const rows = this.db.connection
@@ -446,7 +560,7 @@ export class SyncEngineService {
     const concurrency = 3;
     for (let i = 0; i < pending.length; i += concurrency) {
       const slice = pending.slice(i, i + concurrency);
-      await Promise.all(slice.map((row) => this.syncOneAttachment(peer, token, row)));
+      await Promise.all(slice.map((row) => this.syncOneAttachment(peer, token, row, force)));
     }
   }
 
@@ -454,72 +568,199 @@ export class SyncEngineService {
     peer: { onlineBaseUrl: string },
     token: string,
     row: { storedPath: string; mimeType: string | null },
+    force = false,
   ): Promise<void> {
     try {
-      const already = this.tableExists('sync_file_objects')
-        ? (this.db.connection
-            .prepare(`SELECT uploaded_at AS uploadedAt FROM sync_file_objects WHERE record_uid = ?`)
-            .get(row.storedPath) as { uploadedAt?: string } | undefined)
-        : undefined;
+      const state = this.fileSyncState(row.storedPath);
+      if (
+        !shouldRetryAttachment({
+          uploadedAt: state?.uploadedAt,
+          attemptCount: state?.attemptCount,
+          nextRetryAt: state?.nextRetryAt,
+          force,
+        })
+      ) {
+        return;
+      }
       const local = await this.objectStorage.getObject(row.storedPath);
       if (local && local.length > 0) {
-        if (already?.uploadedAt) return;
-        const encoded = local.toString('base64');
-        const res = await this.onlineFetch(peer, token, '/api/sync/files', {
-          method: 'POST',
-          body: JSON.stringify({
-            relativePath: row.storedPath,
-            contentBase64: encoded,
-            mimeType: row.mimeType,
-          }),
-        });
-        if (res.ok) this.markFileUploaded(row.storedPath, local.length, row.mimeType);
-        else this.markFileError(row.storedPath, `upload-${res.status}`);
+        if (state?.uploadedAt) return;
+        await this.uploadAttachmentBytes(peer, token, row, local);
         return;
       }
-      const res = await this.onlineFetch(
-        peer,
-        token,
-        `/api/sync/files?path=${encodeURIComponent(row.storedPath)}`,
-        { method: 'GET' },
-      );
-      const data = (await res.json().catch(() => ({}))) as { found?: boolean; contentBase64?: string };
-      if (res.ok && data.found && data.contentBase64) {
-        await this.objectStorage.putObject(row.storedPath, Buffer.from(data.contentBase64, 'base64'), row.mimeType);
-        this.markFileUploaded(row.storedPath, Buffer.from(data.contentBase64, 'base64').length, row.mimeType);
-        return;
-      }
-      if (!res.ok) this.markFileError(row.storedPath, `download-${res.status}`);
+      await this.downloadAttachmentBytes(peer, token, row);
     } catch (err) {
       this.markFileError(row.storedPath, (err as Error).message || 'sync-failed');
     }
   }
 
-  private markFileUploaded(relativePath: string, byteSize: number, mimeType: string | null): void {
+  private async uploadAttachmentBytes(
+    peer: { onlineBaseUrl: string },
+    token: string,
+    row: { storedPath: string; mimeType: string | null },
+    local: Buffer,
+  ): Promise<void> {
+    const digest = sha256Hex(local);
+    if (local.length <= FILE_INLINE_MAX_BYTES) {
+      const res = await this.onlineFetch(peer, token, '/api/sync/files', {
+        method: 'POST',
+        body: JSON.stringify({
+          relativePath: row.storedPath,
+          contentBase64: local.toString('base64'),
+          mimeType: row.mimeType,
+        }),
+      });
+      if (res.ok) this.markFileUploaded(row.storedPath, local.length, row.mimeType, digest);
+      else this.markFileError(row.storedPath, `upload-${res.status}`);
+      return;
+    }
+    const begin = await this.onlineFetch(peer, token, '/api/sync/files/begin', {
+      method: 'POST',
+      body: JSON.stringify({
+        relativePath: row.storedPath,
+        mimeType: row.mimeType,
+        byteSize: local.length,
+        sha256: digest,
+      }),
+    });
+    if (!begin.ok) {
+      this.markFileError(row.storedPath, `upload-begin-${begin.status}`);
+      return;
+    }
+    for (let offset = 0; offset < local.length; offset += FILE_CHUNK_BYTES) {
+      const slice = local.subarray(offset, offset + FILE_CHUNK_BYTES);
+      const chunkRes = await this.onlineFetch(peer, token, '/api/sync/files/chunk', {
+        method: 'POST',
+        body: JSON.stringify({
+          relativePath: row.storedPath,
+          offset,
+          contentBase64: slice.toString('base64'),
+        }),
+      });
+      if (!chunkRes.ok) {
+        this.markFileError(row.storedPath, `upload-chunk-${chunkRes.status}`);
+        return;
+      }
+    }
+    const finish = await this.onlineFetch(peer, token, '/api/sync/files/finish', {
+      method: 'POST',
+      body: JSON.stringify({
+        relativePath: row.storedPath,
+        sha256: digest,
+        mimeType: row.mimeType,
+      }),
+    });
+    if (finish.ok) this.markFileUploaded(row.storedPath, local.length, row.mimeType, digest);
+    else this.markFileError(row.storedPath, `upload-finish-${finish.status}`);
+  }
+
+  private async downloadAttachmentBytes(
+    peer: { onlineBaseUrl: string },
+    token: string,
+    row: { storedPath: string; mimeType: string | null },
+  ): Promise<void> {
+    const metaRes = await this.onlineFetch(
+      peer,
+      token,
+      `/api/sync/files?path=${encodeURIComponent(row.storedPath)}`,
+      { method: 'GET' },
+    );
+    const meta = (await metaRes.json().catch(() => ({}))) as {
+      found?: boolean;
+      contentBase64?: string;
+      chunked?: boolean;
+      byteSize?: number;
+      sha256?: string;
+    };
+    if (!metaRes.ok) {
+      this.markFileError(row.storedPath, `download-${metaRes.status}`);
+      return;
+    }
+    if (!meta.found) return;
+    if (meta.contentBase64 && !meta.chunked) {
+      const bytes = Buffer.from(meta.contentBase64, 'base64');
+      await this.objectStorage.putObject(row.storedPath, bytes, row.mimeType);
+      this.markFileUploaded(row.storedPath, bytes.length, row.mimeType, sha256Hex(bytes));
+      return;
+    }
+    const total = Number(meta.byteSize) || 0;
+    if (total < 1 || total > FILE_MAX_BYTES) {
+      this.markFileError(row.storedPath, 'download-size');
+      return;
+    }
+    const chunks: Buffer[] = [];
+    for (let offset = 0; offset < total; offset += FILE_CHUNK_BYTES) {
+      const qs = new URLSearchParams({
+        path: row.storedPath,
+        offset: String(offset),
+        limit: String(FILE_CHUNK_BYTES),
+      });
+      const chunkRes = await this.onlineFetch(peer, token, `/api/sync/files?${qs.toString()}`, { method: 'GET' });
+      const data = (await chunkRes.json().catch(() => ({}))) as { found?: boolean; contentBase64?: string };
+      if (!chunkRes.ok || !data.found || !data.contentBase64) {
+        this.markFileError(row.storedPath, `download-chunk-${chunkRes.status}`);
+        return;
+      }
+      chunks.push(Buffer.from(data.contentBase64, 'base64'));
+    }
+    const bytes = Buffer.concat(chunks);
+    if (meta.sha256 && sha256Hex(bytes) !== meta.sha256) {
+      this.markFileError(row.storedPath, 'download-checksum');
+      return;
+    }
+    await this.objectStorage.putObject(row.storedPath, bytes, row.mimeType);
+    this.markFileUploaded(row.storedPath, bytes.length, row.mimeType, sha256Hex(bytes));
+  }
+
+  private fileSyncState(relativePath: string): {
+    uploadedAt?: string | null;
+    attemptCount?: number;
+    nextRetryAt?: string | null;
+  } | undefined {
+    if (!this.tableExists('sync_file_objects')) return undefined;
+    return this.db.connection
+      .prepare(
+        `SELECT uploaded_at AS uploadedAt, attempt_count AS attemptCount, next_retry_at AS nextRetryAt
+         FROM sync_file_objects WHERE record_uid = ?`,
+      )
+      .get(relativePath) as
+      | { uploadedAt?: string | null; attemptCount?: number; nextRetryAt?: string | null }
+      | undefined;
+  }
+
+  private markFileUploaded(relativePath: string, byteSize: number, mimeType: string | null, sha256?: string): void {
     if (!this.tableExists('sync_file_objects')) return;
     this.db.connection
       .prepare(
-        `INSERT INTO sync_file_objects (record_uid, relative_path, mime_type, byte_size, uploaded_at, last_error)
-         VALUES (?, ?, ?, ?, datetime('now'), NULL)
+        `INSERT INTO sync_file_objects (record_uid, relative_path, mime_type, byte_size, sha256, uploaded_at, last_error, attempt_count, next_retry_at)
+         VALUES (?, ?, ?, ?, ?, datetime('now'), NULL, 0, NULL)
          ON CONFLICT(record_uid) DO UPDATE SET
            relative_path = excluded.relative_path,
            mime_type = excluded.mime_type,
            byte_size = excluded.byte_size,
+           sha256 = excluded.sha256,
            uploaded_at = excluded.uploaded_at,
-           last_error = NULL`,
+           last_error = NULL,
+           attempt_count = 0,
+           next_retry_at = NULL`,
       )
-      .run(relativePath, relativePath, mimeType, byteSize);
+      .run(relativePath, relativePath, mimeType, byteSize, sha256 ?? null);
   }
 
   private markFileError(relativePath: string, error: string): void {
     if (!this.tableExists('sync_file_objects')) return;
+    const current = this.fileSyncState(relativePath);
+    const attempts = (Number(current?.attemptCount) || 0) + 1;
     this.db.connection
       .prepare(
-        `INSERT INTO sync_file_objects (record_uid, relative_path, last_error)
-         VALUES (?, ?, ?)
-         ON CONFLICT(record_uid) DO UPDATE SET last_error = excluded.last_error`,
+        `INSERT INTO sync_file_objects (record_uid, relative_path, last_error, attempt_count, next_retry_at)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(record_uid) DO UPDATE SET
+           last_error = excluded.last_error,
+           attempt_count = excluded.attempt_count,
+           next_retry_at = excluded.next_retry_at`,
       )
-      .run(relativePath, relativePath, error.slice(0, 300));
+      .run(relativePath, relativePath, error.slice(0, 300), attempts, nextAttachmentRetryAt(attempts - 1));
   }
 
   private tableExists(name: string): boolean {
@@ -610,7 +851,7 @@ export class SyncEngineService {
     try {
       res = await fetch(`${peer.onlineBaseUrl}/api/sync/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...syncProtocolHeaders() },
         body: JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret }),
         signal: AbortSignal.timeout(20_000),
       });
@@ -638,6 +879,7 @@ export class SyncEngineService {
           Accept: 'application/json',
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
+          ...syncProtocolHeaders(),
           ...(init.headers || {}),
         },
         signal: AbortSignal.timeout(45_000),

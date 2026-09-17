@@ -13,6 +13,39 @@ export function ensureSyncInfrastructure(db: Database.Database): void {
   installTriggers(db);
   backfillIdMap(db);
   ackLegacySeedCatalogOutbound(db);
+  ensureFileSyncColumns(db);
+  ensureMedicationCatalogNaturalKey(db);
+}
+
+function ensureColumn(db: Database.Database, table: string, column: string, ddl: string): void {
+  if (!tableExists(db, table)) return;
+  const cols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+  if (cols.includes(column)) return;
+  db.exec(`ALTER TABLE ${table} ADD COLUMN ${ddl}`);
+}
+
+function ensureFileSyncColumns(db: Database.Database): void {
+  ensureColumn(db, 'sync_file_objects', 'attempt_count', 'attempt_count INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'sync_file_objects', 'next_retry_at', 'next_retry_at TEXT');
+}
+
+/** Unique natural key so seed catalogs cannot duplicate across Offline/Online. */
+function ensureMedicationCatalogNaturalKey(db: Database.Database): void {
+  if (!tableExists(db, 'medication_catalog')) return;
+  try {
+    db.exec(`
+      UPDATE medication_catalog
+      SET name = name || ' [' || id || ']'
+      WHERE id NOT IN (
+        SELECT MIN(id) FROM medication_catalog GROUP BY lower(trim(name))
+      )
+    `);
+  } catch {
+    /* table may be empty / locked during tests */
+  }
+  db.exec(
+    `CREATE UNIQUE INDEX IF NOT EXISTS idx_medication_catalog_name_nocase ON medication_catalog(name COLLATE NOCASE)`,
+  );
 }
 
 function installTriggers(db: Database.Database): void {

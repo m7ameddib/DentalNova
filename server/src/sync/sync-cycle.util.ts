@@ -1,6 +1,8 @@
 /** Orchestration helpers for Offline bootstrap / token refresh — kept pure for unit tests. */
 
 export const DEVICE_TOKEN_REFRESH_AFTER_MS = 60 * 60 * 1000;
+export const SYNC_CYCLE_MAX_MS = 8 * 60 * 1000;
+export const PULL_MAX_PAGES = 500;
 
 export function shouldRefreshDeviceToken(issuedAtMs: number, nowMs: number): boolean {
   if (!Number.isFinite(issuedAtMs) || issuedAtMs <= 0) return true;
@@ -39,4 +41,19 @@ export function remoteRowFromConflictJson(remote: unknown): Record<string, unkno
     return obj.row as Record<string, unknown>;
   }
   return obj;
+}
+
+export function shouldContinueSyncLoop(input: {
+  startedAtMs: number;
+  nowMs: number;
+  round: number;
+  maxRounds: number;
+  madeProgress: boolean;
+  exhausted: boolean;
+}): boolean {
+  if (input.exhausted) return false;
+  if (!input.madeProgress) return false;
+  if (input.round >= input.maxRounds) return false;
+  if (input.nowMs - input.startedAtMs >= SYNC_CYCLE_MAX_MS) return false;
+  return true;
 }

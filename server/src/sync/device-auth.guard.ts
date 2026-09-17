@@ -1,10 +1,15 @@
-import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
+import { BadRequestException, CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Request } from 'express';
 import { JwtSecretService } from '../auth/jwt-secret.service';
 import { PlatformService } from '../platform/platform.service';
 import { bindTenant } from '../platform/tenant-context';
 import { SYNC_DEVICE_JWT_ISSUER } from '../auth/jwt-payload.util';
+import {
+  isCompatibleSyncProtocol,
+  protocolVersionFromHeaders,
+  SYNC_PROTOCOL_MISMATCH,
+} from './sync-protocol.util';
 
 export interface SyncDevicePrincipal {
   deviceId: string;
@@ -34,6 +39,10 @@ export class DeviceAuthGuard implements CanActivate {
     }
     if (payload.typ !== 'sync-device' || !payload.deviceId || !payload.clinicId) {
       throw new UnauthorizedException();
+    }
+    const protocol = protocolVersionFromHeaders(req.headers as Record<string, unknown>);
+    if (!isCompatibleSyncProtocol(protocol)) {
+      throw new BadRequestException({ statusCode: 400, message: SYNC_PROTOCOL_MISMATCH, code: 'SYNC_PROTOCOL_MISMATCH' });
     }
     if (!this.platform.isEnabled()) throw new UnauthorizedException();
     const device = this.platform.findSyncDevice(payload.deviceId);

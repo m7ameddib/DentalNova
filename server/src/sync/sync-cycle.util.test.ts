@@ -7,6 +7,9 @@ import {
   remoteRowFromConflictJson,
   shouldRefreshDeviceToken,
   shouldRunBootstrapBeforeCycle,
+  shouldContinueSyncLoop,
+  PULL_MAX_PAGES,
+  SYNC_CYCLE_MAX_MS,
 } from './sync-cycle.util';
 import { snapshotOpeningCheckpoint } from './bootstrap.util';
 import { immutableApplyDecision, isVoidedRow } from './sync.entities';
@@ -72,4 +75,42 @@ test('immutable payments allow void-only transitions and reject amount edits', (
     'conflict',
   );
   assert.equal(immutableApplyDecision(active, active), 'skip');
+});
+
+test('multi-cycle drain continues until empty and stops without progress', () => {
+  assert.equal(PULL_MAX_PAGES, 500);
+  assert.ok(SYNC_CYCLE_MAX_MS >= 8 * 60 * 1000);
+  assert.equal(
+    shouldContinueSyncLoop({
+      startedAtMs: 0,
+      nowMs: 1,
+      round: 20,
+      maxRounds: 500,
+      madeProgress: true,
+      exhausted: false,
+    }),
+    true,
+  );
+  assert.equal(
+    shouldContinueSyncLoop({
+      startedAtMs: 0,
+      nowMs: 1,
+      round: 20,
+      maxRounds: 500,
+      madeProgress: true,
+      exhausted: true,
+    }),
+    false,
+  );
+  assert.equal(
+    shouldContinueSyncLoop({
+      startedAtMs: 0,
+      nowMs: SYNC_CYCLE_MAX_MS,
+      round: 1,
+      maxRounds: 500,
+      madeProgress: true,
+      exhausted: false,
+    }),
+    false,
+  );
 });
