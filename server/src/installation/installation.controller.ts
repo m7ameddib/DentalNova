@@ -18,13 +18,31 @@ export class InstallationController {
   }
 
   @Post('activate')
-  activate(@Body() dto: ActivateLicenseDto) {
-    return this.installation.activate(dto);
+  async activate(@Body() dto: ActivateLicenseDto, @Req() req: Request) {
+    const key = `install-activate:${requestClientIp(req)}`;
+    this.rateLimit.assertAllowed(key, 8, 15 * 60 * 1000);
+    try {
+      const result = await this.installation.activate(dto);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, 15 * 60 * 1000);
+      throw err;
+    }
   }
 
   @Post('activate-online')
-  activateOnline(@Body() dto: ActivateOnlineDto) {
-    return this.installation.activateOnline(dto);
+  async activateOnline(@Body() dto: ActivateOnlineDto, @Req() req: Request) {
+    const key = `install-activate-online:${requestClientIp(req)}`;
+    this.rateLimit.assertAllowed(key, 8, 15 * 60 * 1000);
+    try {
+      const result = await this.installation.activateOnline(dto);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, 15 * 60 * 1000);
+      throw err;
+    }
   }
 
   @Post('setup')

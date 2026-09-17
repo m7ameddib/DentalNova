@@ -329,12 +329,14 @@ export class LabCasesService {
       throw new BadRequestException('Payment is already voided');
     }
 
-    const voided = this.labPaymentsRepo.void(paymentId, user.id, dto.reason.trim());
-    if (!voided) throw new BadRequestException('Payment could not be voided');
-
-    if (payment.expenseId) {
-      this.expensesRepo.void(payment.expenseId, user.id, dto.reason.trim());
-    }
+    const voided = this.db.connection.transaction(() => {
+      const row = this.labPaymentsRepo.void(paymentId, user.id, dto.reason.trim());
+      if (!row) throw new BadRequestException('Payment could not be voided');
+      if (payment.expenseId) {
+        this.expensesRepo.void(payment.expenseId, user.id, dto.reason.trim());
+      }
+      return row;
+    })();
 
     const labCase = this.labCasesRepo.findById(labCaseId);
     this.audit.log({
@@ -607,12 +609,14 @@ export class LabCasesService {
       throw new BadRequestException('Payment is already voided');
     }
 
-    const voided = this.labAccountPaymentsRepo.void(paymentId, user.id, dto.reason.trim());
-    if (!voided) throw new BadRequestException('Payment could not be voided');
-
-    if (existing.expenseId) {
-      this.expensesRepo.void(existing.expenseId, user.id, dto.reason.trim());
-    }
+    const voided = this.db.connection.transaction(() => {
+      const row = this.labAccountPaymentsRepo.void(paymentId, user.id, dto.reason.trim());
+      if (!row) throw new BadRequestException('Payment could not be voided');
+      if (existing.expenseId) {
+        this.expensesRepo.void(existing.expenseId, user.id, dto.reason.trim());
+      }
+      return row;
+    })();
 
     this.audit.log({
       action: 'LAB_ACCOUNT_PAYMENT_VOIDED',

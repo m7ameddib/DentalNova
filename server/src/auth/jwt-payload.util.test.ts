@@ -10,6 +10,7 @@ import {
   isSessionJwtPayload,
   isSyncDevicePayload,
   isValidAdminJwtPayload,
+  isWeakJwtSecret,
   SYNC_DEVICE_JWT_ISSUER,
 } from './jwt-payload.util';
 
@@ -53,4 +54,11 @@ test('clinic session payload with forged admin flag is still not a valid admin J
 test('normal clinic session payload is accepted', () => {
   assert.equal(isSessionJwtPayload({ sub: 1, username: 'doc', roleName: 'doctor', clinicId: 'c1' }), true);
   assert.equal(isAdminJwtPayload({ sub: 1, username: 'doc', roleName: 'doctor', clinicId: 'c1' }), false);
+});
+
+test('weak JWT secrets include placeholders and short values', () => {
+  assert.equal(isWeakJwtSecret(''), true);
+  assert.equal(isWeakJwtSecret('dev-secret'), true);
+  assert.equal(isWeakJwtSecret('short'), true);
+  assert.equal(isWeakJwtSecret('security-sync-test-jwt-secret-value-32ch'), false);
 });

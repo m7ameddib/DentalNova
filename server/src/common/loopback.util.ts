@@ -13,6 +13,17 @@ export function isLoopbackAddress(ip: string | undefined | null): boolean {
   return false;
 }
 
+/** Hostnames that may use HTTP during local pairing tests (never LAN/public HTTP). */
+export function isLoopbackHostname(hostname: string | undefined | null): boolean {
+  const raw = String(hostname || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^\[|\]$/g, '');
+  if (!raw) return false;
+  if (raw === 'localhost') return true;
+  return isLoopbackAddress(raw);
+}
+
 /**
  * Client IP for rate limits. Uses Express `req.ip` (honours `trust proxy`) then the
  * socket. Does **not** read `X-Forwarded-For` directly — that header is spoofable

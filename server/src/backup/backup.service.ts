@@ -26,6 +26,7 @@ import {
   BackupManifestIdentity,
   sha256Buffer,
 } from './backup-manifest.util';
+import { copyDirRecursive, replaceDirectoryAtomically, replaceFileAtomically } from './backup-fs.util';
 
 const BACKUP_VERSION = BACKUP_MANIFEST_VERSION;
 
@@ -64,20 +65,6 @@ export class BackupService {
     const dir = path.join(base, 'backups');
     fs.mkdirSync(dir, { recursive: true });
     return dir;
-  }
-
-  private async copyDirRecursive(src: string, dest: string): Promise<void> {
-    if (!fs.existsSync(src)) return;
-    await fs.promises.mkdir(dest, { recursive: true });
-    for (const entry of await fs.promises.readdir(src, { withFileTypes: true })) {
-      const from = path.join(src, entry.name);
-      const to = path.join(dest, entry.name);
-      if (entry.isDirectory()) {
-        await this.copyDirRecursive(from, to);
-      } else {
-        await fs.promises.copyFile(from, to);
-      }
-    }
   }
 
   /** Stream files into a zip on disk — avoids loading the full archive into memory. */
@@ -223,7 +210,7 @@ export class BackupService {
 
       const uploadsSrc = this.uploads.uploadsRoot();
       const uploadsDest = path.join(workDir, 'uploads');
-      await this.copyDirRecursive(uploadsSrc, uploadsDest);
+      await copyDirRecursive(uploadsSrc, uploadsDest);
 
       const identity = this.currentBackupIdentity();
       const dbSha256 = sha256Buffer(fs.readFileSync(dbBackupPath));
@@ -364,12 +351,28 @@ export class BackupService {
       // shadow the restored database once queries resume.
       await this.db.withConnectionClosed(async () => {
         this.removeWalSidecars(dbDest);
-        fs.copyFileSync(dbSrc, dbDest);
-        this.removeWalSidecars(dbDest);
+        const previousDb = `${dbDest}.pre-restore`;
+        if (fs.existsSync(dbDest)) {
+          fs.copyFileSync(dbDest, previousDb);
+        }
+        try {
+          replaceFileAtomically(dbSrc, dbDest);
+          this.removeWalSidecars(dbDest);
 
-        if (fs.existsSync(uploadsSrc)) {
-          await fs.promises.rm(uploadsDest, { recursive: true, force: true });
-          await this.copyDirRecursive(uploadsSrc, uploadsDest);
+          if (fs.existsSync(uploadsSrc)) {
+            await replaceDirectoryAtomically(uploadsSrc, uploadsDest);
+          }
+          if (fs.existsSync(previousDb)) fs.rmSync(previousDb, { force: true });
+        } catch (err) {
+          if (fs.existsSync(previousDb)) {
+            try {
+              replaceFileAtomically(previousDb, dbDest);
+              this.removeWalSidecars(dbDest);
+            } catch (rollbackErr) {
+              this.logger.error('Failed to roll back clinic.db after a failed restore', rollbackErr as Error);
+            }
+          }
+          throw err;
         }
       });
 

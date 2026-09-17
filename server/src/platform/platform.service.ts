@@ -11,7 +11,8 @@ import {
   OnlineSubscriptionStatus,
   TRIAL_DURATION_DAYS,
 } from '../subscription/subscription.types';
-import { ClinicTrialAccount, ClinicUserDirectoryRow, PlatformClinic } from './platform.types';
+import { ClinicUserDirectoryRow, ClinicTrialAccount, PlatformClinic } from './platform.types';
+import { consumeHashedOneTimeRow } from './one-time-token.util';
 
 const SUBSCRIPTION_TERM_MS = 365 * 24 * 60 * 60 * 1000;
 
@@ -440,6 +441,8 @@ export class PlatformService implements OnModuleInit {
     this.db.prepare('DELETE FROM clinic_user_directory WHERE clinic_id = ?').run(clinicId);
     this.db.prepare('DELETE FROM clinic_recovery WHERE clinic_id = ?').run(clinicId);
     this.db.prepare('DELETE FROM clinic_trial_accounts WHERE clinic_id = ?').run(clinicId);
+    this.db.prepare('DELETE FROM sync_registered_devices WHERE clinic_id = ?').run(clinicId);
+    this.db.prepare('DELETE FROM sync_pairing_codes WHERE clinic_id = ?').run(clinicId);
     this.db.prepare('DELETE FROM clinics WHERE id = ?').run(clinicId);
   }
 
@@ -571,7 +574,7 @@ export class PlatformService implements OnModuleInit {
     this.assertEnabled();
     const existing = this.getPayment(id);
     if (!existing || existing.status === 'VOID') {
-      throw new Error('Payment not found or already voided.');
+      throw new NotFoundException('Payment not found or already voided.');
     }
     this.db
       .prepare(
@@ -594,7 +597,7 @@ export class PlatformService implements OnModuleInit {
     this.assertEnabled();
     const existing = this.getPayment(id);
     if (!existing || existing.status === 'VOID') {
-      throw new Error('Payment not found or already voided.');
+      throw new NotFoundException('Payment not found or already voided.');
     }
     this.db
       .prepare(
@@ -943,14 +946,14 @@ export class PlatformService implements OnModuleInit {
 
   consumeSignupInvite(token: string): void {
     this.assertEnabled();
-    const codeHash = this.hashToken(token.trim());
-    const row = this.db
-      .prepare(`SELECT id, expires_at, used_at FROM clinic_signup_invites WHERE code_hash = ?`)
-      .get(codeHash) as { id: string; expires_at: string; used_at: string | null } | undefined;
-    if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
+    const consumed = consumeHashedOneTimeRow(this.db, {
+      table: 'clinic_signup_invites',
+      hash: this.hashToken(token.trim()),
+      nowIso: new Date().toISOString(),
+    });
+    if (!consumed) {
       throw new Error('INVALID_INVITE');
     }
-    this.db.prepare(`UPDATE clinic_signup_invites SET used_at = datetime('now') WHERE id = ?`).run(row.id);
   }
 
   createPairingCode(clinicId: string, createdByUserId: number, ttlMinutes = 10): {
@@ -989,16 +992,15 @@ export class PlatformService implements OnModuleInit {
 
   consumePairingCode(code: string): string {
     this.assertEnabled();
-    const row = this.db
-      .prepare(`SELECT code_hash, clinic_id, expires_at, used_at FROM sync_pairing_codes WHERE code_hash = ?`)
-      .get(this.hashToken(code.trim().toUpperCase())) as
-      | { code_hash: string; clinic_id: string; expires_at: string; used_at: string | null }
-      | undefined;
-    if (!row || row.used_at || new Date(row.expires_at).getTime() < Date.now()) {
+    const consumed = consumeHashedOneTimeRow(this.db, {
+      table: 'sync_pairing_codes',
+      hash: this.hashToken(code.trim().toUpperCase()),
+      nowIso: new Date().toISOString(),
+    });
+    if (!consumed?.clinicId) {
       throw new Error('INVALID_PAIRING');
     }
-    this.db.prepare(`UPDATE sync_pairing_codes SET used_at = datetime('now') WHERE code_hash = ?`).run(row.code_hash);
-    return row.clinic_id;
+    return consumed.clinicId;
   }
 
   registerSyncDevice(input: {

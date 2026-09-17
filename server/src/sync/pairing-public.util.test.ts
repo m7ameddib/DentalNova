@@ -48,6 +48,9 @@ test('secret detector flags nested deviceSecret keys', () => {
 test('normalizeOnlineBaseUrl keeps http(s) origin and rejects credentials', () => {
   assert.equal(normalizeOnlineBaseUrl('https://dentalnova.dibnova.com/setup'), 'https://dentalnova.dibnova.com');
   assert.equal(normalizeOnlineBaseUrl('http://127.0.0.1:4000/'), 'http://127.0.0.1:4000');
+  assert.equal(normalizeOnlineBaseUrl('http://localhost:4000/'), 'http://localhost:4000');
+  assert.throws(() => normalizeOnlineBaseUrl('http://evil.example.com'), (err: Error) => err.message === INVALID_ONLINE_URL);
+  assert.throws(() => normalizeOnlineBaseUrl('http://192.168.1.9:4000'), (err: Error) => err.message === INVALID_ONLINE_URL);
   assert.throws(() => normalizeOnlineBaseUrl('file:///etc/passwd'), (err: Error) => err.message === INVALID_ONLINE_URL);
   assert.throws(() => normalizeOnlineBaseUrl('ftp://example.com'), (err: Error) => err.message === INVALID_ONLINE_URL);
   assert.throws(() => normalizeOnlineBaseUrl('https://user:secret@example.com'), (err: Error) => err.message === INVALID_ONLINE_URL);

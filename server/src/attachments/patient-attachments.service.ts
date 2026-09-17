@@ -120,8 +120,8 @@ export class PatientAttachmentsService {
     if (!attachment || attachment.patientId !== patientId) {
       throw new NotFoundException('Attachment not found');
     }
-    this.repo.delete(attachmentId);
     await this.objectStorage.deleteObject(attachment.storedPath);
+    this.repo.delete(attachmentId);
     return { id: attachmentId, patientId };
   }
 

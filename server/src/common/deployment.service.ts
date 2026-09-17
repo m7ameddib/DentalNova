@@ -1,6 +1,6 @@
 import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { isInsecureAiServiceSecret, onlineAiSecretBootError } from './ai-service-secret.util';
+import { onlineBootConfigError } from './online-boot-config.util';
 
 export type DeploymentMode = 'offline' | 'online';
 export type ClinicSignupMode = 'open' | 'invite' | 'disabled';
@@ -75,37 +75,15 @@ export class DeploymentService implements OnModuleInit {
   }
 
   private validateOnlineConfig() {
-    const jwt = this.config.get<string>('JWT_SECRET');
-    if (!jwt || jwt === 'change-this-in-production' || jwt === 'dev-secret') {
-      throw new Error(
-        'Online deployment requires a strong JWT_SECRET environment variable. ' +
-          'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(48).toString(\'base64url\'))"',
-      );
-    }
-
-    const geminiKey = this.config.get<string>('GEMINI_API_KEY')?.trim();
-    if (geminiKey) {
-      const aiSecret = this.config.get<string>('AI_SERVICE_SECRET')?.trim();
-      if (isInsecureAiServiceSecret(aiSecret)) {
-        throw new Error(onlineAiSecretBootError());
-      }
-    }
-
-    if (this.isProduction()) {
-      const adminUser = this.config.get<string>('DIBNOVA_ADMIN_USERNAME')?.trim();
-      const adminPass = this.config.get<string>('DIBNOVA_ADMIN_PASSWORD');
-      if (!adminUser || !adminPass) {
-        throw new Error(
-          'Online production requires DIBNOVA_ADMIN_USERNAME and DIBNOVA_ADMIN_PASSWORD so clinics can be activated. ' +
-            'These are server-side credentials for /dibnova-admin — they are never entered as an API key in the browser.',
-        );
-      }
-      const platformSecrets = this.config.get<string>('PLATFORM_SECRETS_KEY')?.trim();
-      if (!platformSecrets) {
-        throw new Error(
-          'Online production requires PLATFORM_SECRETS_KEY (a unique secret, not JWT_SECRET) to encrypt trial passwords in platform.db.',
-        );
-      }
-    }
+    const error = onlineBootConfigError({
+      jwtSecret: this.config.get<string>('JWT_SECRET'),
+      geminiApiKey: this.config.get<string>('GEMINI_API_KEY'),
+      aiServiceSecret: this.config.get<string>('AI_SERVICE_SECRET'),
+      isProduction: this.isProduction(),
+      adminUsername: this.config.get<string>('DIBNOVA_ADMIN_USERNAME'),
+      adminPassword: this.config.get<string>('DIBNOVA_ADMIN_PASSWORD'),
+      platformSecretsKey: this.config.get<string>('PLATFORM_SECRETS_KEY'),
+    });
+    if (error) throw new Error(error);
   }
 }

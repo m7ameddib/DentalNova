@@ -35,7 +35,9 @@ export class PasswordResetService {
   private inUserClinic<T>(username: string, fn: () => T): T {
     if (!this.platform.isEnabled()) return fn();
     const directory = this.platform.findUserByUsername(username);
-    if (!directory) return fn();
+    if (!directory) {
+      throw new UnauthorizedException('Invalid recovery details.');
+    }
     return runInTenant(directory.clinicId, fn);
   }
 
@@ -120,6 +122,9 @@ export class PasswordResetService {
     }
 
     if (payload.purpose !== 'password_reset') {
+      throw new UnauthorizedException('Invalid password reset token.');
+    }
+    if (this.platform.isEnabled() && !payload.clinicId) {
       throw new UnauthorizedException('Invalid password reset token.');
     }
 

@@ -1,3 +1,5 @@
+import { isLoopbackHostname } from '../common/loopback.util';
+
 export interface StoredPeerConfig {
   deviceId: string;
   deviceSecret: string;
@@ -29,7 +31,13 @@ export function normalizeOnlineBaseUrl(raw: string): string {
   } catch {
     throw new Error(INVALID_ONLINE_URL);
   }
-  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+  if (parsed.protocol === 'https:') {
+    // ok
+  } else if (parsed.protocol === 'http:') {
+    if (!isLoopbackHostname(parsed.hostname)) {
+      throw new Error(INVALID_ONLINE_URL);
+    }
+  } else {
     throw new Error(INVALID_ONLINE_URL);
   }
   if (parsed.username || parsed.password) {

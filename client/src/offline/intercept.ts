@@ -27,6 +27,7 @@ import { useOfflineStatusStore } from './status.store';
 import { axiosRequestUrl } from './requestUrl';
 import { flushOutbox } from './sync';
 import { probeApiHealth } from './health';
+import { chooseSessionPersistTarget, FALLBACK_TOKEN_KEY, FALLBACK_USER_KEY } from './session-persist';
 
 function asAxiosResponse<T>(data: T, config: InternalAxiosRequestConfig, status = 200): AxiosResponse<T> {
   return {
@@ -50,9 +51,15 @@ function parseRequestBody(data: unknown): unknown {
 function persistSessionForFallback(): void {
   const { token, user } = useAuthStore.getState();
   if (!token || !user) return;
+  const target = chooseSessionPersistTarget({
+    localHasToken: Boolean(localStorage.getItem(FALLBACK_TOKEN_KEY)),
+    sessionHasToken: Boolean(sessionStorage.getItem(FALLBACK_TOKEN_KEY)),
+  });
+  if (!target) return;
+  const storage = target === 'local' ? localStorage : sessionStorage;
   try {
-    localStorage.setItem('dnt-dental-token', token);
-    localStorage.setItem('dnt-dental-user', JSON.stringify(user));
+    storage.setItem(FALLBACK_TOKEN_KEY, token);
+    storage.setItem(FALLBACK_USER_KEY, JSON.stringify(user));
   } catch {
     /* ignore quota */
   }
