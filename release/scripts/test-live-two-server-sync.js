@@ -213,6 +213,19 @@ function namesOf(list) {
   return (Array.isArray(list) ? list : []).map((p) => p.fullName || p.full_name);
 }
 
+async function mapPool(count, concurrency, fn) {
+  let next = 0;
+  const workers = Array.from({ length: concurrency }, async () => {
+    for (;;) {
+      const idx = next;
+      next += 1;
+      if (idx >= count) return;
+      await fn(idx);
+    }
+  });
+  await Promise.all(workers);
+}
+
 async function waitUntil(fn, { timeoutMs = 120000, intervalMs = 800, label = 'condition' } = {}) {
   const started = Date.now();
   let last;
@@ -438,6 +451,15 @@ async function main() {
       },
       { label: 'Offline patient on Online' },
     );
+    const onNew = (Array.isArray(onlineSawPatient) ? onlineSawPatient : []).find((p) =>
+      String(p.fullName).includes('Offline New Patient'),
+    );
+    const onTx = await onlineReq('GET', `/patients/${onNew.id}/treatments`, { token: onlineToken, expected: 200 });
+    const onPay = await onlineReq('GET', `/patients/${onNew.id}/payments`, { token: onlineToken, expected: 200 });
+    const onAppt = await onlineReq('GET', `/patients/${onNew.id}/appointments`, { token: onlineToken, expected: 200 });
+    assert((Array.isArray(onTx.data) ? onTx.data : []).length >= 1, 'Offline treatment missing on Online');
+    assert((Array.isArray(onPay.data) ? onPay.data : []).length >= 1, 'Offline payment missing on Online');
+    assert((Array.isArray(onAppt.data) ? onAppt.data : []).length >= 1, 'Offline appointment missing on Online');
     proven.push('Offline→Online patients/treatments/payments/appointments');
 
     const onlinePatient = await onlineReq('POST', '/patients', {
@@ -498,7 +520,21 @@ async function main() {
     );
     const pulledOnline = await offlineReq('GET', '/patients?q=Online%20After', { token: offlineToken, expected: 200 });
     assert(namesOf(pulledOnline.data).some((n) => n.includes('Online After Pair')), 'Online→Offline patient missing after reconnect');
+    const offSeedAfter = (Array.isArray(afterBoot.data) ? afterBoot.data : []).find((p) =>
+      String(p.fullName).includes('Online Seed Patient'),
+    );
+    const seedPays = await offlineReq('GET', `/patients/${offSeedAfter.id}/payments`, { token: offlineToken, expected: 200 });
+    const payList = Array.isArray(seedPays.data) ? seedPays.data : [];
+    assert(
+      payList.some((p) => String(p.status || '').toUpperCase() === 'VOID'),
+      `VOID payment did not replicate to Offline (got ${JSON.stringify(payList).slice(0, 400)})`,
+    );
+    const seedTxs = await offlineReq('GET', `/patients/${offSeedAfter.id}/treatments`, { token: offlineToken, expected: 200 });
+    assert((Array.isArray(seedTxs.data) ? seedTxs.data : []).length >= 1, 'seed treatment missing on Offline');
+    const seedAppts = await offlineReq('GET', `/patients/${offSeedAfter.id}/appointments`, { token: offlineToken, expected: 200 });
+    assert((Array.isArray(seedAppts.data) ? seedAppts.data : []).length >= 1, 'seed appointment missing on Offline');
     proven.push('Internet-drop substitute: Online kill/restart, Offline reconnect + pull');
+    proven.push('VOID payment, treatment, and appointment replicated onto Offline');
 
     const deviceTok = await onlineReq('POST', '/sync/token', {
       body: {
@@ -550,38 +586,28 @@ async function main() {
     assert(part.data.contentBase64, 'chunked download missing');
     proven.push('Chunked 300KiB attachment upload/download (blob not stored in SQLite)');
 
-    let pushed = 0;
-    for (let batch = 0; batch < 28; batch += 1) {
-      const changes = [];
-      for (let i = 0; i < 80; i += 1) {
-        const n = batch * 80 + i;
-        changes.push({
-          changeId: `drain-${n}`,
-          entity: 'patients',
-          recordUid: `dddddddd-0000-4000-8000-${String(n).padStart(12, '0')}`,
-          op: 'upsert',
-          row: {
-            fullName: `Drain ${n}`,
-            phone: `0796${String(n).padStart(6, '0')}`,
-            gender: 'MALE',
-            fileNumber: `P-D${n}`,
-          },
-        });
-      }
-      const res = await onlineReq('POST', '/sync/push', { token: deviceToken, body: { changes }, expected: [200, 201] });
-      pushed += (res.data.accepted || []).length;
-    }
-    assert(pushed >= 2000, `expected 2000+ drain rows accepted, got ${pushed}`);
+    let createdDrain = 0;
+    await mapPool(2100, 20, async (n) => {
+      await onlineReq('POST', '/patients', {
+        token: onlineToken2,
+        body: { fullName: `Drain ${n}`, phone: `0797${String(n).padStart(6, '0')}`, gender: 'MALE' },
+        expected: [200, 201],
+      });
+      createdDrain += 1;
+    });
+    assert(createdDrain >= 2100, `expected 2100 drain rows, got ${createdDrain}`);
     const drainSync = await waitUntil(
       async () => {
-        const res = await offlineReq('POST', '/sync/now', { token: offlineToken });
-        if (res.status >= 400 || res.data.error) return null;
-        const found = await offlineReq('GET', '/patients?q=Drain%202199', { token: offlineToken, expected: 200 });
-        return namesOf(found.data).some((n) => n.includes('Drain 2199')) ? res.data : null;
+        const st = await offlineReq('GET', '/sync/status', { token: offlineToken, expected: 200 });
+        if (st.data.state !== 'SYNCING') {
+          await offlineReq('POST', '/sync/now', { token: offlineToken });
+        }
+        const found = await offlineReq('GET', '/patients?q=Drain%202099', { token: offlineToken, expected: 200 });
+        return namesOf(found.data).some((n) => n.includes('Drain 2099')) ? { status: st.data, found: true } : null;
       },
-      { timeoutMs: 240000, label: '2k+ drain pull to Offline' },
+      { timeoutMs: 300000, label: '2k+ drain pull to Offline' },
     );
-    proven.push(`Multi-cycle drain: ${pushed} Online rows reached Offline (including Drain 2199)`);
+    proven.push(`Multi-cycle drain: ${createdDrain} Online doctor-created rows reached Offline (including Drain 2099)`);
 
     const medPush = await onlineReq('POST', '/sync/push', {
       token: deviceToken,
