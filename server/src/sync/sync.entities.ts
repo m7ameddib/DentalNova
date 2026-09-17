@@ -245,8 +245,71 @@ export const IDENTITY_RECONCILE_ENTITY_SET = new Set<string>([
   ...PRE_BOOTSTRAP_HOLD_ENTITIES,
 ]);
 
+export const CONFLICT_RESOLUTION_DEVICE_ID = 'conflict-resolution';
+
 export function isCanonicalOnlineApply(deviceId: string | null | undefined): boolean {
   return deviceId === 'online-server';
+}
+
+/** Doctor explicitly chose a side in Settings — apply even if policies would conflict. */
+export function isForcedSyncApply(deviceId: string | null | undefined): boolean {
+  return deviceId === CONFLICT_RESOLUTION_DEVICE_ID;
+}
+
+export function isVoidedRow(row: Record<string, unknown> | null | undefined): boolean {
+  if (!row) return false;
+  if (String(row.status ?? '').toUpperCase() === 'VOID') return true;
+  const voidedAt = row.voidedAt ?? row.voided_at;
+  return voidedAt != null && String(voidedAt) !== '';
+}
+
+const IMMUTABLE_IDENTITY_GROUPS: string[][] = [
+  ['amountCents', 'amount_cents'],
+  ['date', 'paymentDate', 'payment_date'],
+  ['method', 'paymentMethod', 'payment_method'],
+  ['patientUid'],
+  ['labCaseUid'],
+  ['labNameUid'],
+];
+
+function pickRowValue(row: Record<string, unknown>, names: string[]): unknown {
+  for (const name of names) {
+    if (row[name] !== undefined && row[name] !== null && row[name] !== '') return row[name];
+  }
+  return null;
+}
+
+export function immutableIdentityMatches(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+): boolean {
+  for (const names of IMMUTABLE_IDENTITY_GROUPS) {
+    const left = pickRowValue(current, names);
+    const right = pickRowValue(incoming, names);
+    if (left == null && right == null) continue;
+    if (JSON.stringify(left) !== JSON.stringify(right)) return false;
+  }
+  return true;
+}
+
+/**
+ * Payments and similar rows are append-only for amount/identity, but VOID is a
+ * one-way status transition that must replicate in both directions.
+ */
+export function immutableApplyDecision(
+  current: Record<string, unknown>,
+  incoming: Record<string, unknown>,
+  skipColumns: string[] = [],
+): 'skip' | 'apply-void' | 'conflict' {
+  if (!rowsDiffer(current, incoming, skipColumns)) return 'skip';
+  const currentVoid = isVoidedRow(current);
+  const incomingVoid = isVoidedRow(incoming);
+  if (currentVoid && incomingVoid) {
+    return immutableIdentityMatches(current, incoming) ? 'skip' : 'conflict';
+  }
+  if (currentVoid && !incomingVoid) return 'conflict';
+  if (!currentVoid && incomingVoid && immutableIdentityMatches(current, incoming)) return 'apply-void';
+  return 'conflict';
 }
 
 export function tableExists(db: { prepare: (sql: string) => { get: (name: string) => unknown } }, table: string): boolean {

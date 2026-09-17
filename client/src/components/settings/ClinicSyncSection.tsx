@@ -109,6 +109,7 @@ export function ClinicSyncSection({ mode }: { mode: 'online' | 'offline' }) {
         <OfflinePairingPanel
           paired={Boolean(status?.paired)}
           pairingBlocked={Boolean(status?.pairingBlocked)}
+          needsBootstrap={Boolean(status?.needsBootstrap)}
           census={status?.census}
           peerClinicName={status?.peerClinicName}
           onlineClinicId={status?.onlineClinicId}
@@ -372,6 +373,7 @@ function OnlinePairingPanel({
 function OfflinePairingPanel({
   paired,
   pairingBlocked,
+  needsBootstrap,
   census,
   peerClinicName,
   onlineClinicId,
@@ -381,6 +383,7 @@ function OfflinePairingPanel({
 }: {
   paired: boolean;
   pairingBlocked: boolean;
+  needsBootstrap: boolean;
   census?: { patients: number; payments: number; treatments: number; appointments: number; total: number } | null;
   peerClinicName?: string | null;
   onlineClinicId?: string | null;
@@ -423,6 +426,15 @@ function OfflinePairingPanel({
         setBootstrapping(false);
         onChanged();
       }
+    },
+    onError: (err) => onError(err),
+  });
+
+  const bootstrapMutation = useMutation({
+    mutationFn: syncApi.bootstrap,
+    onSuccess: () => {
+      onSuccess(t('settings.clinicSync.bootstrapDone'));
+      onChanged();
     },
     onError: (err) => onError(err),
   });
@@ -477,6 +489,7 @@ function OfflinePairingPanel({
   }
 
   if (paired) {
+    const busy = syncNowMutation.isPending || bootstrapMutation.isPending || bootstrapping;
     return (
       <div className="clinic-sync-panel">
         <p>
@@ -485,15 +498,29 @@ function OfflinePairingPanel({
             id: onlineClinicId || '—',
           })}
         </p>
-        <p className="muted">{t('settings.clinicSync.autoSyncHint')}</p>
+        {needsBootstrap ? (
+          <div className="form-error-banner">{t('settings.clinicSync.needsBootstrap')}</div>
+        ) : (
+          <p className="muted">{t('settings.clinicSync.autoSyncHint')}</p>
+        )}
         <div className="settings-actions">
+          {needsBootstrap ? (
+            <button
+              type="button"
+              className="btn btn--primary"
+              onClick={() => bootstrapMutation.mutate()}
+              disabled={busy}
+            >
+              <RefreshCw size={14} /> {busy ? t('settings.clinicSync.syncing') : t('settings.clinicSync.finishDownload')}
+            </button>
+          ) : null}
           <button
             type="button"
-            className="btn btn--primary"
+            className={needsBootstrap ? 'btn' : 'btn btn--primary'}
             onClick={() => syncNowMutation.mutate()}
-            disabled={syncNowMutation.isPending || bootstrapping}
+            disabled={busy}
           >
-            <RefreshCw size={14} /> {syncNowMutation.isPending || bootstrapping ? t('settings.clinicSync.syncing') : t('settings.clinicSync.syncNow')}
+            <RefreshCw size={14} /> {busy ? t('settings.clinicSync.syncing') : t('settings.clinicSync.syncNow')}
           </button>
           <button type="button" className="btn" onClick={() => setConfirmDisconnect(true)}>
             <Unplug size={14} /> {t('settings.clinicSync.disconnect')}
@@ -502,6 +529,7 @@ function OfflinePairingPanel({
         {confirmDisconnect && (
           <Modal title={t('settings.clinicSync.disconnect')} onClose={() => setConfirmDisconnect(false)}>
             <p>{t('settings.clinicSync.disconnectConfirm', { name: peerClinicName || t('settings.clinicSync.onlineClinic') })}</p>
+            {needsBootstrap ? <p className="form-error-banner">{t('settings.clinicSync.disconnectBeforeBootstrap')}</p> : null}
             <div className="settings-actions">
               <button type="button" className="btn" onClick={() => setConfirmDisconnect(false)}>
                 {t('common.cancel')}

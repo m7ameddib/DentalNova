@@ -23,8 +23,14 @@ import { SyncChangePayload, SYNC_ENTITY_BY_NAME, IDENTITY_RECONCILE_ENTITY_SET }
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { clinicOperationalCensus, OPERATIONAL_TABLES, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
-import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished } from './bootstrap.util';
+import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished, snapshotOpeningCheckpoint } from './bootstrap.util';
 import { ackPreBootstrapHoldOutbound } from './sync-schema';
+import {
+  canResumeIncompleteBootstrap,
+  rememberOpeningCheckpoint,
+  shouldRefreshDeviceToken,
+  shouldRunBootstrapBeforeCycle,
+} from './sync-cycle.util';
 import {
   describeOnlineReachabilityError,
   friendlyStoredSyncError,
@@ -33,6 +39,9 @@ import {
 import { PUSH_BATCH_MAX_ITEMS, PUSH_BATCH_MAX_JSON_BYTES, PUSH_MAX_ROUNDS, pushRoundFollowUp, splitPushBatch } from './push-batch.util';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
+
+type DeviceSession = { token: string; issuedAt: number };
+type DevicePeer = { onlineBaseUrl: string; deviceId: string; deviceSecret: string };
 
 @Injectable()
 export class SyncEngineService {
@@ -52,6 +61,8 @@ export class SyncEngineService {
     const conflicts = unresolvedConflictCount(conn);
     const peer = this.pairing.readPeerConfig();
     const lastError = this.readPeerValue('last_error');
+    const bootstrappedAt = this.readPeerValue('bootstrapped_at');
+    const needsBootstrap = Boolean(this.deployment.isOffline() && peer && !bootstrappedAt);
     const pending = this.deployment.isOnline() ? this.onlineDevicesBehind() : pendingCount(conn);
     const census = this.deployment.isOffline() ? clinicOperationalCensus(conn) : null;
     let state: ClinicSyncState = 'OFFLINE';
@@ -60,12 +71,24 @@ export class SyncEngineService {
     } else if (this.deployment.isOnline()) {
       state = conflicts > 0 ? 'CONFLICT' : lastError ? 'ERROR' : pending > 0 ? 'PENDING' : 'SYNCED';
     } else if (peer) {
-      state = conflicts > 0 ? 'CONFLICT' : lastError ? 'ERROR' : pending > 0 ? 'PENDING' : 'SYNCED';
+      state = needsBootstrap
+        ? lastError
+          ? 'ERROR'
+          : 'PENDING'
+        : conflicts > 0
+          ? 'CONFLICT'
+          : lastError
+            ? 'ERROR'
+            : pending > 0
+              ? 'PENDING'
+              : 'SYNCED';
     }
     return {
       kind: this.deployment.isOnline() ? 'online-hub' : peer ? 'offline-peer' : 'none',
       state,
       paired: this.deployment.isOnline() ? this.onlineDeviceCount() > 0 : Boolean(peer),
+      bootstrapped: Boolean(bootstrappedAt),
+      needsBootstrap,
       pendingOutbound: pending,
       conflicts,
       lastSyncedAt: this.readPeerValue('last_synced_at'),
@@ -105,6 +128,7 @@ export class SyncEngineService {
   }
 
   snapshotPage(afterEntity?: string, afterId?: number, limit = 80) {
+    const checkpoint = snapshotOpeningCheckpoint(maxSeq(this.db.connection));
     const { changes, nextAfterEntity, nextAfterId } = clinicSnapshot(
       this.db.connection,
       afterEntity,
@@ -113,7 +137,7 @@ export class SyncEngineService {
     );
     return {
       changes,
-      checkpoint: maxSeq(this.db.connection),
+      checkpoint,
       hasMore: changes.length >= limit,
       nextAfterEntity,
       nextAfterId,
@@ -152,39 +176,42 @@ export class SyncEngineService {
         error: 'This computer is not paired with an Online clinic yet. Enter the pairing code and connect first.',
       };
     }
-    if (!this.readPeerValue('bootstrapped_at')) {
-      const bootstrapError =
-        this.readPeerValue('bootstrap_in_progress') === '1'
-          ? 'The first download from the Online clinic is still in progress. Wait a moment, then click Sync now.'
-          : 'This computer is paired but the first clinic download has not finished. Click Connect / bootstrap again.';
-      return {
-        pushed: 0,
-        pulled: 0,
-        conflicts: unresolvedConflictCount(this.db.connection),
-        error: bootstrapError,
-      };
-    }
     this.running = true;
     this.writePeerValue('last_error', '');
+    let pushed = 0;
+    let pulled = 0;
     try {
-      const token = await this.deviceToken(peer);
-      await this.reconcileCatalogIdentity(peer, token);
-      let pushed = 0;
+      const session = await this.newDeviceSession(peer);
+      if (shouldRunBootstrapBeforeCycle(this.readPeerValue('bootstrapped_at'))) {
+        const boot = await this.executeBootstrapUnlocked(peer, session);
+        pulled += boot.pulled;
+        Object.assign(session, await this.newDeviceSession(peer));
+      } else {
+        await this.reconcileCatalogIdentity(peer, session.token);
+      }
       let maxItems = PUSH_BATCH_MAX_ITEMS;
       let maxBytes = PUSH_BATCH_MAX_JSON_BYTES;
       const skipThisCycle = new Set<string>();
       for (let round = 0; round < PUSH_MAX_ROUNDS; round += 1) {
+        await this.refreshDeviceSession(peer, session);
         const outbound = pendingOutbound(this.db.connection, 200, skipThisCycle);
         if (outbound.length === 0) break;
         const batch = splitPushBatch(outbound, maxItems, maxBytes);
-        const res = await this.onlineFetch(peer, token, '/api/sync/push', {
+        const res = await this.onlineFetch(peer, session.token, '/api/sync/push', {
           method: 'POST',
           body: JSON.stringify({ changes: batch }),
         });
         const data = await this.readOnlineJson<{
           accepted?: string[];
           skipped?: string[];
-          conflicts?: Array<{ changeId: string; entity: string; recordUid: string; reason: string }>;
+          conflicts?: Array<{
+            changeId: string;
+            entity: string;
+            recordUid: string;
+            reason: string;
+            row?: Record<string, unknown> | null;
+            current?: Record<string, unknown> | null;
+          }>;
           message?: unknown;
         }>(res);
         if (res.status === 413 && batch.length > 1) {
@@ -211,42 +238,17 @@ export class SyncEngineService {
         for (const id of follow.skipThisCycle) skipThisCycle.add(id);
       }
 
-      let pulled = 0;
-      let since = currentCheckpoint(this.db.connection);
-      for (let i = 0; i < 20; i += 1) {
-        const res = await this.onlineFetch(peer, token, `/api/sync/changes?since=${since}&limit=100`, { method: 'GET' });
-        const data = await this.readOnlineJson<{
-          changes?: SyncChangePayload[];
-          until?: number;
-          hasMore?: boolean;
-          message?: unknown;
-        }>(res);
-        if (!res.ok) {
-          throw new Error(
-            messageFromOnlineResponse(res.status, data, `Could not download clinic changes (HTTP ${res.status}).`),
-          );
-        }
-        const batch = data.changes ?? [];
-        if (batch.length === 0) break;
-        const applied = applyChanges(this.db.connection, batch, 'online-server');
-        pulled += applied.accepted.length;
-        if (!canAdvancePullCheckpoint(applied)) {
-          break;
-        }
-        since = data.until ?? since;
-        setCheckpoint(this.db.connection, since);
-        if (!data.hasMore) break;
-      }
-
-      await this.reportCheckpoint(peer, token, since);
-      await this.syncAttachmentBlobs(peer, token);
+      pulled += await this.pullRemoteChanges(peer, session);
+      const since = currentCheckpoint(this.db.connection);
+      await this.reportCheckpoint(peer, session.token, since);
+      await this.syncAttachmentBlobs(peer, session.token);
       this.writePeerValue('last_synced_at', new Date().toISOString());
       return { pushed, pulled, conflicts: unresolvedConflictCount(this.db.connection) };
     } catch (err) {
       const message = this.userFacingSyncFailure(err);
       this.logger.warn(`Offline sync cycle failed: ${message}`);
       this.writePeerValue('last_error', message);
-      return { pushed: 0, pulled: 0, conflicts: unresolvedConflictCount(this.db.connection), error: message };
+      return { pushed, pulled, conflicts: unresolvedConflictCount(this.db.connection), error: message };
     } finally {
       this.running = false;
     }
@@ -265,9 +267,12 @@ export class SyncEngineService {
     if (this.running) {
       throw new BadRequestException('Sync is already running. Try bootstrap again in a moment.');
     }
-    const inProgress = this.readPeerValue('bootstrap_in_progress') === '1';
     const census = clinicOperationalCensus(this.db.connection);
-    if (census.populated && !inProgress) {
+    const resumable = canResumeIncompleteBootstrap({
+      bootstrappedAt: this.readPeerValue('bootstrapped_at'),
+      bootstrapStarted: this.readPeerValue('bootstrap_started'),
+    });
+    if (census.populated && !resumable) {
       throw new BadRequestException({
         statusCode: 400,
         message: populatedOfflineMessage(census),
@@ -275,75 +280,9 @@ export class SyncEngineService {
       });
     }
     this.running = true;
-    let onlineCheckpoint: number | undefined;
     try {
-      const token = await this.deviceToken(peer);
-      this.writePeerValue('bootstrap_in_progress', '1');
-      let pulled = 0;
-      let afterEntity: string | undefined = this.readPeerValue('bootstrap_after_entity') || undefined;
-      let afterId: number | undefined = Number(this.readPeerValue('bootstrap_after_id') || 0) || undefined;
-      let complete = false;
-      for (let i = 0; i < MAX_BOOTSTRAP_PAGES; i += 1) {
-        if (this.hasLocalOperationalPending()) {
-          throw new BadRequestException(
-            'Local clinic records were saved during the first download. Use an empty Offline install and pair again — two databases are never merged.',
-          );
-        }
-        const qs = new URLSearchParams();
-        if (afterEntity) qs.set('afterEntity', afterEntity);
-        if (afterId != null) qs.set('afterId', String(afterId));
-        qs.set('limit', String(BOOTSTRAP_PAGE_SIZE));
-        const res = await this.onlineFetch(peer, token, `/api/sync/snapshot?${qs.toString()}`, { method: 'GET' });
-        const data = await this.readOnlineJson<{
-          changes?: SyncChangePayload[];
-          checkpoint?: number;
-          hasMore?: boolean;
-          nextAfterEntity?: string;
-          nextAfterId?: number;
-          message?: unknown;
-        }>(res);
-        if (!res.ok) {
-          throw new Error(
-            messageFromOnlineResponse(res.status, data, `Could not download the clinic snapshot (HTTP ${res.status}).`),
-          );
-        }
-        const batch = data.changes ?? [];
-        if (batch.length > 0) {
-          const applied = applyChanges(this.db.connection, batch, 'online-server');
-          pulled += applied.accepted.length;
-          afterEntity = data.nextAfterEntity;
-          afterId = data.nextAfterId;
-          if (afterEntity) this.writePeerValue('bootstrap_after_entity', afterEntity);
-          if (afterId != null) this.writePeerValue('bootstrap_after_id', String(afterId));
-        }
-        if (data.checkpoint != null) onlineCheckpoint = data.checkpoint;
-        if (
-          bootstrapSnapshotFinished({
-            changesLength: batch.length,
-            hasMore: data.hasMore,
-            pageSize: BOOTSTRAP_PAGE_SIZE,
-          })
-        ) {
-          complete = true;
-          break;
-        }
-      }
-      if (!complete) {
-        throw new BadRequestException(
-          `Snapshot download is not finished after ${MAX_BOOTSTRAP_PAGES} pages. Click Connect / bootstrap again — this computer is not fully synced yet.`,
-        );
-      }
-      if (onlineCheckpoint != null) setCheckpoint(this.db.connection, onlineCheckpoint);
-      ackPreBootstrapHoldOutbound(this.db.connection);
-      this.writePeerValue('catalog_uids_reconciled', '1');
-      await this.syncAttachmentBlobs(peer, token);
-      const checkpoint = currentCheckpoint(this.db.connection);
-      await this.reportCheckpoint(peer, token, checkpoint);
-      this.writePeerValue('last_synced_at', new Date().toISOString());
-      this.writePeerValue('bootstrapped_at', new Date().toISOString());
-      this.writePeerValue('bootstrap_in_progress', '0');
-      this.writePeerValue('last_error', '');
-      return { pulled };
+      const session = await this.newDeviceSession(peer);
+      return await this.executeBootstrapUnlocked(peer, session);
     } catch (err) {
       if (err instanceof BadRequestException) {
         this.writePeerValue('last_error', this.httpExceptionMessage(err));
@@ -353,8 +292,136 @@ export class SyncEngineService {
       this.writePeerValue('last_error', message);
       throw new BadRequestException(message);
     } finally {
+      if (!this.readPeerValue('bootstrapped_at')) {
+        this.writePeerValue('bootstrap_in_progress', '0');
+      }
       this.running = false;
     }
+  }
+
+  private async executeBootstrapUnlocked(
+    peer: DevicePeer,
+    session: DeviceSession,
+  ): Promise<{ pulled: number }> {
+    this.writePeerValue('bootstrap_started', '1');
+    this.writePeerValue('bootstrap_in_progress', '1');
+    try {
+    let pulled = 0;
+    let afterEntity: string | undefined = this.readPeerValue('bootstrap_after_entity') || undefined;
+    let afterId: number | undefined = Number(this.readPeerValue('bootstrap_after_id') || 0) || undefined;
+    let openingCheckpoint: number | undefined;
+    let complete = false;
+    for (let i = 0; i < MAX_BOOTSTRAP_PAGES; i += 1) {
+      if (this.hasLocalOperationalPending()) {
+        throw new BadRequestException(
+          'Local clinic records were saved during the first download. Use an empty Offline install and pair again — two databases are never merged.',
+        );
+      }
+      await this.refreshDeviceSession(peer, session);
+      const qs = new URLSearchParams();
+      if (afterEntity) qs.set('afterEntity', afterEntity);
+      if (afterId != null) qs.set('afterId', String(afterId));
+      qs.set('limit', String(BOOTSTRAP_PAGE_SIZE));
+      const res = await this.onlineFetch(peer, session.token, `/api/sync/snapshot?${qs.toString()}`, { method: 'GET' });
+      const data = await this.readOnlineJson<{
+        changes?: SyncChangePayload[];
+        checkpoint?: number;
+        hasMore?: boolean;
+        nextAfterEntity?: string;
+        nextAfterId?: number;
+        message?: unknown;
+      }>(res);
+      if (!res.ok) {
+        throw new Error(
+          messageFromOnlineResponse(res.status, data, `Could not download the clinic snapshot (HTTP ${res.status}).`),
+        );
+      }
+      openingCheckpoint = rememberOpeningCheckpoint(openingCheckpoint, data.checkpoint);
+      const batch = data.changes ?? [];
+      if (batch.length > 0) {
+        const applied = applyChanges(this.db.connection, batch, 'online-server');
+        pulled += applied.accepted.length;
+        afterEntity = data.nextAfterEntity;
+        afterId = data.nextAfterId;
+        if (afterEntity) this.writePeerValue('bootstrap_after_entity', afterEntity);
+        if (afterId != null) this.writePeerValue('bootstrap_after_id', String(afterId));
+      }
+      if (
+        bootstrapSnapshotFinished({
+          changesLength: batch.length,
+          hasMore: data.hasMore,
+          pageSize: BOOTSTRAP_PAGE_SIZE,
+        })
+      ) {
+        complete = true;
+        break;
+      }
+    }
+    if (!complete) {
+      throw new BadRequestException(
+        `Snapshot download is not finished after ${MAX_BOOTSTRAP_PAGES} pages. Click Sync now — this computer is not fully synced yet.`,
+      );
+    }
+    if (openingCheckpoint != null) setCheckpoint(this.db.connection, openingCheckpoint);
+    pulled += await this.pullRemoteChanges(peer, session);
+    ackPreBootstrapHoldOutbound(this.db.connection);
+    this.writePeerValue('catalog_uids_reconciled', '1');
+    await this.syncAttachmentBlobs(peer, session.token);
+    const checkpoint = currentCheckpoint(this.db.connection);
+    await this.reportCheckpoint(peer, session.token, checkpoint);
+    this.writePeerValue('last_synced_at', new Date().toISOString());
+    this.writePeerValue('bootstrapped_at', new Date().toISOString());
+    this.writePeerValue('bootstrap_in_progress', '0');
+    this.writePeerValue('last_error', '');
+    return { pulled };
+    } finally {
+      if (!this.readPeerValue('bootstrapped_at')) {
+        this.writePeerValue('bootstrap_in_progress', '0');
+      }
+    }
+  }
+
+  private async pullRemoteChanges(peer: DevicePeer, session: DeviceSession): Promise<number> {
+    let pulled = 0;
+    let since = currentCheckpoint(this.db.connection);
+    for (let i = 0; i < 20; i += 1) {
+      await this.refreshDeviceSession(peer, session);
+      const res = await this.onlineFetch(peer, session.token, `/api/sync/changes?since=${since}&limit=100`, {
+        method: 'GET',
+      });
+      const data = await this.readOnlineJson<{
+        changes?: SyncChangePayload[];
+        until?: number;
+        hasMore?: boolean;
+        message?: unknown;
+      }>(res);
+      if (!res.ok) {
+        throw new Error(
+          messageFromOnlineResponse(res.status, data, `Could not download clinic changes (HTTP ${res.status}).`),
+        );
+      }
+      const batch = data.changes ?? [];
+      if (batch.length === 0) break;
+      const applied = applyChanges(this.db.connection, batch, 'online-server');
+      pulled += applied.accepted.length;
+      if (!canAdvancePullCheckpoint(applied)) {
+        break;
+      }
+      since = data.until ?? since;
+      setCheckpoint(this.db.connection, since);
+      if (!data.hasMore) break;
+    }
+    return pulled;
+  }
+
+  private async newDeviceSession(peer: DevicePeer): Promise<DeviceSession> {
+    return { token: await this.deviceToken(peer), issuedAt: Date.now() };
+  }
+
+  private async refreshDeviceSession(peer: DevicePeer, session: DeviceSession): Promise<void> {
+    if (!shouldRefreshDeviceToken(session.issuedAt, Date.now())) return;
+    session.token = await this.deviceToken(peer);
+    session.issuedAt = Date.now();
   }
 
   async putFileFromDevice(relativePath: string, bytes: Buffer, mimeType?: string) {

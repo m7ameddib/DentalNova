@@ -24,6 +24,8 @@ export interface ClinicSyncStatus {
   kind: 'none' | 'online-hub' | 'offline-peer';
   state: ClinicSyncState;
   paired: boolean;
+  bootstrapped?: boolean;
+  needsBootstrap?: boolean;
   pendingOutbound: number;
   conflicts: number;
   lastSyncedAt: string | null;
@@ -81,8 +83,8 @@ export interface SyncNowResult {
 }
 
 export const SYNC_CONNECT_TIMEOUT_MS = 60_000;
-export const SYNC_BOOTSTRAP_TIMEOUT_MS = 180_000;
-export const SYNC_NOW_TIMEOUT_MS = 120_000;
+export const SYNC_BOOTSTRAP_TIMEOUT_MS = 900_000;
+export const SYNC_NOW_TIMEOUT_MS = 600_000;
 
 export const syncApi = {
   status: () => apiClient.get<ClinicSyncStatus>('/sync/status').then((r) => r.data),

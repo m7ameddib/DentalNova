@@ -3,8 +3,11 @@ import { nextPatientFileNumber } from '../patients/file-number.util';
 import {
   camelToSnake,
   ConflictPolicy,
+  CONFLICT_RESOLUTION_DEVICE_ID,
   fkColumnToUidField,
+  immutableApplyDecision,
   isCanonicalOnlineApply,
+  isForcedSyncApply,
   newChangeId,
   newUid,
   paymentFingerprint,
@@ -17,10 +20,20 @@ import {
   SyncOp,
   tableExists,
 } from './sync.entities';
+import { remoteRowFromConflictJson } from './sync-cycle.util';
+
+export interface ApplyConflict {
+  changeId: string;
+  entity: string;
+  recordUid: string;
+  reason: string;
+  row?: Record<string, unknown> | null;
+  current?: Record<string, unknown> | null;
+}
 
 export interface ApplyResult {
   accepted: string[];
-  conflicts: Array<{ changeId: string; entity: string; recordUid: string; reason: string }>;
+  conflicts: ApplyConflict[];
   skipped: string[];
 }
 
@@ -258,15 +271,14 @@ export function applyChanges(
         try {
           const applyRow = db.transaction(() => applyOne(db, change, deviceId));
           const result = applyRow();
-          if (result === 'accepted') accepted.push(change.changeId);
-          else if (result === 'skipped') skipped.push(change.changeId);
+          if (result === 'accepted' || result === 'file-number-collision') {
+            accepted.push(change.changeId);
+            if (result === 'file-number-collision') {
+              conflicts.push(conflictPayload(db, change, result));
+            }
+          } else if (result === 'skipped') skipped.push(change.changeId);
           else {
-            conflicts.push({
-              changeId: change.changeId,
-              entity: change.entity,
-              recordUid: change.recordUid,
-              reason: result,
-            });
+            conflicts.push(conflictPayload(db, change, result));
           }
         } catch (err) {
           recordConflict(db, change.entity, change.recordUid, 'apply-error', null, {
@@ -278,6 +290,8 @@ export function applyChanges(
             entity: change.entity,
             recordUid: change.recordUid,
             reason: 'apply-error',
+            row: change.row ?? null,
+            current: null,
           });
         }
       }
@@ -299,13 +313,33 @@ export function canAdvancePullCheckpoint(applied: ApplyResult): boolean {
 
 export function recordInboundConflicts(
   db: Database.Database,
-  conflicts: Array<{ entity: string; recordUid: string; reason: string }>,
+  conflicts: Array<{
+    entity: string;
+    recordUid: string;
+    reason: string;
+    row?: Record<string, unknown> | null;
+    current?: Record<string, unknown> | null;
+  }>,
 ): void {
   for (const conflict of conflicts) {
     const localId = getLocalId(db, conflict.entity, conflict.recordUid);
-    const local = localId != null ? snapshotRow(db, conflict.entity, localId) : null;
-    recordConflict(db, conflict.entity, conflict.recordUid, conflict.reason, local, conflict);
+    const local =
+      conflict.current ?? (localId != null ? snapshotRow(db, conflict.entity, localId) : null);
+    const remote = conflict.row ?? remoteRowFromConflictJson(conflict) ?? conflict;
+    recordConflict(db, conflict.entity, conflict.recordUid, conflict.reason, local, remote);
   }
+}
+
+function conflictPayload(db: Database.Database, change: SyncChangePayload, reason: string): ApplyConflict {
+  const localId = getLocalId(db, change.entity, change.recordUid);
+  return {
+    changeId: change.changeId,
+    entity: change.entity,
+    recordUid: change.recordUid,
+    reason,
+    row: change.row ?? null,
+    current: localId != null ? snapshotRow(db, change.entity, localId) : null,
+  };
 }
 
 function findByNaturalKey(
@@ -419,15 +453,21 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
   const localId = getLocalId(db, change.entity, change.recordUid);
   const policy: ConflictPolicy = def.conflict;
 
-  if (policy === 'immutable' && localId != null) {
+  if (policy === 'immutable' && localId != null && !isForcedSyncApply(deviceId)) {
     const current = snapshotRow(db, change.entity, localId);
-    if (current && rowsDiffer(current, change.row, def.skipColumns)) {
-      recordConflict(db, change.entity, change.recordUid, 'immutable-row-differs', current, change.row);
-      appendRemoteLog(db, change, deviceId, localId);
-      return 'immutable-row-differs';
+    if (current) {
+      const decision = immutableApplyDecision(current, change.row, def.skipColumns);
+      if (decision === 'conflict') {
+        recordConflict(db, change.entity, change.recordUid, 'immutable-row-differs', current, change.row);
+        appendRemoteLog(db, change, deviceId, localId);
+        return 'immutable-row-differs';
+      }
+      if (decision === 'skip') {
+        appendRemoteLog(db, change, deviceId, localId);
+        return 'skipped';
+      }
+      // apply-void: fall through and UPDATE void fields only (identity already matched).
     }
-    appendRemoteLog(db, change, deviceId, localId);
-    return 'skipped';
   }
 
   if (change.entity === 'payments' && localId == null) {
@@ -442,7 +482,7 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
     }
   }
 
-  if (policy === 'review' && localId != null) {
+  if (policy === 'review' && localId != null && !isForcedSyncApply(deviceId)) {
     const pendingLocal = db
       .prepare(
         `SELECT 1 FROM sync_change_log WHERE entity = ? AND record_uid = ? AND origin = 'local' AND acked_at IS NULL LIMIT 1`,
@@ -601,7 +641,7 @@ function applyClinicSettingsSingleton(
   }
   const exists = db.prepare(`SELECT id FROM clinic_settings WHERE id = 1`).get() as { id: number } | undefined;
   const currentUid = mappedUidFor(db, 'clinic_settings', 1);
-  const preferIncoming = isCanonicalOnlineApply(deviceId);
+  const preferIncoming = isCanonicalOnlineApply(deviceId) || isForcedSyncApply(deviceId);
   const foreignUid = Boolean(currentUid && currentUid !== change.recordUid);
 
   if (exists && foreignUid && !preferIncoming) {
@@ -747,22 +787,26 @@ export function resolveConflict(
     | undefined;
   if (!row || row.resolved_at) return;
   if (resolution === 'keep_remote') {
-    const remote = JSON.parse(row.remote_json || 'null') as Record<string, unknown> | null;
-    if (remote) {
-      applyChanges(db, [
-        {
-          changeId: newChangeId(),
-          entity: row.entity,
-          recordUid: row.record_uid,
-          op: 'upsert',
-          row: remote,
-        },
-      ], 'conflict-resolution');
-    }
     db.prepare(
       `UPDATE sync_change_log SET acked_at = datetime('now')
        WHERE entity = ? AND record_uid = ? AND origin = 'local' AND acked_at IS NULL`,
     ).run(row.entity, row.record_uid);
+    const remote = remoteRowFromConflictJson(JSON.parse(row.remote_json || 'null'));
+    if (remote) {
+      applyChanges(
+        db,
+        [
+          {
+            changeId: newChangeId(),
+            entity: row.entity,
+            recordUid: row.record_uid,
+            op: 'upsert',
+            row: remote,
+          },
+        ],
+        CONFLICT_RESOLUTION_DEVICE_ID,
+      );
+    }
   } else {
     const localId = getLocalId(db, row.entity, row.record_uid);
     if (localId != null) {
