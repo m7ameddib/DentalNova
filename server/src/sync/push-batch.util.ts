@@ -32,3 +32,19 @@ export function splitPushBatch(
   if (batch.length === 0) return [changes[0]];
   return batch;
 }
+
+/**
+ * Ack accepted/skipped ids; park the rest of this batch so UNIQUE catalog
+ * conflicts cannot block later operational rows in the same cycle.
+ */
+export function pushRoundFollowUp(input: {
+  batchIds: string[];
+  accepted: string[];
+  skipped: string[];
+}): { acked: string[]; skipThisCycle: string[] } {
+  const done = new Set([...input.accepted, ...input.skipped]);
+  return {
+    acked: [...done],
+    skipThisCycle: input.batchIds.filter((id) => !done.has(id)),
+  };
+}

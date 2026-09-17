@@ -1,36 +1,43 @@
 export type SyncOp = 'upsert' | 'delete' | 'void';
 export type ConflictPolicy = 'review' | 'lww-safe' | 'immutable';
 
+export interface SyncNaturalKey {
+  /** Snake-case columns that identify the same catalog row across databases. */
+  columns: string[];
+  collateNocase?: boolean;
+}
+
 export interface SyncEntityDef {
   name: string;
   table: string;
   fks: Record<string, string>;
   conflict: ConflictPolicy;
   skipColumns?: string[];
+  naturalKey?: SyncNaturalKey;
 }
 
 /** Parent → child order for apply. Reverse for capture grouping. */
 export const SYNC_ENTITIES: SyncEntityDef[] = [
-  { name: 'areas', table: 'areas', fks: {}, conflict: 'lww-safe' },
-  { name: 'payment_methods', table: 'payment_methods', fks: {}, conflict: 'lww-safe' },
-  { name: 'expense_categories', table: 'expense_categories', fks: {}, conflict: 'lww-safe' },
-  { name: 'treatment_types', table: 'treatment_types', fks: {}, conflict: 'lww-safe' },
-  { name: 'lab_names', table: 'lab_names', fks: {}, conflict: 'lww-safe' },
-  { name: 'lab_work_types', table: 'lab_work_types', fks: {}, conflict: 'lww-safe' },
+  { name: 'areas', table: 'areas', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['name'], collateNocase: true } },
+  { name: 'payment_methods', table: 'payment_methods', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['code'] } },
+  { name: 'expense_categories', table: 'expense_categories', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['code'] } },
+  { name: 'treatment_types', table: 'treatment_types', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['code'] } },
+  { name: 'lab_names', table: 'lab_names', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['name'], collateNocase: true } },
+  { name: 'lab_work_types', table: 'lab_work_types', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['code'] } },
   {
     name: 'lab_service_costs',
     table: 'lab_service_costs',
     fks: { lab_name_id: 'lab_names' },
     conflict: 'lww-safe',
   },
-  { name: 'guarantors', table: 'guarantors', fks: {}, conflict: 'lww-safe' },
+  { name: 'guarantors', table: 'guarantors', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['name'], collateNocase: true } },
   {
     name: 'guarantor_treatment_prices',
     table: 'guarantor_treatment_prices',
     fks: { guarantor_id: 'guarantors', treatment_type_id: 'treatment_types' },
     conflict: 'lww-safe',
   },
-  { name: 'disease_catalog', table: 'disease_catalog', fks: {}, conflict: 'lww-safe' },
+  { name: 'disease_catalog', table: 'disease_catalog', fks: {}, conflict: 'lww-safe', naturalKey: { columns: ['name'], collateNocase: true } },
   { name: 'medication_catalog', table: 'medication_catalog', fks: {}, conflict: 'lww-safe' },
   {
     name: 'users',
@@ -54,8 +61,20 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
     conflict: 'lww-safe',
     skipColumns: ['account_recovery_code_hash', 'logo_path', 'logo_original_name'],
   },
-  { name: 'clinic_weekly_periods', table: 'clinic_weekly_periods', fks: {}, conflict: 'lww-safe' },
-  { name: 'clinic_schedule_exceptions', table: 'clinic_schedule_exceptions', fks: {}, conflict: 'lww-safe' },
+  {
+    name: 'clinic_weekly_periods',
+    table: 'clinic_weekly_periods',
+    fks: {},
+    conflict: 'lww-safe',
+    naturalKey: { columns: ['day_of_week', 'start_time', 'end_time'] },
+  },
+  {
+    name: 'clinic_schedule_exceptions',
+    table: 'clinic_schedule_exceptions',
+    fks: {},
+    conflict: 'lww-safe',
+    naturalKey: { columns: ['exception_date'] },
+  },
   {
     name: 'clinic_exception_periods',
     table: 'clinic_exception_periods',
@@ -194,6 +213,41 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
 ];
 
 export const SYNC_ENTITY_BY_NAME = Object.fromEntries(SYNC_ENTITIES.map((e) => [e.name, e]));
+
+/** Seed/reference catalogs. Never treated as first-pairing outbound clinical work. */
+export const REFERENCE_CATALOG_ENTITIES = [
+  'areas',
+  'payment_methods',
+  'expense_categories',
+  'treatment_types',
+  'lab_names',
+  'lab_work_types',
+  'lab_service_costs',
+  'guarantors',
+  'guarantor_treatment_prices',
+  'disease_catalog',
+  'medication_catalog',
+] as const;
+
+/** Setup rows that must not overwrite Online until the user edits them after bootstrap. */
+export const PRE_BOOTSTRAP_HOLD_ENTITIES = [
+  'users',
+  'clinic_settings',
+  'clinic_weekly_periods',
+  'clinic_schedule_exceptions',
+  'clinic_exception_periods',
+] as const;
+
+export const REFERENCE_CATALOG_ENTITY_SET = new Set<string>(REFERENCE_CATALOG_ENTITIES);
+export const PRE_BOOTSTRAP_HOLD_ENTITY_SET = new Set<string>(PRE_BOOTSTRAP_HOLD_ENTITIES);
+export const IDENTITY_RECONCILE_ENTITY_SET = new Set<string>([
+  ...REFERENCE_CATALOG_ENTITIES,
+  ...PRE_BOOTSTRAP_HOLD_ENTITIES,
+]);
+
+export function isCanonicalOnlineApply(deviceId: string | null | undefined): boolean {
+  return deviceId === 'online-server';
+}
 
 export function tableExists(db: { prepare: (sql: string) => { get: (name: string) => unknown } }, table: string): boolean {
   const row = db.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name = ?`).get(table);

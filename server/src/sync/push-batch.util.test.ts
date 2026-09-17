@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { jsonBytes, PUSH_BATCH_MAX_JSON_BYTES, splitPushBatch } from './push-batch.util';
+import { jsonBytes, PUSH_BATCH_MAX_JSON_BYTES, pushRoundFollowUp, splitPushBatch } from './push-batch.util';
 import { SyncChangePayload } from './sync.entities';
 
 function change(i: number, padding = ''): SyncChangePayload {
@@ -39,4 +39,21 @@ test('a single oversized row is still returned so Online can reject it clearly',
   const batch = splitPushBatch([huge], 40, 1_000);
   assert.equal(batch.length, 1);
   assert.equal(batch[0].changeId, 'c-1');
+});
+
+test('push round parks UNIQUE conflicts instead of aborting the cycle', () => {
+  const follow = pushRoundFollowUp({
+    batchIds: ['type-1', 'type-2', 'patient-1'],
+    accepted: [],
+    skipped: [],
+  });
+  assert.deepEqual(follow.acked, []);
+  assert.deepEqual(follow.skipThisCycle, ['type-1', 'type-2', 'patient-1']);
+  const next = pushRoundFollowUp({
+    batchIds: ['patient-1', 'pay-1'],
+    accepted: ['patient-1'],
+    skipped: [],
+  });
+  assert.deepEqual(next.acked, ['patient-1']);
+  assert.deepEqual(next.skipThisCycle, ['pay-1']);
 });

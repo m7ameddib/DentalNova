@@ -4,13 +4,16 @@ import {
   camelToSnake,
   ConflictPolicy,
   fkColumnToUidField,
+  isCanonicalOnlineApply,
   newChangeId,
   newUid,
   paymentFingerprint,
+  PRE_BOOTSTRAP_HOLD_ENTITY_SET,
   rowsDiffer,
   SYNC_ENTITIES,
   SYNC_ENTITY_BY_NAME,
   SyncChangePayload,
+  SyncEntityDef,
   SyncOp,
   tableExists,
 } from './sync.entities';
@@ -67,7 +70,14 @@ export function snapshotRow(db: Database.Database, entityName: string, localId: 
   return out;
 }
 
-export function pendingOutbound(db: Database.Database, limit = 200): SyncChangePayload[] {
+export function pendingOutbound(
+  db: Database.Database,
+  limit = 200,
+  excludeChangeIds: Iterable<string> = [],
+): SyncChangePayload[] {
+  const excluded = [...excludeChangeIds];
+  const excludeSql =
+    excluded.length > 0 ? `AND c.change_id NOT IN (${excluded.map(() => '?').join(', ')})` : '';
   const rows = db
     .prepare(
       `SELECT c.change_id, c.entity, c.record_uid, c.local_id, c.op
@@ -79,13 +89,22 @@ export function pendingOutbound(db: Database.Database, limit = 200): SyncChangeP
          GROUP BY entity, record_uid
        ) latest
          ON latest.entity = c.entity AND latest.record_uid = c.record_uid AND latest.max_seq = c.seq
+       WHERE 1=1 ${excludeSql}
        ORDER BY c.seq ASC
        LIMIT ?`,
     )
-    .all(limit) as Array<{ change_id: string; entity: string; record_uid: string; local_id: number | null; op: SyncOp }>;
+    .all(...excluded, limit) as Array<{
+    change_id: string;
+    entity: string;
+    record_uid: string;
+    local_id: number | null;
+    op: SyncOp;
+  }>;
 
   const payload: SyncChangePayload[] = [];
+  const bootstrapped = isPeerBootstrapped(db);
   for (const row of rows) {
+    if (!bootstrapped && PRE_BOOTSTRAP_HOLD_ENTITY_SET.has(row.entity)) continue;
     if (row.op === 'delete') {
       payload.push({ changeId: row.change_id, entity: row.entity, recordUid: row.record_uid, op: 'delete', row: null });
       continue;
@@ -108,6 +127,14 @@ export function pendingOutbound(db: Database.Database, limit = 200): SyncChangeP
 function entityOrder(name: string): number {
   const idx = SYNC_ENTITIES.findIndex((e) => e.name === name);
   return idx < 0 ? 999 : idx;
+}
+
+function isPeerBootstrapped(db: Database.Database): boolean {
+  if (!tableExists(db, 'sync_peer_state')) return false;
+  const row = db.prepare(`SELECT value FROM sync_peer_state WHERE key = 'bootstrapped_at'`).get() as
+    | { value: string }
+    | undefined;
+  return Boolean(row?.value);
 }
 
 export function markAcked(db: Database.Database, changeIds: string[]): void {
@@ -281,6 +308,66 @@ export function recordInboundConflicts(
   }
 }
 
+function findByNaturalKey(
+  db: Database.Database,
+  def: SyncEntityDef,
+  values: Record<string, unknown>,
+): number | null {
+  const key = def.naturalKey;
+  if (!key?.columns.length) return null;
+  if (!tableExists(db, def.table)) return null;
+  const cols = columnsOf(db, def.table);
+  for (const column of key.columns) {
+    if (!cols.includes(column)) return null;
+    if (values[column] == null || values[column] === '') return null;
+  }
+  const collate = key.collateNocase ? ' COLLATE NOCASE' : '';
+  const where = key.columns.map((column) => `${column} = ?${collate}`).join(' AND ');
+  const row = db.prepare(`SELECT id FROM ${def.table} WHERE ${where} LIMIT 1`).get(...key.columns.map((column) => values[column])) as
+    | { id: number }
+    | undefined;
+  return row?.id ?? null;
+}
+
+function mappedUidFor(db: Database.Database, entity: string, localId: number): string | null {
+  const row = db.prepare('SELECT record_uid AS uid FROM sync_id_map WHERE entity = ? AND local_id = ?').get(entity, localId) as
+    | { uid: string }
+    | undefined;
+  return row?.uid ?? null;
+}
+
+function ackPendingLocalRecord(db: Database.Database, entity: string, recordUid: string): void {
+  db.prepare(
+    `UPDATE sync_change_log SET acked_at = datetime('now')
+     WHERE entity = ? AND record_uid = ? AND origin = 'local' AND acked_at IS NULL`,
+  ).run(entity, recordUid);
+}
+
+/** Bind incoming UID to an existing row. Online keeps its UID; Offline adopts Online's. */
+function bindRecordUid(
+  db: Database.Database,
+  entity: string,
+  localId: number,
+  incomingUid: string,
+  preferIncoming: boolean,
+): 'bound' | 'kept-existing' {
+  const incomingOwner = getLocalId(db, entity, incomingUid);
+  if (incomingOwner != null && incomingOwner !== localId) {
+    return 'kept-existing';
+  }
+  const current = mappedUidFor(db, entity, localId);
+  if (!current) {
+    db.prepare('INSERT INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(entity, localId, incomingUid);
+    return 'bound';
+  }
+  if (current === incomingUid) return 'bound';
+  if (!preferIncoming) return 'kept-existing';
+  ackPendingLocalRecord(db, entity, current);
+  db.prepare('DELETE FROM sync_id_map WHERE entity = ? AND local_id = ?').run(entity, localId);
+  db.prepare('INSERT INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(entity, localId, incomingUid);
+  return 'bound';
+}
+
 function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: string | null): 'accepted' | 'skipped' | string {
   const existingChange = db.prepare('SELECT change_id FROM sync_change_log WHERE change_id = ?').get(change.changeId);
   if (existingChange) return 'skipped';
@@ -414,26 +501,53 @@ function applyOne(db: Database.Database, change: SyncChangePayload, deviceId: st
   }
 
   let appliedId = localId;
-  if (localId == null) {
+  const preferIncoming = isCanonicalOnlineApply(deviceId);
+
+  if (appliedId == null) {
+    const naturalId = findByNaturalKey(db, def, values);
+    if (naturalId != null) {
+      const bind = bindRecordUid(db, change.entity, naturalId, change.recordUid, preferIncoming);
+      if (bind === 'kept-existing') {
+        appendRemoteLog(db, change, deviceId, naturalId);
+        return 'skipped';
+      }
+      appliedId = naturalId;
+    }
+  }
+
+  if (appliedId == null) {
     const insertCols = Object.keys(values);
     if (insertCols.length === 0) return 'skipped';
     const placeholders = insertCols.map(() => '?').join(', ');
-    const info = db
-      .prepare(`INSERT INTO ${def.table} (${insertCols.join(', ')}) VALUES (${placeholders})`)
-      .run(...insertCols.map((c) => values[c] ?? null));
-    appliedId = Number(info.lastInsertRowid);
-    db.prepare('DELETE FROM sync_id_map WHERE entity = ? AND local_id = ?').run(change.entity, appliedId);
-    db.prepare('INSERT INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(
-      change.entity,
-      appliedId,
-      change.recordUid,
-    );
+    try {
+      const info = db
+        .prepare(`INSERT INTO ${def.table} (${insertCols.join(', ')}) VALUES (${placeholders})`)
+        .run(...insertCols.map((c) => values[c] ?? null));
+      appliedId = Number(info.lastInsertRowid);
+      db.prepare('DELETE FROM sync_id_map WHERE entity = ? AND local_id = ?').run(change.entity, appliedId);
+      db.prepare('INSERT INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(
+        change.entity,
+        appliedId,
+        change.recordUid,
+      );
+    } catch (err) {
+      const naturalId = findByNaturalKey(db, def, values);
+      if (naturalId != null) {
+        const bind = bindRecordUid(db, change.entity, naturalId, change.recordUid, preferIncoming);
+        appendRemoteLog(db, change, deviceId, naturalId);
+        return bind === 'bound' && preferIncoming ? 'accepted' : 'skipped';
+      }
+      throw err;
+    }
   } else {
     const assignments = Object.keys(values)
       .map((c) => `${c} = ?`)
       .join(', ');
     if (assignments) {
-      db.prepare(`UPDATE ${def.table} SET ${assignments} WHERE id = ?`).run(...Object.keys(values).map((c) => values[c] ?? null), localId);
+      db.prepare(`UPDATE ${def.table} SET ${assignments} WHERE id = ?`).run(
+        ...Object.keys(values).map((c) => values[c] ?? null),
+        appliedId,
+      );
     }
   }
 
@@ -486,6 +600,15 @@ function applyClinicSettingsSingleton(
     if (cols.includes(snake) && !skip.has(snake)) values[snake] = value;
   }
   const exists = db.prepare(`SELECT id FROM clinic_settings WHERE id = 1`).get() as { id: number } | undefined;
+  const currentUid = mappedUidFor(db, 'clinic_settings', 1);
+  const preferIncoming = isCanonicalOnlineApply(deviceId);
+  const foreignUid = Boolean(currentUid && currentUid !== change.recordUid);
+
+  if (exists && foreignUid && !preferIncoming) {
+    appendRemoteLog(db, change, deviceId, 1);
+    return 'skipped';
+  }
+
   if (exists) {
     const assignments = Object.keys(values)
       .map((c) => `${c} = ?`)
@@ -502,10 +625,13 @@ function applyClinicSettingsSingleton(
       `INSERT INTO clinic_settings (${insertCols.join(', ')}) VALUES (${insertCols.map(() => '?').join(', ')})`,
     ).run(...insertCols.map((c) => values[c] ?? null));
   }
-  db.prepare(`DELETE FROM sync_id_map WHERE entity = 'clinic_settings'`).run();
-  db.prepare(`INSERT INTO sync_id_map (entity, local_id, record_uid) VALUES ('clinic_settings', 1, ?)`).run(
-    change.recordUid,
-  );
+
+  if (preferIncoming || !currentUid) {
+    db.prepare(`DELETE FROM sync_id_map WHERE entity = 'clinic_settings'`).run();
+    db.prepare(`INSERT INTO sync_id_map (entity, local_id, record_uid) VALUES ('clinic_settings', 1, ?)`).run(
+      change.recordUid,
+    );
+  }
   appendRemoteLog(db, change, deviceId, 1);
   return 'accepted';
 }
@@ -563,6 +689,11 @@ function applyUserLinkOnly(
     return 'user-id-mismatch';
   }
   if (mappedUid && mappedUid.recordUid !== change.recordUid) {
+    if (!isCanonicalOnlineApply(deviceId)) {
+      appendRemoteLog(db, change, deviceId, local.id);
+      return 'accepted';
+    }
+    ackPendingLocalRecord(db, 'users', mappedUid.recordUid);
     db.prepare(`DELETE FROM sync_id_map WHERE entity = 'users' AND local_id = ?`).run(local.id);
   }
   db.prepare('INSERT OR IGNORE INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(
@@ -580,13 +711,18 @@ export function unresolvedConflictCount(db: Database.Database): number {
 }
 
 export function pendingCount(db: Database.Database): number {
+  const hold = [...PRE_BOOTSTRAP_HOLD_ENTITY_SET];
+  const hideHold = !isPeerBootstrapped(db) && hold.length > 0;
+  const holdSql = hideHold ? `AND entity NOT IN (${hold.map(() => '?').join(', ')})` : '';
   const row = db
     .prepare(
       `SELECT COUNT(*) AS c FROM (
-         SELECT 1 FROM sync_change_log WHERE acked_at IS NULL AND origin = 'local' GROUP BY entity, record_uid
+         SELECT 1 FROM sync_change_log
+         WHERE acked_at IS NULL AND origin = 'local' ${holdSql}
+         GROUP BY entity, record_uid
        )`,
     )
-    .get() as { c: number };
+    .get(...(hideHold ? hold : [])) as { c: number };
   return row.c;
 }
 

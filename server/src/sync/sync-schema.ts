@@ -1,10 +1,18 @@
 import Database from 'better-sqlite3';
-import { SYNC_ENTITIES, tableExists } from './sync.entities';
+import {
+  PRE_BOOTSTRAP_HOLD_ENTITIES,
+  REFERENCE_CATALOG_ENTITIES,
+  SYNC_ENTITIES,
+  tableExists,
+} from './sync.entities';
+
+const SEED_CATALOG_ACK_KEY = 'seed_catalog_outbound_acked_v1';
 
 export function ensureSyncInfrastructure(db: Database.Database): void {
   if (!tableExists(db, 'sync_change_log')) return;
   installTriggers(db);
   backfillIdMap(db);
+  ackLegacySeedCatalogOutbound(db);
 }
 
 function installTriggers(db: Database.Database): void {
@@ -65,4 +73,44 @@ function backfillIdMap(db: Database.Database): void {
        SELECT ?, id, lower(hex(randomblob(16))) FROM ${entity.table}`,
     ).run(entity.name);
   }
+}
+
+function peerFlag(db: Database.Database, key: string): string | null {
+  if (!tableExists(db, 'sync_peer_state')) return null;
+  const row = db.prepare(`SELECT value FROM sync_peer_state WHERE key = ?`).get(key) as { value: string } | undefined;
+  return row?.value ?? null;
+}
+
+function setPeerFlag(db: Database.Database, key: string, value: string): void {
+  if (!tableExists(db, 'sync_peer_state')) return;
+  db.prepare(
+    `INSERT INTO sync_peer_state (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
+  ).run(key, value);
+}
+
+function ackPendingLocalEntities(db: Database.Database, entities: readonly string[]): void {
+  if (!tableExists(db, 'sync_change_log') || entities.length === 0) return;
+  const placeholders = entities.map(() => '?').join(', ');
+  db.prepare(
+    `UPDATE sync_change_log SET acked_at = datetime('now')
+     WHERE acked_at IS NULL AND origin = 'local' AND entity IN (${placeholders})`,
+  ).run(...entities);
+}
+
+/**
+ * Existing installs logged comprehensive catalog seed as local outbound.
+ * Ack those rows once so they cannot wedge Offline → Online push.
+ * Later doctor catalog edits still flow through triggers.
+ */
+export function ackLegacySeedCatalogOutbound(db: Database.Database): void {
+  if (!tableExists(db, 'sync_change_log')) return;
+  if (peerFlag(db, SEED_CATALOG_ACK_KEY) === '1') return;
+  ackPendingLocalEntities(db, REFERENCE_CATALOG_ENTITIES);
+  setPeerFlag(db, SEED_CATALOG_ACK_KEY, '1');
+}
+
+/** After first Online snapshot, drop setup-time settings/users/hours from the outbox. */
+export function ackPreBootstrapHoldOutbound(db: Database.Database): void {
+  ackPendingLocalEntities(db, PRE_BOOTSTRAP_HOLD_ENTITIES);
+  ackPendingLocalEntities(db, REFERENCE_CATALOG_ENTITIES);
 }

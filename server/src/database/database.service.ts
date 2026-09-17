@@ -8,6 +8,8 @@ import { seedComprehensiveTreatmentCatalog } from './seed-comprehensive-catalog'
 import { getTenantClinicId } from '../platform/tenant-context';
 import { PlatformService } from '../platform/platform.service';
 import { ensureSyncInfrastructure } from '../sync/sync-schema';
+import { tableExists } from '../sync/sync.entities';
+import { withRemoteApply } from '../sync/sync-apply.util';
 
 /**
  * Owns the single SQLite connection (persistence layer) and applies SQL
@@ -161,17 +163,24 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     db.pragma('foreign_keys = ON');
     db.pragma('busy_timeout = 15000');
     this.runMigrationsOn(db);
-    this.ensureReferenceDataOn(db);
     try {
       ensureSyncInfrastructure(db);
     } catch (err) {
       this.logger.warn(`Sync infrastructure setup skipped: ${(err as Error).message}`);
     }
-    const catalogCount = (
-      db.prepare(`SELECT COUNT(*) AS c FROM treatment_types`).get() as { c: number } | undefined
-    )?.c ?? 0;
-    if (catalogCount < 20) {
-      seedComprehensiveTreatmentCatalog(db);
+    const seedReference = () => {
+      this.ensureReferenceDataOn(db);
+      const catalogCount = (
+        db.prepare(`SELECT COUNT(*) AS c FROM treatment_types`).get() as { c: number } | undefined
+      )?.c ?? 0;
+      if (catalogCount < 20) {
+        seedComprehensiveTreatmentCatalog(db);
+      }
+    };
+    if (tableExists(db, 'sync_apply_guard')) {
+      withRemoteApply(db, seedReference);
+    } else {
+      seedReference();
     }
     this.logger.log(`SQLite database ready at ${dbFile}`);
     return db;

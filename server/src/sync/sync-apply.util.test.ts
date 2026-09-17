@@ -1,8 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
-import { ensureSyncInfrastructure } from './sync-schema';
-import { applyChanges, pendingOutbound, snapshotRow, clinicSnapshot, markAcked, pendingCount, resolveConflict, canAdvancePullCheckpoint } from './sync-apply.util';
+import { ackLegacySeedCatalogOutbound, ackPreBootstrapHoldOutbound, ensureSyncInfrastructure } from './sync-schema';
+import {
+  applyChanges,
+  pendingOutbound,
+  snapshotRow,
+  clinicSnapshot,
+  markAcked,
+  pendingCount,
+  resolveConflict,
+  canAdvancePullCheckpoint,
+  withRemoteApply,
+} from './sync-apply.util';
 import { paymentFingerprint, rowsDiffer } from './sync.entities';
 
 function memoryClinic(): Database.Database {
@@ -150,7 +160,7 @@ test('user apply links by username and never writes password_hash or role_id', (
         row: { username: 'doc', passwordHash: 'REMOTE-HASH', roleId: 99, fullName: 'Remote Doctor' },
       },
     ],
-    'device-a',
+    'online-server',
   );
   assert.equal(result.accepted.includes('user-1'), true);
   const user = db.prepare(`SELECT password_hash AS hash, role_id AS roleId, full_name AS name FROM users WHERE username = 'doc'`).get() as {
@@ -611,5 +621,293 @@ test('apply-error conflicts block pull checkpoint advance', () => {
     false,
   );
 });
+
+function pairingDbs() {
+  const schema = `
+    CREATE TABLE treatment_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      label TEXT
+    );
+    CREATE TABLE payment_methods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      label TEXT
+    );
+    CREATE TABLE expense_categories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      label TEXT
+    );
+    CREATE TABLE areas (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE COLLATE NOCASE
+    );
+    CREATE TABLE guarantors (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL UNIQUE
+    );
+    CREATE TABLE clinic_settings (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      clinic_name TEXT,
+      work_start_time TEXT
+    );
+    CREATE TABLE clinic_weekly_periods (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      day_of_week INTEGER,
+      start_time TEXT,
+      end_time TEXT,
+      sort_order INTEGER
+    );
+    CREATE TABLE users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      username TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role_id INTEGER NOT NULL
+    );
+    CREATE TABLE patients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      full_name TEXT,
+      phone TEXT,
+      file_number TEXT UNIQUE
+    );
+    CREATE TABLE payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      patient_id INTEGER,
+      amount_cents INTEGER,
+      method TEXT,
+      date TEXT,
+      note TEXT,
+      status TEXT DEFAULT 'ACTIVE'
+    );
+  `;
+  const online = new Database(':memory:');
+  const offline = new Database(':memory:');
+  online.exec(schema);
+  offline.exec(schema);
+  online.exec(fsRead038());
+  offline.exec(fsRead038());
+  ensureSyncInfrastructure(online);
+  ensureSyncInfrastructure(offline);
+  return { online, offline };
+}
+
+test('seed inserts under the apply guard are not queued as outbound', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE treatment_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      label TEXT
+    );
+    CREATE TABLE patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT);
+    CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER);
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  withRemoteApply(db, () => {
+    db.prepare(`INSERT INTO treatment_types (code, label) VALUES ('FILLING', 'Filling')`).run();
+    db.prepare(`INSERT INTO treatment_types (code, label) VALUES ('CROWN', 'Crown')`).run();
+  });
+  assert.equal(pendingOutbound(db).filter((c) => c.entity === 'treatment_types').length, 0);
+  db.prepare(`INSERT INTO treatment_types (code, label) VALUES ('EXAM', 'Exam')`).run();
+  assert.equal(pendingOutbound(db).some((c) => c.entity === 'treatment_types' && c.row?.code === 'EXAM'), true);
+  db.close();
+});
+
+test('legacy seed catalog outbound is acked once so it cannot wedge push', () => {
+  const db = new Database(':memory:');
+  db.exec(`
+    CREATE TABLE treatment_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT NOT NULL UNIQUE,
+      label TEXT
+    );
+    CREATE TABLE patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT);
+    CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER);
+  `);
+  db.exec(fsRead038());
+  ensureSyncInfrastructure(db);
+  for (let i = 0; i < 45; i += 1) {
+    db.prepare(`INSERT INTO treatment_types (code, label) VALUES (?, ?)`).run(`T${i}`, `Type ${i}`);
+  }
+  db.prepare(`INSERT INTO patients (full_name) VALUES ('Offline Ada')`).run();
+  assert.ok(pendingOutbound(db).filter((c) => c.entity === 'treatment_types').length >= 40);
+  db.prepare(`DELETE FROM sync_peer_state WHERE key = 'seed_catalog_outbound_acked_v1'`).run();
+  ackLegacySeedCatalogOutbound(db);
+  const pending = pendingOutbound(db);
+  assert.equal(pending.some((c) => c.entity === 'treatment_types'), false);
+  assert.equal(pending.some((c) => c.entity === 'patients' && c.row?.fullName === 'Offline Ada'), true);
+  ackLegacySeedCatalogOutbound(db);
+  assert.equal(pendingOutbound(db).some((c) => c.entity === 'patients'), true);
+  db.close();
+});
+
+test('natural-key adopt remaps Offline catalog UID to Online without duplicating', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO treatment_types (code, label) VALUES ('FILLING', 'Filling')`).run();
+  offline.prepare(`INSERT INTO treatment_types (code, label) VALUES ('FILLING', 'Filling')`).run();
+  const onlineUid = snapshotRow(online, 'treatment_types', 1)!.recordUid as string;
+  const offlineUid = snapshotRow(offline, 'treatment_types', 1)!.recordUid as string;
+  assert.notEqual(onlineUid, offlineUid);
+  const applied = applyChanges(
+    offline,
+    [
+      {
+        changeId: 'snap-filling',
+        entity: 'treatment_types',
+        recordUid: onlineUid,
+        op: 'upsert',
+        row: { code: 'FILLING', label: 'Filling' },
+      },
+    ],
+    'online-server',
+  );
+  assert.equal(applied.conflicts.length, 0);
+  const count = offline.prepare(`SELECT COUNT(*) AS c FROM treatment_types`).get() as { c: number };
+  assert.equal(count.c, 1);
+  const mapped = offline.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'treatment_types' AND local_id = 1`).get() as {
+    uid: string;
+  };
+  assert.equal(mapped.uid, onlineUid);
+  online.close();
+  offline.close();
+});
+
+test('Offline catalog push does not duplicate or steal Online UID; patients in the same batch still apply', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO treatment_types (code, label) VALUES ('FILLING', 'Filling')`).run();
+  online.prepare(`INSERT INTO clinic_settings (id, clinic_name, work_start_time) VALUES (1, 'Online Clinic', '08:00')`).run();
+  offline.prepare(`INSERT INTO treatment_types (code, label) VALUES ('FILLING', 'Filling')`).run();
+  offline.prepare(`INSERT INTO clinic_settings (id, clinic_name, work_start_time) VALUES (1, 'Offline Clinic', '09:00')`).run();
+  offline.prepare(`INSERT INTO patients (full_name, phone, file_number) VALUES ('Ada', '079', 'P-000001')`).run();
+  const onlineTypeUid = snapshotRow(online, 'treatment_types', 1)!.recordUid as string;
+  const offlineType = pendingOutbound(offline).find((c) => c.entity === 'treatment_types')!;
+  const offlinePatient = pendingOutbound(offline).find((c) => c.entity === 'patients')!;
+  const offlineSettings = snapshotRow(offline, 'clinic_settings', 1)!;
+  const result = applyChanges(
+    online,
+    [
+      offlineType,
+      {
+        changeId: 'settings-seed',
+        entity: 'clinic_settings',
+        recordUid: String(offlineSettings.recordUid),
+        op: 'upsert',
+        row: offlineSettings,
+      },
+      offlinePatient,
+    ],
+    'device-offline',
+  );
+  assert.equal(result.conflicts.some((c) => c.reason === 'apply-error'), false);
+  assert.equal((online.prepare(`SELECT COUNT(*) AS c FROM treatment_types`).get() as { c: number }).c, 1);
+  assert.equal(
+    (online.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'treatment_types'`).get() as { uid: string }).uid,
+    onlineTypeUid,
+  );
+  assert.equal((online.prepare(`SELECT clinic_name AS n FROM clinic_settings WHERE id = 1`).get() as { n: string }).n, 'Online Clinic');
+  assert.equal((online.prepare(`SELECT COUNT(*) AS c FROM patients`).get() as { c: number }).c, 1);
+  assert.equal((online.prepare(`SELECT full_name AS n FROM patients`).get() as { n: string }).n, 'Ada');
+  const replay = applyChanges(online, [offlinePatient], 'device-offline');
+  assert.equal(replay.skipped.includes(offlinePatient.changeId), true);
+  assert.equal((online.prepare(`SELECT COUNT(*) AS c FROM patients`).get() as { c: number }).c, 1);
+  online.close();
+  offline.close();
+});
+
+test('Online patient still applies onto Offline after catalog adopt', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO patients (full_name, phone, file_number) VALUES ('Online Pat', '070', 'P-000009')`).run();
+  const change = pendingOutbound(online).find((c) => c.entity === 'patients')!;
+  const applied = applyChanges(offline, [change], 'online-server');
+  assert.equal(applied.accepted.includes(change.changeId), true);
+  assert.equal((offline.prepare(`SELECT full_name AS n FROM patients`).get() as { n: string }).n, 'Online Pat');
+  online.close();
+  offline.close();
+});
+
+test('first pairing does not rewrite Online user UID when usernames match', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO users (username, password_hash, role_id) VALUES ('doc', 'ON', 1)`).run();
+  offline.prepare(`INSERT INTO users (username, password_hash, role_id) VALUES ('doc', 'OFF', 1)`).run();
+  const onlineUid = snapshotRow(online, 'users', 1)!.recordUid as string;
+  const offlineUser = pendingOutbound(offline).find((c) => c.entity === 'users');
+  assert.equal(Boolean(offlineUser), false, 'users are held until bootstrap');
+  const forced = snapshotRow(offline, 'users', 1)!;
+  applyChanges(
+    online,
+    [{ changeId: 'user-seed', entity: 'users', recordUid: String(forced.recordUid), op: 'upsert', row: forced }],
+    'device-offline',
+  );
+  const mapped = online.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'users' AND local_id = 1`).get() as {
+    uid: string;
+  };
+  assert.equal(mapped.uid, onlineUid);
+  online.close();
+  offline.close();
+});
+
+test('weekly periods with the same day and hours are adopted, not duplicated', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO clinic_weekly_periods (day_of_week, start_time, end_time, sort_order) VALUES (0, '09:00', '17:00', 0)`).run();
+  offline.prepare(`INSERT INTO clinic_weekly_periods (day_of_week, start_time, end_time, sort_order) VALUES (0, '09:00', '17:00', 0)`).run();
+  const onlineSnap = snapshotRow(online, 'clinic_weekly_periods', 1)!;
+  applyChanges(
+    online,
+    [
+      {
+        changeId: 'hours-offline',
+        entity: 'clinic_weekly_periods',
+        recordUid: snapshotRow(offline, 'clinic_weekly_periods', 1)!.recordUid as string,
+        op: 'upsert',
+        row: snapshotRow(offline, 'clinic_weekly_periods', 1),
+      },
+    ],
+    'device-offline',
+  );
+  assert.equal((online.prepare(`SELECT COUNT(*) AS c FROM clinic_weekly_periods`).get() as { c: number }).c, 1);
+  applyChanges(offline, [{ changeId: 'hours-online', entity: 'clinic_weekly_periods', recordUid: onlineSnap.recordUid as string, op: 'upsert', row: onlineSnap }], 'online-server');
+  assert.equal((offline.prepare(`SELECT COUNT(*) AS c FROM clinic_weekly_periods`).get() as { c: number }).c, 1);
+  assert.equal(
+    (offline.prepare(`SELECT record_uid AS uid FROM sync_id_map WHERE entity = 'clinic_weekly_periods'`).get() as { uid: string }).uid,
+    onlineSnap.recordUid,
+  );
+  online.close();
+  offline.close();
+});
+
+test('pre-bootstrap hold rows are acked so they never replace Online after snapshot', () => {
+  const { offline } = pairingDbs();
+  offline.prepare(`INSERT INTO clinic_settings (id, clinic_name) VALUES (1, 'Local')`).run();
+  offline.prepare(`INSERT INTO users (username, password_hash, role_id) VALUES ('doc', 'x', 1)`).run();
+  offline.prepare(`INSERT INTO clinic_weekly_periods (day_of_week, start_time, end_time, sort_order) VALUES (1, '10:00', '18:00', 0)`).run();
+  assert.equal(pendingOutbound(offline).some((c) => c.entity === 'clinic_settings'), false);
+  ackPreBootstrapHoldOutbound(offline);
+  offline.prepare(`INSERT INTO sync_peer_state (key, value) VALUES ('bootstrapped_at', datetime('now'))`).run();
+  assert.equal(pendingOutbound(offline).some((c) => c.entity === 'users' || c.entity === 'clinic_settings'), false);
+  offline.close();
+});
+
+test('areas and guarantors adopt by name (case-insensitive for areas)', () => {
+  const { online, offline } = pairingDbs();
+  online.prepare(`INSERT INTO areas (name) VALUES ('Downtown')`).run();
+  online.prepare(`INSERT INTO guarantors (name) VALUES ('NHIF')`).run();
+  offline.prepare(`INSERT INTO areas (name) VALUES ('downtown')`).run();
+  offline.prepare(`INSERT INTO guarantors (name) VALUES ('NHIF')`).run();
+  applyChanges(
+    offline,
+    [
+      { changeId: 'a', entity: 'areas', recordUid: snapshotRow(online, 'areas', 1)!.recordUid as string, op: 'upsert', row: snapshotRow(online, 'areas', 1) },
+      { changeId: 'g', entity: 'guarantors', recordUid: snapshotRow(online, 'guarantors', 1)!.recordUid as string, op: 'upsert', row: snapshotRow(online, 'guarantors', 1) },
+    ],
+    'online-server',
+  );
+  assert.equal((offline.prepare(`SELECT COUNT(*) AS c FROM areas`).get() as { c: number }).c, 1);
+  assert.equal((offline.prepare(`SELECT COUNT(*) AS c FROM guarantors`).get() as { c: number }).c, 1);
+  online.close();
+  offline.close();
+});
+
 
 
