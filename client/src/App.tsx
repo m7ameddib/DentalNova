@@ -45,6 +45,18 @@ import { SubscriptionGate } from '@/routes/SubscriptionGate';
 import { SubscriptionStatusPage } from '@/pages/SubscriptionStatusPage';
 
 import { DibNovaAdminPage } from '@/pages/DibNovaAdminPage';
+import { AdminOverviewPage } from '@/pages/admin/AdminOverviewPage';
+import { AdminClinicsPage } from '@/pages/admin/AdminClinicsPage';
+import { AdminSubscriptionPage } from '@/pages/admin/AdminSubscriptionPage';
+import { AdminPaymentsPage } from '@/pages/admin/AdminPaymentsPage';
+import { AdminUsersPage } from '@/pages/admin/AdminUsersPage';
+import { AdminOperationsPage } from '@/pages/admin/AdminOperationsPage';
+import { AdminTrialsPage } from '@/pages/admin/AdminTrialsPage';
+import { AdminMarketingPage } from '@/pages/admin/AdminMarketingPage';
+import { AdminOfflineLicensesPage } from '@/pages/admin/AdminOfflineLicensesPage';
+import { AdminAiUsagePage } from '@/pages/admin/AdminAiUsagePage';
+import { AdminHistoryPage } from '@/pages/admin/AdminHistoryPage';
+import { AdminAuditPage } from '@/pages/admin/AdminAuditPage';
 
 import { OdontogramPreviewPage } from '@/pages/OdontogramPreviewPage';
 import { ForgotPasswordPage } from '@/pages/ForgotPasswordPage';
@@ -94,7 +106,21 @@ export default function App() {
 
           <Route path="/subscription-status" element={<SubscriptionStatusPage />} />
 
-          <Route path="/dibnova-admin" element={<DibNovaAdminPage />} />
+          <Route path="/dibnova-admin" element={<DibNovaAdminPage />}>
+            <Route index element={<AdminOverviewPage />} />
+            <Route path="clinics" element={<AdminClinicsPage />} />
+            <Route path="subscription" element={<AdminSubscriptionPage />} />
+            <Route path="payments" element={<AdminPaymentsPage />} />
+            <Route path="users" element={<AdminUsersPage />} />
+            <Route path="operations" element={<AdminOperationsPage />} />
+            <Route path="trials" element={<AdminTrialsPage />} />
+            <Route path="marketing" element={<AdminMarketingPage />} />
+            <Route path="offline-licenses" element={<AdminOfflineLicensesPage />} />
+            <Route path="ai-usage" element={<AdminAiUsagePage />} />
+            <Route path="history" element={<AdminHistoryPage />} />
+            <Route path="audit" element={<AdminAuditPage />} />
+            <Route path="*" element={<Navigate to="/dibnova-admin" replace />} />
+          </Route>
 
           <Route path="/login" element={<LoginPage />} />
 
