@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Download, X } from 'lucide-react';
 
@@ -6,6 +7,7 @@ const DISMISS_KEY = 'dnt-pwa-install-dismissed';
 
 export function PwaInstallBanner() {
   const { t, i18n } = useTranslation();
+  const location = useLocation();
   const [installEvent, setInstallEvent] = useState<BeforeInstallPromptEvent | null>(null);
   const [dismissed, setDismissed] = useState(() => localStorage.getItem(DISMISS_KEY) === '1');
   const [installing, setInstalling] = useState(false);
@@ -20,7 +22,7 @@ export function PwaInstallBanner() {
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
-  if (dismissed || !installEvent) {
+  if (location.pathname.startsWith('/dibnova-admin') || dismissed || !installEvent) {
     return null;
   }
 

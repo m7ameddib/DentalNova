@@ -9,6 +9,7 @@ import './styles/print.css';
 import './styles/follow-up.css';
 import './styles/ops-pages.css';
 import './styles/daily-report.css';
+import './styles/admin-dashboard.css';
 import { registerPwaServiceWorker } from '@/pwa/registerPwa';
 import { queryClient } from '@/queryClient';
 import { startOfflineFallback } from '@/offline/bootstrap';
