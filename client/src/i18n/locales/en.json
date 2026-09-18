@@ -7,7 +7,8 @@
     "nav": {
       "product": "Product",
       "mobile": "Mobile",
-      "editions": "Online & Offline"
+      "editions": "Online & Offline",
+      "pricing": "Pricing"
     },
     "cta": {
       "trial": "Start Your Clinic Free for 7 Days",
@@ -48,6 +49,13 @@
       "title": "The patient file is the clinic.",
       "text": "Treatments sit on the tooth. Notes, files, and the account stay with the same record. No jumping between screens to finish a visit.",
       "window": "Patient file & teeth chart"
+    },
+    "demo": {
+      "patient": "Patient",
+      "patientA": "Sara Hassan",
+      "patientB": "Omar Khalil",
+      "patientC": "Layla Nasser",
+      "fileNo": "File 1042"
     },
     "agenda": {
       "kicker": "Appointments · Emergency",

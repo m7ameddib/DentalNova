@@ -1,7 +1,8 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
+import { Menu, X } from 'lucide-react';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { installationApi } from '@/api/installation.api';
 import { useUiStore } from '@/store/ui.store';
@@ -26,9 +27,12 @@ const CAPABILITIES = [
   'landing.cap.backup',
 ] as const;
 
+const CHART_TEETH = 16;
+
 export function LandingPage() {
   const { t } = useTranslation();
   const { language, setLanguage } = useUiStore();
+  const [menuOpen, setMenuOpen] = useState(false);
   const { data: installStatus } = useQuery({
     queryKey: ['installation-status'],
     queryFn: installationApi.status,
@@ -36,19 +40,27 @@ export function LandingPage() {
   });
   const canCreateClinic = installStatus?.canCreateClinic !== false;
 
+  function closeMenu() {
+    setMenuOpen(false);
+  }
+
   return (
     <div className="dn-landing">
       <header className="dn-landing__nav">
         <Link to="/" className="dn-landing__brand" aria-label="Dental Nova">
           <BrandLogo variant="nav" />
         </Link>
-        <nav className="dn-landing__nav-links">
-          <a href="#product">{t('landing.nav.product')}</a>
-          <a href="#mobile">{t('landing.nav.mobile')}</a>
-          <a href="#editions">{t('landing.nav.editions')}</a>
+        <nav
+          id="dn-landing-nav"
+          className={menuOpen ? 'dn-landing__nav-links is-open' : 'dn-landing__nav-links'}
+        >
+          <a href="#product" onClick={closeMenu}>{t('landing.nav.product')}</a>
+          <a href="#mobile" onClick={closeMenu}>{t('landing.nav.mobile')}</a>
+          <a href="#editions" onClick={closeMenu}>{t('landing.nav.editions')}</a>
+          <a href="#pricing" onClick={closeMenu}>{t('landing.nav.pricing')}</a>
         </nav>
         <div className="dn-landing__nav-actions">
-          <div className="dn-landing__lang">
+          <div className="dn-landing__lang" role="group" aria-label={t('common.language')}>
             <button
               type="button"
               className={language === 'en' ? 'lang-btn lang-btn--active' : 'lang-btn'}
@@ -73,6 +85,16 @@ export function LandingPage() {
             </Link>
           )}
         </div>
+        <button
+          type="button"
+          className="dn-landing__menu"
+          aria-expanded={menuOpen}
+          aria-controls="dn-landing-nav"
+          aria-label={menuOpen ? t('nav.closeMenu') : t('nav.openMenu')}
+          onClick={() => setMenuOpen((open) => !open)}
+        >
+          {menuOpen ? <X size={20} /> : <Menu size={20} />}
+        </button>
       </header>
 
       <section className="dn-hero">
@@ -80,6 +102,11 @@ export function LandingPage() {
           <p className="dn-kicker">{t('landing.hero.kicker')}</p>
           <h1>{t('landing.hero.title')}</h1>
           <p className="dn-hero__lead">{t('landing.hero.lead')}</p>
+          <ul className="dn-hero__points">
+            <li>{t('landing.cap.patients')}</li>
+            <li>{t('landing.cap.appointments')}</li>
+            <li>{t('landing.cap.modes')}</li>
+          </ul>
           <div className="dn-hero__actions">
             {canCreateClinic && (
               <Link to="/setup" className="btn btn--primary dn-landing__cta dn-landing__cta--lg">
@@ -92,7 +119,7 @@ export function LandingPage() {
           </div>
         </div>
         <figure className="dn-hero__visual">
-          <img src="/assets/login-clinic.jpg" alt="" />
+          <img src="/assets/login-clinic.jpg" alt={t('landing.hero.caption')} />
           <figcaption>{t('landing.hero.caption')}</figcaption>
         </figure>
       </section>
@@ -122,10 +149,23 @@ export function LandingPage() {
             <em>{t('landing.clinical.window')}</em>
           </div>
           <div className="dn-file-mock" aria-hidden="true">
-            <strong>Mostafa</strong>
-            <i>{t('landing.agenda.slot2')}</i>
-            <i>{t('landing.agenda.slot1')}</i>
-            <i>{t('landing.clinical.window')}</i>
+            <header className="dn-file-mock__head">
+              <strong>{t('landing.demo.patientA')}</strong>
+              <small>{t('landing.demo.fileNo')}</small>
+            </header>
+            <div className="dn-file-mock__chart">
+              {Array.from({ length: CHART_TEETH }, (_, index) => (
+                <i
+                  key={index}
+                  className={index === 5 || index === 11 ? 'is-active' : undefined}
+                />
+              ))}
+            </div>
+            <div className="dn-file-mock__rows">
+              <i>{t('landing.agenda.slot2')}</i>
+              <i>{t('landing.agenda.slot1')}</i>
+              <i>{t('landing.clinical.window')}</i>
+            </div>
           </div>
         </div>
       </section>
@@ -144,16 +184,28 @@ export function LandingPage() {
             <em>{t('landing.agenda.window')}</em>
           </div>
           <div className="dn-agenda-mock">
-            <aside>
+            <div className="dn-agenda-mock__day">{t('common.today')}</div>
+            <div className="dn-agenda-mock__row">
               <b>09:00</b>
+              <i className="dn-agenda-mock__apt">
+                {t('landing.agenda.slot1')} · {t('landing.demo.patientB')}
+              </i>
+            </div>
+            <div className="dn-agenda-mock__row">
               <b>10:00</b>
+              <i className="dn-agenda-mock__apt dn-agenda-mock__apt--late">
+                {t('landing.agenda.slot2')} · {t('landing.demo.patientA')}
+              </i>
+            </div>
+            <div className="dn-agenda-mock__row">
               <b>11:00</b>
+              <i className="dn-agenda-mock__apt dn-agenda-mock__apt--er">
+                {t('landing.agenda.slot3')} · {t('landing.demo.patientC')}
+              </i>
+            </div>
+            <div className="dn-agenda-mock__row dn-agenda-mock__row--empty">
               <b>12:00</b>
-            </aside>
-            <div>
-              <i className="dn-agenda-mock__apt">{t('landing.agenda.slot1')}</i>
-              <i className="dn-agenda-mock__apt dn-agenda-mock__apt--late">{t('landing.agenda.slot2')}</i>
-              <i className="dn-agenda-mock__apt dn-agenda-mock__apt--er">{t('landing.agenda.slot3')}</i>
+              <span />
             </div>
           </div>
         </div>
@@ -198,16 +250,21 @@ export function LandingPage() {
         <div className="dn-phones" aria-hidden="true">
           <PhoneFrame title={t('landing.mobile.phoneAppts')}>
             <div className="dn-phone-ui dn-phone-ui--appts">
-              <small>Today</small>
-              <b>10:00 · Dib</b>
-              <b>10:30 · Mohoha</b>
-              <b className="dn-phone-ui--er">Emergency</b>
+              <small>{t('common.today')}</small>
+              <b>10:00 · {t('landing.demo.patientB')}</b>
+              <b>10:30 · {t('landing.demo.patientC')}</b>
+              <b className="dn-phone-ui--er">{t('landing.agenda.slot3')}</b>
             </div>
           </PhoneFrame>
           <PhoneFrame title={t('landing.mobile.phonePatient')} featured>
             <div className="dn-phone-ui dn-phone-ui--chart">
-              <small>Patient</small>
-              <strong>Mostafa</strong>
+              <small>{t('landing.demo.patient')}</small>
+              <strong>{t('landing.demo.patientA')}</strong>
+              <div className="dn-phone-ui__chart">
+                {Array.from({ length: 8 }, (_, index) => (
+                  <i key={index} className={index === 2 ? 'is-active' : undefined} />
+                ))}
+              </div>
               <b>{t('landing.agenda.slot2')}</b>
               <b>{t('landing.agenda.slot1')}</b>
               <b>{t('landing.mobile.p3')}</b>
@@ -215,7 +272,7 @@ export function LandingPage() {
           </PhoneFrame>
           <PhoneFrame title={t('landing.mobile.phoneAi')}>
             <div className="dn-phone-ui dn-phone-ui--ai">
-              <small>AI</small>
+              <small>{t('landing.cap.ai')}</small>
               <p>{t('landing.ai.q')}</p>
               <p>{t('landing.ai.a')}</p>
             </div>
@@ -224,8 +281,10 @@ export function LandingPage() {
       </section>
 
       <section className="dn-editions" id="editions">
-        <p className="dn-kicker">{t('landing.editions.kicker')}</p>
-        <h2>{t('landing.editions.title')}</h2>
+        <header className="dn-section-head">
+          <p className="dn-kicker">{t('landing.editions.kicker')}</p>
+          <h2>{t('landing.editions.title')}</h2>
+        </header>
         <div className="dn-editions__grid">
           <article>
             <h3>{t('landing.editions.offlineTitle')}</h3>
@@ -250,7 +309,9 @@ export function LandingPage() {
       </section>
 
       <section className="dn-pricing" id="pricing">
-        <h2>{t('landing.pricing.title')}</h2>
+        <header className="dn-section-head">
+          <h2>{t('landing.pricing.title')}</h2>
+        </header>
         <div className="dn-pricing__row">
           <article>
             <span>{t('landing.pricing.offlineLabel')}</span>
@@ -268,7 +329,7 @@ export function LandingPage() {
             </p>
             <b>{t('landing.pricing.onlineTerm')}</b>
           </article>
-          <article>
+          <article className="dn-price-card--combo">
             <span>{t('landing.pricing.comboLabel')}</span>
             <p className="dn-price-row">
               <s>{t('landing.pricing.comboWas')}</s>
