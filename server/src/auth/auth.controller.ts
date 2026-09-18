@@ -45,41 +45,61 @@ export class AuthController {
 
   @SkipSubscriptionGuard()
   @Post('forgot-password')
-  requestPasswordReset(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
+  async requestPasswordReset(@Body() dto: ForgotPasswordDto, @Req() req: Request) {
     const key = `reset:${requestClientIp(req)}:${dto.username.trim().toLowerCase()}`;
     this.rateLimit.assertAllowed(key, RESET_LIMIT, RESET_WINDOW_MS);
-    this.rateLimit.recordFailure(key, RESET_WINDOW_MS);
-    if (dto.recoveryCode?.trim()) {
-      return this.passwordResetService.recoverWithCode(dto.username, dto.recoveryCode);
+    try {
+      if (!dto.recoveryCode?.trim()) {
+        throw new BadRequestException(RECOVERY_CODE_ONLY);
+      }
+      const result = await this.passwordResetService.recoverWithCode(dto.username, dto.recoveryCode);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, RESET_WINDOW_MS);
+      throw err;
     }
-    throw new BadRequestException(RECOVERY_CODE_ONLY);
   }
 
   @SkipSubscriptionGuard()
   @Post('recover-username')
-  recoverUsername(@Body() dto: RecoverUsernameDto, @Req() req: Request) {
+  async recoverUsername(@Body() dto: RecoverUsernameDto, @Req() req: Request) {
     const key = `recover-username:${requestClientIp(req)}`;
     this.rateLimit.assertAllowed(key, RESET_LIMIT, RESET_WINDOW_MS);
+    // This endpoint returns 200 with an empty list for unknown details, so every
+    // probe must count against the limit (unlike login / forgot-password).
     this.rateLimit.recordFailure(key, RESET_WINDOW_MS);
     return this.passwordResetService.recoverUsername(dto.phone, dto.recoveryCode);
   }
 
   @SkipSubscriptionGuard()
   @Post('verify-reset-otp')
-  verifyResetOtp(@Body() dto: VerifyResetOtpDto, @Req() req: Request) {
+  async verifyResetOtp(@Body() dto: VerifyResetOtpDto, @Req() req: Request) {
     const key = `verify-otp:${requestClientIp(req)}:${dto.username.trim().toLowerCase()}`;
     this.rateLimit.assertAllowed(key, RESET_LIMIT, RESET_WINDOW_MS);
-    this.rateLimit.recordFailure(key, RESET_WINDOW_MS);
-    return this.passwordResetService.verifyOtp(dto.username, dto.phone, dto.code);
+    try {
+      const result = await this.passwordResetService.verifyOtp(dto.username, dto.phone, dto.code);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, RESET_WINDOW_MS);
+      throw err;
+    }
   }
 
   @SkipSubscriptionGuard()
   @Post('reset-password')
-  resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
+  async resetPassword(@Body() dto: ResetPasswordDto, @Req() req: Request) {
     const key = `reset-password:${requestClientIp(req)}`;
     this.rateLimit.assertAllowed(key, RESET_LIMIT, RESET_WINDOW_MS);
-    this.rateLimit.recordFailure(key, RESET_WINDOW_MS);
-    return this.passwordResetService.resetPassword(dto.resetToken, dto.newPassword);
+    try {
+      const result = await this.passwordResetService.resetPassword(dto.resetToken, dto.newPassword);
+      this.rateLimit.recordSuccess(key);
+      return result;
+    } catch (err) {
+      this.rateLimit.recordFailure(key, RESET_WINDOW_MS);
+      throw err;
+    }
   }
 
   @UseGuards(JwtAuthGuard)

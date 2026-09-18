@@ -11,6 +11,7 @@ import {
   UpdateAppointmentStatusDto,
 } from './dto/create-appointment.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
+import { DatabaseService } from '../database/database.service';
 
 export const SLOT_STEP_MIN = 30;
 
@@ -21,6 +22,7 @@ export class AppointmentsService {
     private readonly patientsRepo: PatientsRepository,
     private readonly workingSchedule: WorkingScheduleService,
     private readonly audit: AuditService,
+    private readonly db: DatabaseService,
   ) {}
 
   getById(id: number) {
@@ -99,25 +101,26 @@ export class AppointmentsService {
     const durationMin = dto.durationMin ?? 30;
     // Emergencies live in the sidebar and are dropped onto the calendar later.
     // Overlap with a booked slot is expected and must not fail create.
-    if (dto.appointmentType !== 'EMERGENCY' && this.hasOverlap(dto.date, dto.time, durationMin)) {
-      throw new ConflictException('This time overlaps with another appointment');
-    }
-
     if (dto.appointmentType !== 'EMERGENCY') {
       this.assertWorkingHours(dto.date, dto.time, durationMin, dto.allowOutsideHours, currentUser);
     }
 
-    const created = this.appointmentsRepo.create({
-      patientId,
-      guestName,
-      guestPhone,
-      date: dto.date,
-      time: dto.time,
-      durationMin,
-      appointmentType: dto.appointmentType,
-      reason: dto.reason,
-      notes: dto.notes,
-      createdById: currentUser.id,
+    const created = this.db.runImmediate(() => {
+      if (dto.appointmentType !== 'EMERGENCY' && this.hasOverlap(dto.date, dto.time, durationMin)) {
+        throw new ConflictException('This time overlaps with another appointment');
+      }
+      return this.appointmentsRepo.create({
+        patientId,
+        guestName,
+        guestPhone,
+        date: dto.date,
+        time: dto.time,
+        durationMin,
+        appointmentType: dto.appointmentType,
+        reason: dto.reason,
+        notes: dto.notes,
+        createdById: currentUser.id,
+      });
     });
     this.audit.log({
       action: 'APPOINTMENT_CREATED',
@@ -206,23 +209,24 @@ export class AppointmentsService {
     const appointmentType =
       dto.appointmentType !== undefined ? dto.appointmentType : appointment.appointmentType;
 
-    if (appointmentType !== 'EMERGENCY' && this.hasOverlap(date, time, durationMin, id)) {
-      throw new ConflictException('This time overlaps with another appointment');
-    }
-
     if (appointmentType !== 'EMERGENCY' && currentUser) {
       this.assertWorkingHours(date, time, durationMin, dto.allowOutsideHours, currentUser);
     }
 
-    const updated = this.appointmentsRepo.update(id, {
-      patientId,
-      date,
-      time,
-      durationMin,
-      reason,
-      appointmentType,
-      guestName,
-      guestPhone,
+    const updated = this.db.runImmediate(() => {
+      if (appointmentType !== 'EMERGENCY' && this.hasOverlap(date, time, durationMin, id)) {
+        throw new ConflictException('This time overlaps with another appointment');
+      }
+      return this.appointmentsRepo.update(id, {
+        patientId,
+        date,
+        time,
+        durationMin,
+        reason,
+        appointmentType,
+        guestName,
+        guestPhone,
+      });
     });
     this.audit.log({
       action: 'APPOINTMENT_EDITED',

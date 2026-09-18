@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { requestClientIp } from './loopback.util';
+import { isLoopbackHostname, requestClientIp } from './loopback.util';
 
 test('rate-limit IP ignores spoofed X-Forwarded-For when req.ip is the socket', () => {
   const ip = requestClientIp({
@@ -19,4 +19,12 @@ test('falls back to the socket when Express has not set req.ip', () => {
     }),
     '192.168.1.9',
   );
+});
+
+test('loopback hostnames include localhost and 127/::1, not LAN or public hosts', () => {
+  assert.equal(isLoopbackHostname('localhost'), true);
+  assert.equal(isLoopbackHostname('127.0.0.1'), true);
+  assert.equal(isLoopbackHostname('[::1]'), true);
+  assert.equal(isLoopbackHostname('192.168.1.9'), false);
+  assert.equal(isLoopbackHostname('dentalnova.dibnova.com'), false);
 });

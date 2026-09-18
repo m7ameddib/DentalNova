@@ -48,6 +48,11 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
     return this.db;
   }
 
+  /** Exclusive write lock so overlap/uniqueness checks cannot race an insert. */
+  runImmediate<T>(fn: () => T): T {
+    return this.connection.transaction(fn).immediate();
+  }
+
   ping(): boolean {
     this.db.prepare('SELECT 1 AS ok').get();
     return true;

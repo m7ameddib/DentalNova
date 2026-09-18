@@ -267,6 +267,16 @@ async function main() {
     assert(health.data.r2Configured === false, 'test env must not claim R2 is configured');
     assert(!JSON.stringify(health.data).includes(JWT_SECRET), 'health must not leak JWT secret');
 
+    const missingPay = await request('POST', '/dibnova-admin/payments/999999/void', {
+      token: adminToken,
+      body: { reason: 'missing' },
+    });
+    assert(missingPay.status === 404, `unknown admin payment void must be 404 (got ${missingPay.status})`);
+    assert(
+      String(missingPay.data?.message || '') !== 'Unexpected server error',
+      'known missing payment must not surface as Unexpected server error',
+    );
+
     const audit = await request('GET', '/dibnova-admin/audit', { token: adminToken, expected: 200 });
     assert(Array.isArray(audit.data) && audit.data.length > 0, 'admin audit log must record actions');
     assert(

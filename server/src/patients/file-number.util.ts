@@ -20,3 +20,14 @@ export function maxPatientFileSeq(db: { prepare: (sql: string) => { all: () => u
 export function nextPatientFileNumber(db: { prepare: (sql: string) => { all: () => unknown[] } }): string {
   return `P-${String(maxPatientFileSeq(db) + 1).padStart(6, '0')}`;
 }
+
+export function isFileNumberCollision(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const rec = err as { code?: unknown; message?: unknown };
+  const code = String(rec.code || '');
+  const message = String(rec.message || '');
+  return (
+    (code.startsWith('SQLITE_CONSTRAINT') || message.includes('SQLITE_CONSTRAINT')) &&
+    message.includes('file_number')
+  );
+}

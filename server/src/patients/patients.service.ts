@@ -10,6 +10,7 @@ import { CreatePatientDto } from './dto/create-patient.dto';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { buildAccountSummaryTotals } from '../common/treatment-account.util';
+import { conflictingPhoneOwners } from './patient-phone.util';
 
 @Injectable()
 export class PatientsService {
@@ -47,38 +48,37 @@ export class PatientsService {
   }
 
   create(dto: CreatePatientDto) {
+    let familyGroupId: number | undefined;
     if (dto.linkFamilyOfPatientId) {
       const relative = this.patientsRepo.findById(dto.linkFamilyOfPatientId);
       if (!relative) throw new NotFoundException('Referenced family member not found');
 
-      let familyGroupId = relative.familyGroupId;
+      familyGroupId = relative.familyGroupId ?? undefined;
       if (!familyGroupId) {
         const group = this.patientsRepo.createFamilyGroup(relative.phone, null);
         familyGroupId = group.id;
         this.patientsRepo.update(relative.id, { familyGroupId });
       }
-
-      return this.patientsRepo.create({ ...this.toCreateInput(dto), familyGroupId });
     }
 
-    const existing = this.patientsRepo.findByPhone(dto.phone);
-    if (existing.length > 0) {
-      throw new ConflictException({
-        message: 'A patient with this phone number already exists',
-        code: 'PHONE_EXISTS',
-        existingPatients: existing,
-      });
-    }
-
-    return this.patientsRepo.create(this.toCreateInput(dto));
+    this.assertPhoneAvailable(dto.phone, { familyGroupId });
+    return this.patientsRepo.create({ ...this.toCreateInput(dto), familyGroupId });
   }
 
   update(id: number, dto: UpdatePatientDto, currentUser?: AuthenticatedUser) {
+    const existing = this.patientsRepo.findById(id);
+    if (!existing) throw new NotFoundException('Patient not found');
     const payload: UpdatePatientDto = { ...dto };
     if (payload.dateOfBirth) {
       payload.approxAge = undefined;
     }
     delete payload.accountDiscount;
+    if (payload.phone) {
+      this.assertPhoneAvailable(payload.phone, {
+        excludePatientId: id,
+        familyGroupId: existing.familyGroupId,
+      });
+    }
     const repoInput: UpdatePatientInput = {
       ...payload,
       approxAge: payload.dateOfBirth ? null : payload.approxAge,
@@ -110,6 +110,10 @@ export class PatientsService {
   restore(id: number) {
     const patient = this.patientsRepo.findById(id);
     if (!patient) throw new NotFoundException('Patient not found');
+    this.assertPhoneAvailable(patient.phone, {
+      excludePatientId: id,
+      familyGroupId: patient.familyGroupId,
+    });
     const restored = this.patientsRepo.restore(id);
     return { id, restored: true, archivedAt: restored!.archivedAt };
   }
@@ -181,6 +185,20 @@ export class PatientsService {
 
   private assertExists(id: number) {
     if (!this.patientsRepo.findById(id)) throw new NotFoundException('Patient not found');
+  }
+
+  private assertPhoneAvailable(
+    phone: string,
+    options?: { excludePatientId?: number; familyGroupId?: number | null },
+  ) {
+    const matches = this.patientsRepo.findActiveByNormalizedPhone(phone);
+    const conflicts = conflictingPhoneOwners(matches, options);
+    if (conflicts.length === 0) return;
+    throw new ConflictException({
+      message: 'A patient with this phone number already exists',
+      code: 'PHONE_EXISTS',
+      existingPatients: matches.filter((row) => conflicts.some((conflict) => conflict.id === row.id)),
+    });
   }
 
   private toCreateInput(dto: CreatePatientDto) {

@@ -1,4 +1,4 @@
-import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, ServiceUnavailableException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -6,7 +6,7 @@ import { UploadsService } from '../common/uploads.service';
 import { DeploymentService } from '../common/deployment.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { createHash } from 'crypto';
-import { r2ObjectKey, withRetries } from './object-storage.util';
+import { r2ObjectKey, withRetries, isObjectNotFoundError } from './object-storage.util';
 
 const DEFAULT_BUCKET = 'dentalnova-files';
 
@@ -95,13 +95,17 @@ export class ObjectStorageService implements OnModuleInit {
     if (this.s3) {
       try {
         const { GetObjectCommand } = await import('@aws-sdk/client-s3');
-        const res = await withRetries(async () =>
-          this.s3!.send(
-            new GetObjectCommand({
-              Bucket: this.bucket,
-              Key: this.objectKey(relativePath),
-            }),
-          ),
+        const res = await withRetries(
+          async () =>
+            this.s3!.send(
+              new GetObjectCommand({
+                Bucket: this.bucket,
+                Key: this.objectKey(relativePath),
+              }),
+            ),
+          3,
+          120,
+          (err) => !isObjectNotFoundError(err),
         );
         const bytes = await this.streamToBuffer(res.Body);
         if (bytes && local) {
@@ -110,7 +114,13 @@ export class ObjectStorageService implements OnModuleInit {
         }
         return bytes;
       } catch (err) {
+        if (isObjectNotFoundError(err)) return null;
         this.logger.warn(`R2 get failed: ${(err as Error).message}`);
+        if (this.deployment.isOnline()) {
+          throw new ServiceUnavailableException(
+            'File storage is temporarily unavailable. Try again in a moment.',
+          );
+        }
       }
     }
     return null;
@@ -215,6 +225,9 @@ export class ObjectStorageService implements OnModuleInit {
         });
       } catch (err) {
         this.logger.warn(`R2 delete failed: ${(err as Error).message}`);
+        if (this.deployment.isOnline() && !isObjectNotFoundError(err)) {
+          throw err;
+        }
       }
     }
   }

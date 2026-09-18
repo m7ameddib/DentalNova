@@ -5,7 +5,8 @@ import { localDayUtcBounds } from '../../common/local-date.util';
 import { remainingCents } from '../../common/money.util';
 import { billableTreatmentSql } from '../../common/treatment-account.util';
 import { FamilyGroup, Patient } from '../../common/types';
-import { nextPatientFileNumber } from '../../patients/file-number.util';
+import { isFileNumberCollision, nextPatientFileNumber } from '../../patients/file-number.util';
+import { normalizePhone } from '../../common/phone.util';
 
 export interface CreatePatientInput {
   fullName: string;
@@ -37,10 +38,16 @@ export class PatientsRepository {
   }
 
   findByPhone(phone: string): Patient[] {
+    return this.findActiveByNormalizedPhone(phone);
+  }
+
+  findActiveByNormalizedPhone(phone: string): Patient[] {
+    const want = normalizePhone(phone);
+    if (!want) return [];
     const rows = this.db.connection
-      .prepare('SELECT * FROM patients WHERE phone = ? AND archived_at IS NULL ORDER BY created_at')
-      .all(phone) as Record<string, unknown>[];
-    return toCamelList<Patient>(rows);
+      .prepare('SELECT * FROM patients WHERE archived_at IS NULL ORDER BY created_at')
+      .all() as Record<string, unknown>[];
+    return toCamelList<Patient>(rows).filter((patient) => normalizePhone(patient.phone) === want);
   }
 
   search(query: string, limit = 50, includeArchived = false): Patient[] {
@@ -177,30 +184,39 @@ export class PatientsRepository {
   }
 
   create(input: CreatePatientInput): Patient {
-    const fileNumber = this.generateFileNumber();
-    const result = this.db.connection
-      .prepare(
-        `INSERT INTO patients
+    let lastError: unknown;
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const fileNumber = this.generateFileNumber();
+      try {
+        const result = this.db.connection
+          .prepare(
+            `INSERT INTO patients
           (file_number, full_name, phone, gender, date_of_birth, approx_age, weight_kg, address, area_id,
            medical_notes, general_notes, family_group_id, guarantor_id)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .run(
-        fileNumber,
-        input.fullName,
-        input.phone,
-        input.gender ?? null,
-        input.dateOfBirth ?? null,
-        input.approxAge ?? null,
-        input.weightKg ?? null,
-        input.address ?? null,
-        input.areaId ?? null,
-        input.medicalNotes ?? null,
-        input.generalNotes ?? null,
-        input.familyGroupId ?? null,
-        input.guarantorId ?? null,
-      );
-    return this.findById(Number(result.lastInsertRowid))!;
+          )
+          .run(
+            fileNumber,
+            input.fullName,
+            input.phone,
+            input.gender ?? null,
+            input.dateOfBirth ?? null,
+            input.approxAge ?? null,
+            input.weightKg ?? null,
+            input.address ?? null,
+            input.areaId ?? null,
+            input.medicalNotes ?? null,
+            input.generalNotes ?? null,
+            input.familyGroupId ?? null,
+            input.guarantorId ?? null,
+          );
+        return this.findById(Number(result.lastInsertRowid))!;
+      } catch (err) {
+        lastError = err;
+        if (!isFileNumberCollision(err)) throw err;
+      }
+    }
+    throw lastError instanceof Error ? lastError : new Error('Could not allocate a patient file number');
   }
 
   update(id: number, input: UpdatePatientInput): Patient | undefined {

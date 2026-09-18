@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { r2ObjectKey, withRetries } from './object-storage.util';
+import { isObjectNotFoundError, r2ObjectKey, withRetries } from './object-storage.util';
 
 test('R2 keys are clinic-namespaced and never expose a sibling clinic prefix', () => {
   const a = r2ObjectKey('patients/1/x.png', 'clinic-a');
@@ -23,4 +23,28 @@ test('withRetries returns on first success and retries failures', async () => {
   }, 3, 1);
   assert.equal(value, 7);
   assert.equal(n, 2);
+});
+
+test('missing R2 objects are not treated as storage outages', () => {
+  assert.equal(isObjectNotFoundError({ name: 'NoSuchKey' }), true);
+  assert.equal(isObjectNotFoundError({ $metadata: { httpStatusCode: 404 } }), true);
+  assert.equal(isObjectNotFoundError({ name: 'AccessDenied', $metadata: { httpStatusCode: 403 } }), false);
+});
+
+test('withRetries does not retry non-retryable errors', async () => {
+  let n = 0;
+  await assert.rejects(
+    () =>
+      withRetries(
+        async () => {
+          n += 1;
+          throw Object.assign(new Error('missing'), { name: 'NoSuchKey' });
+        },
+        3,
+        1,
+        (err) => !isObjectNotFoundError(err),
+      ),
+    /missing/,
+  );
+  assert.equal(n, 1);
 });

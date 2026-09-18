@@ -57,3 +57,11 @@ export function isInsecureDevSecret(secret: string | undefined | null): boolean 
   const value = secret?.trim() || '';
   return !value || value === DEV_JWT_SECRET || value === 'change-this-in-production';
 }
+
+export const MIN_JWT_SECRET_LENGTH = 32;
+
+/** Production Online must not boot with a short or placeholder JWT_SECRET. */
+export function isWeakJwtSecret(secret: string | undefined | null): boolean {
+  if (isInsecureDevSecret(secret)) return true;
+  return (secret?.trim() || '').length < MIN_JWT_SECRET_LENGTH;
+}

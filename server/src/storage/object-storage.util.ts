@@ -10,13 +10,29 @@ export function r2ObjectKey(relativePath: string, clinicId: string | null | unde
   return pre ? `${pre}/${namespaced}` : namespaced;
 }
 
-export async function withRetries<T>(fn: () => Promise<T>, attempts = 3, baseDelayMs = 120): Promise<T> {
+/** True for missing objects, not credential/outage failures. */
+export function isObjectNotFoundError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false;
+  const rec = err as { name?: unknown; Code?: unknown; $metadata?: { httpStatusCode?: unknown }; message?: unknown };
+  const name = String(rec.name || rec.Code || '');
+  if (name === 'NoSuchKey' || name === 'NotFound') return true;
+  if (Number(rec.$metadata?.httpStatusCode) === 404) return true;
+  return /NoSuchKey|NotFound|status code 404/i.test(String(rec.message || ''));
+}
+
+export async function withRetries<T>(
+  fn: () => Promise<T>,
+  attempts = 3,
+  baseDelayMs = 120,
+  isRetryable?: (err: unknown) => boolean,
+): Promise<T> {
   let last: unknown;
   for (let i = 0; i < attempts; i += 1) {
     try {
       return await fn();
     } catch (err) {
       last = err;
+      if (isRetryable && !isRetryable(err)) throw err;
       if (i === attempts - 1) break;
       await new Promise((r) => setTimeout(r, baseDelayMs * 2 ** i));
     }
