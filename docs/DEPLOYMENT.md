@@ -306,9 +306,11 @@ Offline licensing is unchanged — use the existing `tools/dibnova-license-gener
 
 In **offline desktop mode**, open **Settings → Updates** to check [GitHub Releases](https://github.com/m7ameddib/DentalNova/releases) for `DNT-Dental-Main-Clinic-Setup-v*.exe`.
 
-Each release **must** also publish `DNT-Dental-Main-Clinic-Setup-v*.exe.sha256`. The app refuses to install an update that has no checksum sidecar (it does not skip verification). On Windows the installer must also pass Authenticode (`Get-AuthenticodeSignature` Status = Valid). Optional: set `UPDATE_AUTHENTICODE_PUBLISHER` to pin the expected publisher string. `ALLOW_UNSIGNED_UPDATES=1` is ignored on Windows and in `NODE_ENV=production`.
+Each release **must** also publish `DNT-Dental-Main-Clinic-Setup-v*.exe.sha256`. The app refuses to install an update that has no checksum sidecar (it does not skip verification). On Windows the installer must also pass Authenticode (`Get-AuthenticodeSignature` Status = Valid). Optional: set `UPDATE_AUTHENTICODE_PUBLISHER` to pin the expected publisher string. `ALLOW_UNSIGNED_UPDATES` is ignored.
 
 Updates download to `ProgramData\DibNova\DNTDental\downloads\` and launch the existing Inno Setup installer. Choose **Update Existing Installation** — clinic data at `ProgramData\DibNova\DNTDental\data\clinic.db` is never deleted.
+
+The updater only accepts an installer whose filename matches the GitHub release tag (`DNT-Dental-Main-Clinic-Setup-v{tag}.exe`). A leftover EXE for a different version on the same release is ignored. `ALLOW_UNSIGNED_UPDATES` is ignored; Windows launch always requires Authenticode Status = Valid. PowerShell Authenticode inspection times out after 30 seconds and is treated as untrusted.
 
 ### Authenticode (external — not in this repository)
 
@@ -336,11 +338,15 @@ This Linux/cloud agent cannot run a headed Windows pairing drill. Before the fir
 
 ### Rate limits
 
-Login, pairing, licensing, and admin API-key limits persist to `{DNT_DATA_DIR}/config/auth-rate-limit.json` so a process restart does not reset brute-force windows. They are **single-process**. Do not run multiple Online app instances without a reverse-proxy limit in front. There is no Redis in this stack.
+Login, pairing, licensing, and admin API-key limits persist in `{DNT_DATA_DIR}/config/shared-durable.db` (SQLite WAL). Multiple Online app processes that share the same data volume see the same counters. JSON files from earlier builds are imported once. There is no Redis in this stack.
 
-### Pairing empty-clinic attestation
+### Pairing empty-clinic attestation and device trust
 
-Online `/api/sync/pairing/complete` requires `emptyClinic: true` plus a zero census. The official Offline server fills that census from SQLite. A **custom client** can still lie. Residual risk: only a modified/unofficial Offline talking to Online. Shipped Offline Nest blocks populated pairing and incremental sync until bootstrap completes.
+Online `/api/sync/pairing/complete` requires protocol **v3**: `emptyClinic: true`, a zero census, an HMAC-SHA256 proof **keyed by the pairing challenge** (not the 8-character code), a DibNova-signed Offline **license** bound to the presented `installationId`, an Ed25519 **device public key**, and a `pairingSignature` over that transcript. Official Offline generates the keypair locally, fills the census from SQLite, and presents its activated license.
+
+A custom HTTP client that only has a pairing code cannot complete pairing. After pairing, key-bound devices must sign token and sync requests (`x-dentalnova-device-ts` / `x-dentalnova-device-sig`). Online still refuses operational PUSH and file uploads until the device has walked the snapshot from the start (`bootstrap_completed_at`). Existing devices with `pull_checkpoint > 0` are backfilled as already bootstrapped. Existing devices without a public key keep using `deviceSecret` until official Offline registers a key (`POST /api/sync/device/register-key`).
+
+A modified client that already possesses a **valid stolen/purchased license** can still generate its own device key and attest zeros — Online cannot inspect the Offline disk, and this stack has no Windows TPM / Authenticode remote attestation. Residual risk is a licensed unofficial client, not pairing-code-only scripts.
 
 ---
 

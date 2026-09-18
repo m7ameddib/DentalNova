@@ -23,7 +23,7 @@ import { SyncChangePayload, SYNC_ENTITY_BY_NAME, IDENTITY_RECONCILE_ENTITY_SET }
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { clinicOperationalCensus, OPERATIONAL_TABLES, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
-import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished, snapshotOpeningCheckpoint } from './bootstrap.util';
+import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished, snapshotOpeningCheckpoint, DEVICE_BOOTSTRAP_REQUIRED_CODE, DEVICE_BOOTSTRAP_REQUIRED_MESSAGE, initialSnapshotCursor, normalizeSnapshotCursor, snapshotRequestMatchesCursor } from './bootstrap.util';
 import { ackPreBootstrapHoldOutbound } from './sync-schema';
 import {
   describeOnlineReachabilityError,
@@ -48,11 +48,19 @@ import {
   shouldRetryAttachment,
 } from './sync-files.util';
 import { syncProtocolHeaders } from './sync-protocol.util';
+import { deviceTrustHeaders, generateDeviceKeypair } from './device-trust.util';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
 type DeviceSession = { token: string; issuedAt: number };
-type DevicePeer = { onlineBaseUrl: string; deviceId: string; deviceSecret: string };
+type DevicePeer = {
+  onlineBaseUrl: string;
+  deviceId: string;
+  deviceSecret: string;
+  devicePrivateKey?: string;
+  devicePublicKey?: string;
+};
+type OnlinePeer = { onlineBaseUrl: string; devicePrivateKey?: string };
 
 @Injectable()
 export class SyncEngineService {
@@ -127,6 +135,7 @@ export class SyncEngineService {
     if (getTenantClinicId() !== clinicId) {
       throw new Error('CROSS_CLINIC');
     }
+    this.assertDeviceMayUpload(deviceId);
     const result = applyChanges(this.db.connection, changes, deviceId);
     return result;
   }
@@ -138,7 +147,7 @@ export class SyncEngineService {
     return { changes, until, hasMore: changes.length >= limit };
   }
 
-  snapshotPage(afterEntity?: string, afterId?: number, limit = 80) {
+  snapshotPage(deviceId: string | undefined, afterEntity?: string, afterId?: number, limit = 80) {
     const checkpoint = snapshotOpeningCheckpoint(maxSeq(this.db.connection));
     const { changes, nextAfterEntity, nextAfterId } = clinicSnapshot(
       this.db.connection,
@@ -146,10 +155,12 @@ export class SyncEngineService {
       afterId ?? 0,
       limit,
     );
+    const hasMore = changes.length >= limit;
+    if (deviceId) this.noteSnapshotProgress(deviceId, afterEntity, afterId, nextAfterEntity, nextAfterId, hasMore);
     return {
       changes,
       checkpoint,
-      hasMore: changes.length >= limit,
+      hasMore,
       nextAfterEntity,
       nextAfterId,
     };
@@ -158,6 +169,38 @@ export class SyncEngineService {
   ackDeviceCheckpoint(deviceId: string, seq: number) {
     this.platform.setDeviceCheckpoint(deviceId, seq);
     return { checkpoint: seq };
+  }
+
+  private assertDeviceMayUpload(deviceId: string): void {
+    if (this.platform.isDeviceBootstrapComplete(deviceId)) return;
+    throw new BadRequestException({
+      statusCode: 400,
+      message: DEVICE_BOOTSTRAP_REQUIRED_MESSAGE,
+      code: DEVICE_BOOTSTRAP_REQUIRED_CODE,
+    });
+  }
+
+  private noteSnapshotProgress(
+    deviceId: string,
+    afterEntity: string | undefined,
+    afterId: number | undefined,
+    nextAfterEntity: string | undefined,
+    nextAfterId: number | undefined,
+    hasMore: boolean,
+  ): void {
+    const device = this.platform.findSyncDevice(deviceId);
+    if (!device || device.bootstrapCompletedAt) return;
+    const requested = normalizeSnapshotCursor(afterEntity, afterId);
+    const expected = normalizeSnapshotCursor(device.snapshotNextEntity, device.snapshotNextId);
+    const start = initialSnapshotCursor();
+    const matchesExpected = snapshotRequestMatchesCursor(requested, expected);
+    const matchesStart = snapshotRequestMatchesCursor(requested, start);
+    if (!matchesExpected && !matchesStart) return;
+    if (!hasMore && (matchesExpected || (matchesStart && snapshotRequestMatchesCursor(expected, start)))) {
+      this.platform.markDeviceBootstrapComplete(deviceId);
+      return;
+    }
+    this.platform.setDeviceSnapshotCursor(deviceId, nextAfterEntity || '', nextAfterId ?? 0);
   }
 
   conflicts() {
@@ -178,8 +221,8 @@ export class SyncEngineService {
         error: 'Sync is already running. Try again in a moment.',
       };
     }
-    const peer = this.pairing.readPeerConfig();
-    if (!peer) {
+    const storedPeer = this.pairing.readPeerConfig();
+    if (!storedPeer) {
       return {
         pushed: 0,
         pulled: 0,
@@ -193,6 +236,7 @@ export class SyncEngineService {
     let pulled = 0;
     const cycleStarted = Date.now();
     try {
+      const peer = await this.ensureDeviceKey(storedPeer);
       const session = await this.newDeviceSession(peer);
       if (shouldRunBootstrapBeforeCycle(this.readPeerValue('bootstrapped_at'))) {
         const boot = await this.executeBootstrapUnlocked(peer, session);
@@ -305,8 +349,9 @@ export class SyncEngineService {
     }
     this.running = true;
     try {
-      const session = await this.newDeviceSession(peer);
-      return await this.executeBootstrapUnlocked(peer, session);
+      const bound = await this.ensureDeviceKey(peer);
+      const session = await this.newDeviceSession(bound);
+      return await this.executeBootstrapUnlocked(bound, session);
     } catch (err) {
       if (err instanceof BadRequestException) {
         this.writePeerValue('last_error', this.httpExceptionMessage(err));
@@ -460,14 +505,16 @@ export class SyncEngineService {
     session.issuedAt = Date.now();
   }
 
-  async putFileFromDevice(relativePath: string, bytes: Buffer, mimeType?: string) {
+  async putFileFromDevice(deviceId: string, relativePath: string, bytes: Buffer, mimeType?: string) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
     if (bytes.length > FILE_INLINE_MAX_BYTES) throw new Error('File is too large for a single request');
     await this.objectStorage.putObject(relativePath, bytes, mimeType);
     return { stored: relativePath, bytes: bytes.length, sha256: sha256Hex(bytes) };
   }
 
-  async beginFileFromDevice(relativePath: string, byteSize: number, mimeType?: string, sha256?: string) {
+  async beginFileFromDevice(deviceId: string, relativePath: string, byteSize: number, mimeType?: string, sha256?: string) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
     if (!Number.isFinite(byteSize) || byteSize < 1 || byteSize > FILE_MAX_BYTES) {
       throw new Error('File size is not allowed');
@@ -476,14 +523,16 @@ export class SyncEngineService {
     return { started: relativePath, byteSize, mimeType: mimeType || null, sha256: sha256 || null };
   }
 
-  async putFileChunkFromDevice(relativePath: string, offset: number, bytes: Buffer) {
+  async putFileChunkFromDevice(deviceId: string, relativePath: string, offset: number, bytes: Buffer) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
-    const expected = this.partialExpectedSize(relativePath);
+    const expected = this.objectStorage.partialByteSize(relativePath);
     const result = this.objectStorage.writePartialRange(relativePath, offset, bytes, expected);
     return { stored: relativePath, offset, bytes: bytes.length, received: result.received };
   }
 
-  async finishFileFromDevice(relativePath: string, sha256: string, mimeType?: string) {
+  async finishFileFromDevice(deviceId: string, relativePath: string, sha256: string, mimeType?: string) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
     const result = await this.objectStorage.finalizePartial(relativePath, sha256, mimeType);
     return { stored: relativePath, bytes: result.bytes, sha256: result.sha256 };
@@ -540,15 +589,8 @@ export class SyncEngineService {
     };
   }
 
-  private partialExpectedSize(relativePath: string): number {
-    const part = `${relativePath}.part`;
-    const metaPath = this.objectStorage.localStat(part);
-    if (metaPath) return metaPath.bytes;
-    throw new Error('File upload has not started');
-  }
-
   private async syncAttachmentBlobs(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     force = false,
   ): Promise<void> {
@@ -565,7 +607,7 @@ export class SyncEngineService {
   }
 
   private async syncOneAttachment(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     row: { storedPath: string; mimeType: string | null },
     force = false,
@@ -595,7 +637,7 @@ export class SyncEngineService {
   }
 
   private async uploadAttachmentBytes(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     row: { storedPath: string; mimeType: string | null },
     local: Buffer,
@@ -655,7 +697,7 @@ export class SyncEngineService {
   }
 
   private async downloadAttachmentBytes(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     row: { storedPath: string; mimeType: string | null },
   ): Promise<void> {
@@ -771,7 +813,7 @@ export class SyncEngineService {
   }
 
   private async reconcileCatalogIdentity(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
   ): Promise<void> {
     if (this.readPeerValue('catalog_uids_reconciled') === '1') return;
@@ -812,7 +854,7 @@ export class SyncEngineService {
   }
 
   private async reportCheckpoint(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     seq: number,
   ): Promise<void> {
@@ -846,13 +888,18 @@ export class SyncEngineService {
       .length;
   }
 
-  private async deviceToken(peer: { onlineBaseUrl: string; deviceId: string; deviceSecret: string }): Promise<string> {
+  private async deviceToken(peer: DevicePeer): Promise<string> {
+    const body = JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret });
     let res: Response;
     try {
       res = await fetch(`${peer.onlineBaseUrl}/api/sync/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...syncProtocolHeaders() },
-        body: JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...syncProtocolHeaders(),
+          ...this.deviceRequestHeaders(peer, 'POST', '/api/sync/token', body),
+        },
+        body,
         signal: AbortSignal.timeout(20_000),
       });
     } catch (err) {
@@ -871,7 +918,8 @@ export class SyncEngineService {
     return data.accessToken;
   }
 
-  private async onlineFetch(peer: { onlineBaseUrl: string }, token: string, path: string, init: RequestInit) {
+  private async onlineFetch(peer: OnlinePeer, token: string, path: string, init: RequestInit) {
+    const body = typeof init.body === 'string' ? init.body : '';
     try {
       return await fetch(`${peer.onlineBaseUrl}${path}`, {
         ...init,
@@ -881,12 +929,51 @@ export class SyncEngineService {
           Authorization: `Bearer ${token}`,
           ...syncProtocolHeaders(),
           ...(init.headers || {}),
+          ...this.deviceRequestHeaders(peer, String(init.method || 'GET'), path, body),
         },
         signal: AbortSignal.timeout(45_000),
       });
     } catch (err) {
       throw new Error(describeOnlineReachabilityError(err));
     }
+  }
+
+  private deviceRequestHeaders(peer: OnlinePeer, method: string, path: string, body: string): Record<string, string> {
+    if (!peer.devicePrivateKey) return {};
+    return deviceTrustHeaders(peer.devicePrivateKey, method, path, body);
+  }
+
+  private async ensureDeviceKey(peer: DevicePeer): Promise<DevicePeer> {
+    if (peer.devicePrivateKey && peer.devicePublicKey) return peer;
+    const keys = generateDeviceKeypair();
+    const stored = this.pairing.persistDeviceKeys(keys.publicKey, keys.privateKey);
+    const upgraded: DevicePeer = {
+      ...peer,
+      devicePublicKey: stored.devicePublicKey,
+      devicePrivateKey: stored.devicePrivateKey,
+    };
+    try {
+      const token = await this.deviceToken(peer);
+      const body = JSON.stringify({ devicePublicKey: keys.publicKey });
+      const res = await fetch(`${peer.onlineBaseUrl}/api/sync/device/register-key`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...syncProtocolHeaders(),
+          ...deviceTrustHeaders(keys.privateKey, 'POST', '/api/sync/device/register-key', body),
+        },
+        body,
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`Device key registration returned HTTP ${res.status}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Device key registration deferred: ${(err as Error).message}`);
+    }
+    return upgraded;
   }
 
   private async readOnlineJson<T>(res: Response): Promise<T & { message?: unknown }> {

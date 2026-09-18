@@ -406,6 +406,7 @@ if (Test-Path $setupExe) {
   Copy-Item -Force $setupExe $UsbDir
   $sha256 = (Get-FileHash $setupExe -Algorithm SHA256).Hash.ToLowerInvariant()
   Set-Content -Path "$setupExe.sha256" -Value $sha256 -Encoding ASCII
+  Copy-Item -Force "$setupExe.sha256" $UsbDir
   Write-Host "Installer checksum: $sha256"
 }
 

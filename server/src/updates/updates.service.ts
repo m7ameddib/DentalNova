@@ -20,6 +20,7 @@ import {
   inspectAuthenticodePayload,
   AuthenticodeInspection,
 } from './installer-authenticode.util';
+import { findInstallerAsset } from './installer-asset.util';
 
 interface GitHubReleaseAsset {
   name: string;
@@ -277,16 +278,7 @@ export class UpdatesService {
   }
 
   private findInstallerAsset(release: GitHubRelease): GitHubReleaseAsset | null {
-    const version = this.normalizeVersion(release.tag_name);
-    const expectedName = `DNT-Dental-Main-Clinic-Setup-v${version}.exe`;
-    const exact = release.assets.find((a) => a.name === expectedName);
-    if (exact) return exact;
-
-    return (
-      release.assets.find((a) =>
-        /^DNT-Dental-Main-Clinic-Setup-v.+\.exe$/i.test(a.name),
-      ) ?? null
-    );
+    return findInstallerAsset(release.assets, release.tag_name);
   }
 
   private async verifyInstallerChecksum(
@@ -344,14 +336,6 @@ export class UpdatesService {
   }
 
   private async assertWindowsAuthenticode(installerPath: string, installerFileName: string): Promise<void> {
-    const allowUnsigned =
-      (this.config.get<string>('ALLOW_UNSIGNED_UPDATES') || '').trim() === '1' &&
-      (this.config.get<string>('NODE_ENV') || '').toLowerCase() !== 'production' &&
-      process.platform !== 'win32';
-    if (allowUnsigned) {
-      this.logger.warn('ALLOW_UNSIGNED_UPDATES=1 — skipping Authenticode (not for production).');
-      return;
-    }
     const inspection = await this.readAuthenticodeSignature(installerPath);
     try {
       assertAuthenticodeTrusted(
@@ -377,15 +361,33 @@ export class UpdatesService {
         { windowsHide: true },
       );
       let out = '';
+      let settled = false;
+      const finish = (inspection: AuthenticodeInspection) => {
+        if (settled) return;
+        settled = true;
+        resolve(inspection);
+      };
+      const timer = setTimeout(() => {
+        try {
+          child.kill();
+        } catch {
+          /* ignore */
+        }
+        finish({ status: 'UnknownError', signer: null });
+      }, 30_000);
       child.stdout.on('data', (chunk) => {
         out += String(chunk);
       });
-      child.on('error', () => resolve({ status: 'UnknownError', signer: null }));
+      child.on('error', () => {
+        clearTimeout(timer);
+        finish({ status: 'UnknownError', signer: null });
+      });
       child.on('close', () => {
+        clearTimeout(timer);
         try {
-          resolve(inspectAuthenticodePayload(JSON.parse(out)));
+          finish(inspectAuthenticodePayload(JSON.parse(out)));
         } catch {
-          resolve({ status: 'UnknownError', signer: null });
+          finish({ status: 'UnknownError', signer: null });
         }
       });
     });

@@ -26,7 +26,7 @@ function compactPairingCode(raw) {
     .toUpperCase();
 }
 
-function signCensusProof(pairingCode, input) {
+function signCensusProof(hmacSecret, input) {
   const census = {
     appointments: Number(input.census.appointments) || 0,
     expenses: Number(input.census.expenses) || 0,
@@ -41,11 +41,13 @@ function signCensusProof(pairingCode, input) {
   const payload = JSON.stringify({
     census,
     challenge: String(input.challenge || ''),
+    devicePublicKey: String(input.devicePublicKey || ''),
     emptyClinic: input.emptyClinic === true,
     installationId: String(input.installationId || ''),
+    licenseId: String(input.licenseId || ''),
     protocolVersion: Number(input.protocolVersion) || 0,
   });
-  return crypto.createHmac('sha256', compactPairingCode(pairingCode)).update(payload).digest('hex');
+  return crypto.createHmac('sha256', String(hmacSecret || '')).update(payload).digest('hex');
 }
 
 function emptyCensus() {
@@ -66,7 +68,7 @@ function pairingCompleteBody(code, extra = {}) {
   const census = extra.census || emptyCensus();
   const challenge = extra.challenge;
   const installationId = extra.installationId || '';
-  const protocolVersion = extra.protocolVersion == null ? 2 : extra.protocolVersion;
+  const protocolVersion = extra.protocolVersion == null ? 3 : extra.protocolVersion;
   return {
     code,
     deviceName: extra.deviceName || 'Live Offline PC',
@@ -77,13 +79,34 @@ function pairingCompleteBody(code, extra = {}) {
     challenge,
     censusProof:
       extra.censusProof ||
-      signCensusProof(code, {
+      signCensusProof(challenge, {
         protocolVersion,
         challenge,
         installationId,
         emptyClinic: extra.emptyClinic !== false,
         census,
+        devicePublicKey: extra.devicePublicKey || '',
+        licenseId: extra.licenseId || '',
       }),
+  };
+}
+
+function signWithDeviceKey(privateKeyB64, payload) {
+  const key = crypto.createPrivateKey({
+    key: Buffer.from(privateKeyB64, 'base64url'),
+    type: 'pkcs8',
+    format: 'der',
+  });
+  return crypto.sign(null, Buffer.from(payload, 'utf8'), key).toString('base64url');
+}
+
+function deviceTrustHeaders(privateKeyB64, method, urlPath, body, nowMs = Date.now()) {
+  const timestamp = String(nowMs);
+  const bodySha256 = crypto.createHash('sha256').update(body || '').digest('hex');
+  const payload = ['DNDEV1', timestamp, String(method || '').toUpperCase(), String(urlPath || ''), bodySha256].join('\n');
+  return {
+    'x-dentalnova-device-ts': timestamp,
+    'x-dentalnova-device-sig': signWithDeviceKey(privateKeyB64, payload),
   };
 }
 
@@ -105,7 +128,7 @@ function setupPayload(clinicName, username, phoneTail) {
 function requestFactory(base) {
   return async function request(method, urlPath, { token, body, expected, headers, protocol } = {}) {
     const hdrs = { Accept: 'application/json', ...(headers || {}) };
-    if (protocol !== false) hdrs['x-dentalnova-sync-protocol'] = String(protocol == null ? 2 : protocol);
+    if (protocol !== false) hdrs['x-dentalnova-sync-protocol'] = String(protocol == null ? 3 : protocol);
     if (body !== undefined) hdrs['Content-Type'] = 'application/json';
     if (token) hdrs.Authorization = `Bearer ${token}`;
     const res = await fetch(`${base}${urlPath}`, {
@@ -256,7 +279,12 @@ async function main() {
   const onlineReq = requestFactory(`http://127.0.0.1:${ONLINE_PORT}/api`);
   const offlineReq = requestFactory(`http://127.0.0.1:${OFFLINE_PORT}/api`);
 
-  let online = spawnServer({ mode: 'online', port: ONLINE_PORT, dataDir: onlineDir });
+  let online = spawnServer({
+    mode: 'online',
+    port: ONLINE_PORT,
+    dataDir: onlineDir,
+    extraEnv: { LICENSE_KEYS_DIR: keysDir },
+  });
   let offline = spawnServer({
     mode: 'offline',
     port: OFFLINE_PORT,
@@ -344,6 +372,13 @@ async function main() {
     proven.push('Offline licensed + first setup on a second data root/port');
 
     const pairing = await onlineReq('POST', '/sync/pairing/start', { token: onlineToken, expected: [200, 201] });
+    const customClient = await onlineReq('POST', '/sync/pairing/complete', {
+      body: pairingCompleteBody(pairing.data.code, {
+        challenge: pairing.data.challenge,
+        census: emptyCensus(),
+      }),
+    });
+    assert(customClient.status === 400, `pairing-code-only custom client must not pair (got ${customClient.status})`);
     const badProof = await onlineReq('POST', '/sync/pairing/complete', {
       body: pairingCompleteBody(pairing.data.code, {
         challenge: pairing.data.challenge,
@@ -367,7 +402,7 @@ async function main() {
       expected: [200, 201],
     });
     assert(connect.data.deviceId, 'offline connect must return device id');
-    proven.push('Official Offline connect signed live SQLite census + pairing challenge');
+    proven.push('Official Offline connect signed live SQLite census + pairing challenge + device key + license');
 
     const boot1 = offlineReq('POST', '/sync/bootstrap', { token: offlineToken }).catch(() => ({ status: 0, data: {} }));
     await new Promise((r) => setTimeout(r, 700));
@@ -503,7 +538,12 @@ async function main() {
     proven.push('Online process stopped mid-sync window (internet-drop substitute)');
     const dropSync = await offlineReq('POST', '/sync/now', { token: offlineToken });
     assert(dropSync.data.error || dropSync.status >= 400, 'sync must surface Online unreachable');
-    online = spawnServer({ mode: 'online', port: ONLINE_PORT, dataDir: onlineDir });
+    online = spawnServer({
+      mode: 'online',
+      port: ONLINE_PORT,
+      dataDir: onlineDir,
+      extraEnv: { LICENSE_KEYS_DIR: keysDir },
+    });
     await waitForHealth(ONLINE_PORT);
     const onlineToken2 = (
       await onlineReq('POST', '/auth/login', {
@@ -536,51 +576,66 @@ async function main() {
     proven.push('Internet-drop substitute: Online kill/restart, Offline reconnect + pull');
     proven.push('VOID payment, treatment, and appointment replicated onto Offline');
 
+    const peer = JSON.parse(fs.readFileSync(path.join(offlineDir, 'config', 'sync-device.json'), 'utf-8'));
+    const tokenBody = { deviceId: connect.data.deviceId, deviceSecret: peer.deviceSecret };
+    const unsignedTok = await onlineReq('POST', '/sync/token', { body: tokenBody });
+    assert(unsignedTok.status === 401, `live device token without signature must fail (got ${unsignedTok.status})`);
     const deviceTok = await onlineReq('POST', '/sync/token', {
-      body: {
-        deviceId: connect.data.deviceId,
-        deviceSecret: JSON.parse(fs.readFileSync(path.join(offlineDir, 'config', 'sync-device.json'), 'utf-8'))
-          .deviceSecret,
-      },
+      body: tokenBody,
+      headers: deviceTrustHeaders(peer.devicePrivateKey, 'POST', '/api/sync/token', JSON.stringify(tokenBody)),
       expected: [200, 201],
     });
     const deviceToken = deviceTok.data.accessToken;
-    const mismatch = await onlineReq('GET', '/sync/changes?since=0', { token: deviceToken, protocol: 1 });
+    const mismatch = await onlineReq('GET', '/sync/changes?since=0', {
+      token: deviceToken,
+      protocol: 1,
+      headers: deviceTrustHeaders(peer.devicePrivateKey, 'GET', '/api/sync/changes?since=0', ''),
+    });
     assert(mismatch.status === 400, `protocol v1 must be refused (got ${mismatch.status})`);
     proven.push('Protocol version gate refused incompatible header');
 
     const blob = Buffer.alloc(300 * 1024, 7);
     const digest = crypto.createHash('sha256').update(blob).digest('hex');
     const rel = 'patients/live-drill.bin';
+    const beginBody = { relativePath: rel, mimeType: 'application/octet-stream', byteSize: blob.length, sha256: digest };
     await onlineReq('POST', '/sync/files/begin', {
       token: deviceToken,
-      body: { relativePath: rel, mimeType: 'application/octet-stream', byteSize: blob.length, sha256: digest },
+      body: beginBody,
+      headers: deviceTrustHeaders(peer.devicePrivateKey, 'POST', '/api/sync/files/begin', JSON.stringify(beginBody)),
       expected: [200, 201],
     });
     const chunk = 256 * 1024;
     for (let offset = 0; offset < blob.length; offset += chunk) {
-      await onlineReq('POST', '/sync/files/chunk', {
-        token: deviceToken,
-        body: {
+      const chunkBody = {
           relativePath: rel,
           offset,
           contentBase64: blob.subarray(offset, offset + chunk).toString('base64'),
-        },
+      };
+      await onlineReq('POST', '/sync/files/chunk', {
+        token: deviceToken,
+        body: chunkBody,
+        headers: deviceTrustHeaders(peer.devicePrivateKey, 'POST', '/api/sync/files/chunk', JSON.stringify(chunkBody)),
         expected: [200, 201],
       });
     }
+    const finishBody = { relativePath: rel, sha256: digest, mimeType: 'application/octet-stream' };
     await onlineReq('POST', '/sync/files/finish', {
       token: deviceToken,
-      body: { relativePath: rel, sha256: digest, mimeType: 'application/octet-stream' },
+      body: finishBody,
+      headers: deviceTrustHeaders(peer.devicePrivateKey, 'POST', '/api/sync/files/finish', JSON.stringify(finishBody)),
       expected: [200, 201],
     });
-    const meta = await onlineReq('GET', `/sync/files?path=${encodeURIComponent(rel)}`, {
+    const fileQs = `/sync/files?path=${encodeURIComponent(rel)}`;
+    const meta = await onlineReq('GET', fileQs, {
       token: deviceToken,
+      headers: deviceTrustHeaders(peer.devicePrivateKey, 'GET', `/api${fileQs}`, ''),
       expected: 200,
     });
     assert(meta.data.chunked === true || meta.data.byteSize === blob.length, 'large file must not be inlined as a huge JSON body');
-    const part = await onlineReq('GET', `/sync/files?path=${encodeURIComponent(rel)}&offset=0&limit=1024`, {
+    const partQs = `/sync/files?path=${encodeURIComponent(rel)}&offset=0&limit=1024`;
+    const part = await onlineReq('GET', partQs, {
       token: deviceToken,
+      headers: deviceTrustHeaders(peer.devicePrivateKey, 'GET', `/api${partQs}`, ''),
       expected: 200,
     });
     assert(part.data.contentBase64, 'chunked download missing');
@@ -609,9 +664,7 @@ async function main() {
     );
     proven.push(`Multi-cycle drain: ${createdDrain} Online doctor-created rows reached Offline (including Drain 2099)`);
 
-    const medPush = await onlineReq('POST', '/sync/push', {
-      token: deviceToken,
-      body: {
+    const medPushBody = {
         changes: [
           {
             changeId: 'med-dup-1',
@@ -621,7 +674,11 @@ async function main() {
             row: { name: 'Amoxicillin', category: 'ANTIBIOTICS' },
           },
         ],
-      },
+    };
+    const medPush = await onlineReq('POST', '/sync/push', {
+      token: deviceToken,
+      body: medPushBody,
+      headers: deviceTrustHeaders(peer.devicePrivateKey, 'POST', '/api/sync/push', JSON.stringify(medPushBody)),
       expected: [200, 201],
     });
     assert(!(medPush.data.conflicts || []).some((c) => c.reason === 'apply-error'), 'medication adopt must not apply-error');

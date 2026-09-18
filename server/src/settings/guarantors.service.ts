@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { GuarantorsRepository } from '../database/repositories/guarantors.repository';
+import { amountToCents } from '../common/money.util';
 
 @Injectable()
 export class GuarantorsService {
@@ -31,8 +32,9 @@ export class GuarantorsService {
 
   upsertPrice(guarantorId: number, treatmentTypeId: number, price: number) {
     if (!this.repo.findById(guarantorId)) throw new NotFoundException('Guarantor not found');
-    this.repo.upsertPrice(guarantorId, treatmentTypeId, Math.round(price * 100));
-    return { guarantorId, treatmentTypeId, priceCents: Math.round(price * 100) };
+    const priceCents = amountToCents(price);
+    this.repo.upsertPrice(guarantorId, treatmentTypeId, priceCents);
+    return { guarantorId, treatmentTypeId, priceCents };
   }
 
   deletePrice(guarantorId: number, treatmentTypeId: number) {

@@ -7,6 +7,10 @@ export interface StoredPeerConfig {
   onlineClinicId: string;
   clinicName: string;
   pairedAt: string;
+  /** Ed25519 PKCS8 DER, base64url. Never sent to the UI or Online. */
+  devicePrivateKey?: string;
+  /** Ed25519 SPKI DER, base64url. Registered with Online at pairing. */
+  devicePublicKey?: string;
 }
 
 export interface PublicPeerInfo {
@@ -20,7 +24,17 @@ export interface PublicPeerInfo {
 
 export const INVALID_ONLINE_URL = 'INVALID_ONLINE_URL';
 
-const SECRET_KEYS = new Set(['deviceSecret', 'devicesecret', 'secretHash', 'secrethash', 'secret']);
+const SECRET_KEYS = new Set([
+  'deviceSecret',
+  'devicesecret',
+  'secretHash',
+  'secrethash',
+  'secret',
+  'devicePrivateKey',
+  'deviceprivatekey',
+  'privateKey',
+  'privatekey',
+]);
 
 /** Accept http(s) clinic addresses only. Drop userinfo and keep origin (scheme + host + port). */
 export function normalizeOnlineBaseUrl(raw: string): string {

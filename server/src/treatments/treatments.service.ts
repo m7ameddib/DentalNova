@@ -19,6 +19,7 @@ import {
   TreatmentScope,
 } from './treatment-scope.util';
 import { localTodayIso } from '../common/local-date.util';
+import { amountToCents } from '../common/money.util';
 
 @Injectable()
 export class TreatmentsService {
@@ -49,8 +50,8 @@ export class TreatmentsService {
       abbreviation: dto.abbreviation.trim().toUpperCase(),
       label: dto.label.trim(),
       colorHex: dto.colorHex ?? (dto.category ? TREATMENT_CATEGORY_COLORS[dto.category as keyof typeof TREATMENT_CATEGORY_COLORS] : undefined),
-      defaultPriceCents: Math.round(dto.defaultPrice * 100),
-      referencePriceCents: dto.referencePrice != null ? Math.round(dto.referencePrice * 100) : null,
+      defaultPriceCents: amountToCents(dto.defaultPrice),
+      referencePriceCents: dto.referencePrice != null ? amountToCents(dto.referencePrice) : null,
       category: dto.category ?? null,
       scope: dto.scope ?? 'SINGLE',
       followUp1Days: dto.followUp1Days ?? null,
@@ -68,12 +69,12 @@ export class TreatmentsService {
       abbreviation: dto.abbreviation?.trim().toUpperCase(),
       colorHex: dto.colorHex,
       isActive: dto.isActive,
-      defaultPriceCents: dto.defaultPrice != null ? Math.round(dto.defaultPrice * 100) : undefined,
+      defaultPriceCents: dto.defaultPrice != null ? amountToCents(dto.defaultPrice) : undefined,
       referencePriceCents:
         dto.referencePrice !== undefined
           ? dto.referencePrice == null
             ? null
-            : Math.round(dto.referencePrice * 100)
+            : amountToCents(dto.referencePrice)
           : undefined,
       category: dto.category,
       scope: dto.scope,
@@ -92,7 +93,14 @@ export class TreatmentsService {
 
     const scope = resolveScope(dto.treatmentScope, (type as { scope?: TreatmentScope }).scope ?? null);
     const teeth = this.resolveTeeth(scope, dto.teeth);
-    const amounts = this.computeAmounts(type.id, type.defaultPriceCents, patient.guarantorId ?? null, scope, teeth, dto.discount ?? 0);
+    const amounts = this.computeAmounts(
+      type.id,
+      type.defaultPriceCents,
+      patient.guarantorId ?? null,
+      scope,
+      teeth,
+      amountToCents(dto.discount ?? 0),
+    );
 
     const followUpDaysFromType = [
       type.followUp1Days ?? type.followUpDays ?? null,
@@ -159,8 +167,9 @@ export class TreatmentsService {
       (type as { scope?: TreatmentScope }).scope ?? null,
     );
     const teeth = dto.teeth ? this.resolveTeeth(scope, dto.teeth) : existing.teeth;
-    const discount = dto.discount !== undefined ? dto.discount : existing.discountCents / 100;
-    const amounts = this.computeAmounts(type.id, type.defaultPriceCents, patient.guarantorId ?? null, scope, teeth, discount);
+    const discountCents =
+      dto.discount !== undefined ? amountToCents(dto.discount) : existing.discountCents;
+    const amounts = this.computeAmounts(type.id, type.defaultPriceCents, patient.guarantorId ?? null, scope, teeth, discountCents);
 
     const updated = this.patientTreatmentsRepo.update(id, {
       treatmentTypeId: dto.treatmentTypeId,
@@ -263,7 +272,7 @@ export class TreatmentsService {
     guarantorId: number | null,
     scope: TreatmentScope,
     teeth: number[],
-    discountUnits: number,
+    discountCents: number,
   ) {
     let unitPriceCents = defaultPriceCents;
     if (guarantorId) {
@@ -272,9 +281,9 @@ export class TreatmentsService {
     }
     const multiplier = priceMultiplier(scope, teeth.length);
     const baseAmountCents = unitPriceCents * multiplier;
-    const discountCents = Math.round(discountUnits * 100);
-    const finalAmountCents = Math.max(0, baseAmountCents - discountCents);
-    return { baseAmountCents, discountCents, finalAmountCents };
+    const safeDiscountCents = Math.max(0, Math.round(discountCents));
+    const finalAmountCents = Math.max(0, baseAmountCents - safeDiscountCents);
+    return { baseAmountCents, discountCents: safeDiscountCents, finalAmountCents };
   }
 
   private generateCode(label: string): string {

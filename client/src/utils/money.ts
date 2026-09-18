@@ -1,9 +1,13 @@
 export function centsToAmount(cents: number): number {
-  return Math.round(cents) / 100;
+  const n = Number(cents);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(n) / 100;
 }
 
 export function amountToCents(amount: number): number {
-  return Math.round(amount * 100);
+  const n = Number(amount);
+  if (!Number.isFinite(n)) return 0;
+  return Math.round(Number(`${n}e2`));
 }
 
 export function formatMoney(cents: number): string {

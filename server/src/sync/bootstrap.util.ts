@@ -22,3 +22,21 @@ export function shouldFinalizeBootstrap(complete: boolean): boolean {
 export function snapshotOpeningCheckpoint(maxSeqNow: number): number {
   return Number(maxSeqNow) || 0;
 }
+
+export type SnapshotCursor = { afterEntity: string; afterId: number };
+
+export const DEVICE_BOOTSTRAP_REQUIRED_CODE = 'DEVICE_BOOTSTRAP_REQUIRED';
+export const DEVICE_BOOTSTRAP_REQUIRED_MESSAGE =
+  'This computer must finish the first clinic download before it can upload records. Two databases are never merged.';
+
+export function normalizeSnapshotCursor(afterEntity?: string | null, afterId?: number | null): SnapshotCursor {
+  return { afterEntity: String(afterEntity || ''), afterId: Number(afterId) || 0 };
+}
+
+export function snapshotRequestMatchesCursor(requested: SnapshotCursor, expected: SnapshotCursor): boolean {
+  return requested.afterEntity === expected.afterEntity && requested.afterId === expected.afterId;
+}
+
+export function initialSnapshotCursor(): SnapshotCursor {
+  return { afterEntity: '', afterId: 0 };
+}

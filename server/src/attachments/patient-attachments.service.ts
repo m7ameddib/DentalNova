@@ -57,19 +57,24 @@ export class PatientAttachmentsService {
     const relativePath = path.join('patients', String(patientId), fileName);
     await this.objectStorage.putObject(relativePath, file.buffer, mimeType);
 
-    return this.repo.create({
-      patientId,
-      originalFileName: file.originalname,
-      category: dto.category,
-      storedPath: relativePath,
-      mimeType,
-      fileSize: file.size,
-      note: dto.note ?? null,
-      uploadedById: currentUser.id,
-      patientTreatmentId: dto.patientTreatmentId ?? null,
-      clinicalVisitNoteId: dto.clinicalVisitNoteId ?? null,
-      teeth,
-    });
+    try {
+      return this.repo.create({
+        patientId,
+        originalFileName: file.originalname,
+        category: dto.category,
+        storedPath: relativePath,
+        mimeType,
+        fileSize: file.size,
+        note: dto.note ?? null,
+        uploadedById: currentUser.id,
+        patientTreatmentId: dto.patientTreatmentId ?? null,
+        clinicalVisitNoteId: dto.clinicalVisitNoteId ?? null,
+        teeth,
+      });
+    } catch (err) {
+      await this.objectStorage.deleteObject(relativePath).catch(() => undefined);
+      throw err;
+    }
   }
 
   getFileAbsolutePath(patientId: number, attachmentId: number): {

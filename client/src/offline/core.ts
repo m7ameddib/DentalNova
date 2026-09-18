@@ -1,4 +1,5 @@
 import { priceMultiplier, TreatmentScope } from '../utils/teeth';
+import { amountToCents } from '../utils/money';
 
 export type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
 
@@ -331,7 +332,7 @@ export function optimisticTreatmentPricing(
   const teeth = Array.isArray(payload.teeth) ? payload.teeth : [];
   const scope = String(payload.treatmentScope ?? type?.scope ?? 'SINGLE') as TreatmentScope;
   const multiplier = priceMultiplier(scope, teeth.length);
-  const discountCents = payload.discount != null ? Math.round(Number(payload.discount) * 100) : 0;
+  const discountCents = payload.discount != null ? amountToCents(Number(payload.discount)) : 0;
   const baseAmountCents = unit * multiplier;
   return {
     priceCents: unit,
@@ -428,7 +429,7 @@ export function buildOptimisticRecord(
   if (path === '/payments' || path.startsWith('/payments/')) {
     return {
       patientId: payload.patientId,
-      amountCents: payload.amount != null ? Math.round(Number(payload.amount) * 100) : 0,
+      amountCents: payload.amount != null ? amountToCents(Number(payload.amount)) : 0,
       method: payload.method ?? 'CASH',
       date: payload.date ?? now.slice(0, 10),
       note: payload.note ?? null,
@@ -441,7 +442,7 @@ export function buildOptimisticRecord(
   if (path === '/account-discounts' || path.startsWith('/account-discounts/')) {
     return {
       patientId: payload.patientId,
-      amountCents: payload.amount != null ? Math.round(Number(payload.amount) * 100) : Number(payload.amountCents ?? 0),
+      amountCents: payload.amount != null ? amountToCents(Number(payload.amount)) : Number(payload.amountCents ?? 0),
       date: payload.date ?? now.slice(0, 10),
       note: payload.note ?? null,
       recordedById: null,
@@ -453,7 +454,7 @@ export function buildOptimisticRecord(
   if (path === '/lab-cases' || path.startsWith('/lab-cases/')) {
     const labCost =
       payload.labCostCents ??
-      (payload.labCost != null ? Math.round(Number(payload.labCost) * 100) : 0);
+      (payload.labCost != null ? amountToCents(Number(payload.labCost)) : 0);
     return {
       patientId: payload.patientId,
       laboratoryId: payload.laboratoryId ?? null,

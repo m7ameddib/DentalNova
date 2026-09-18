@@ -37,6 +37,7 @@ import { DeploymentService } from '../common/deployment.service';
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { DatabaseService } from '../database/database.service';
 import { APP_VERSION } from '../common/version';
+import { amountToCents } from '../common/money.util';
 import { AdminAuditInterceptor } from './admin-audit.interceptor';
 
 @UseGuards(DibNovaAdminGuard)
@@ -178,7 +179,7 @@ export class DibNovaAdminController {
     this.platform.requireClinic(dto.clinicId);
     return this.platform.addPayment({
       clinicId: dto.clinicId,
-      amountCents: Math.round(dto.amount * 100),
+      amountCents: amountToCents(dto.amount),
       paymentDate: dto.paymentDate,
       method: dto.method,
       note: dto.note,
@@ -188,7 +189,7 @@ export class DibNovaAdminController {
   @Post('payments/:id/update')
   updatePayment(@Param('id') id: string, @Body() dto: AdminPaymentDto) {
     return this.platform.updatePayment(Number(id), {
-      amountCents: dto.amount != null ? Math.round(dto.amount * 100) : undefined,
+      amountCents: dto.amount != null ? amountToCents(dto.amount) : undefined,
       paymentDate: dto.paymentDate,
       method: dto.method,
       note: dto.note,

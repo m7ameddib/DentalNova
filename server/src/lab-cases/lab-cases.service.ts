@@ -30,6 +30,7 @@ import {
 } from './dto/lab-account-payment.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { localTodayIso } from '../common/local-date.util';
+import { amountToCents, centsToAmount } from '../common/money.util';
 
 @Injectable()
 export class LabCasesService {
@@ -85,7 +86,7 @@ export class LabCasesService {
 
   upsertServiceCost(labNameId: number, workTypeCode: string, cost: number) {
     if (!this.labNamesRepo.findById(labNameId)) throw new NotFoundException('Laboratory not found');
-    return this.labServiceCostsRepo.upsert(labNameId, workTypeCode, Math.round(cost * 100));
+    return this.labServiceCostsRepo.upsert(labNameId, workTypeCode, amountToCents(cost));
   }
 
   lookupServiceCost(labName: string, workTypeCode: string): number | undefined {
@@ -129,10 +130,10 @@ export class LabCasesService {
     this.assertTreatment(dto.patientId, dto.patientTreatmentId);
     this.ensureLabNameSaved(dto.labName);
 
-    let labCost = dto.labCost;
-    if (labCost == null) {
+    let labCostCents = dto.labCost != null ? amountToCents(dto.labCost) : 0;
+    if (dto.labCost == null) {
       const configured = this.lookupServiceCost(dto.labName, dto.workTypeCode);
-      if (configured != null) labCost = configured / 100;
+      if (configured != null) labCostCents = configured;
     }
 
     const created = this.labCasesRepo.create({
@@ -142,7 +143,7 @@ export class LabCasesService {
       workTypeCode: dto.workTypeCode,
       workTypeCustom: dto.workTypeCustom ?? null,
       status: dto.status ?? 'PENDING',
-      labCostCents: labCost != null ? Math.round(labCost * 100) : 0,
+      labCostCents,
       sentDate: dto.sentDate ?? null,
       expectedDeliveryDate: dto.expectedDeliveryDate ?? null,
       receivedDate: dto.receivedDate ?? null,
@@ -187,7 +188,7 @@ export class LabCasesService {
       workTypeCode: dto.workTypeCode,
       workTypeCustom: dto.workTypeCustom,
       status: dto.status,
-      labCostCents: dto.labCost != null ? Math.round(dto.labCost * 100) : undefined,
+      labCostCents: dto.labCost != null ? amountToCents(dto.labCost) : undefined,
       sentDate: dto.sentDate,
       expectedDeliveryDate: dto.expectedDeliveryDate,
       receivedDate: dto.receivedDate,
@@ -209,7 +210,7 @@ export class LabCasesService {
       throw new BadRequestException('Select a valid payment method');
     }
 
-    const amountCents = Math.round(dto.amount * 100);
+    const amountCents = amountToCents(dto.amount);
     if (amountCents <= 0) throw new BadRequestException('Payment amount must be greater than zero');
 
     const totalPaid = this.labPaymentsRepo.totalPaidForCase(labCaseId);
@@ -254,7 +255,7 @@ export class LabCasesService {
       entityType: 'lab_case_payment',
       entityId: payment.id,
       patientId: labCase.patientId,
-      description: `Lab payment ${(amountCents / 100).toFixed(2)} for case #${labCaseId}`,
+      description: `Lab payment ${centsToAmount(amountCents).toFixed(2)} for case #${labCaseId}`,
       userId: user.id,
     });
 
@@ -280,7 +281,7 @@ export class LabCasesService {
       }
     }
 
-    const amountCents = dto.amount !== undefined ? Math.round(dto.amount * 100) : payment.amountCents;
+    const amountCents = dto.amount !== undefined ? amountToCents(dto.amount) : payment.amountCents;
     if (amountCents <= 0) throw new BadRequestException('Payment amount must be greater than zero');
 
     const othersPaid = this.labPaymentsRepo.totalPaidForCase(labCaseId) - payment.amountCents;
@@ -484,7 +485,7 @@ export class LabCasesService {
       throw new BadRequestException('Select a valid payment method');
     }
 
-    const amountCents = Math.round(dto.amount * 100);
+    const amountCents = amountToCents(dto.amount);
     if (amountCents <= 0) throw new BadRequestException('Payment amount must be greater than zero');
 
     const summary = this.buildLabAccountSummary(lab.id, lab.name);
@@ -523,7 +524,7 @@ export class LabCasesService {
       action: 'LAB_ACCOUNT_PAYMENT_RECORDED',
       entityType: 'lab_account_payment',
       entityId: payment.id,
-      description: `Lab account payment ${(amountCents / 100).toFixed(2)} — ${lab.name}`,
+      description: `Lab account payment ${centsToAmount(amountCents).toFixed(2)} — ${lab.name}`,
       userId: user.id,
     });
 
@@ -546,7 +547,7 @@ export class LabCasesService {
     }
 
     const amountCents =
-      dto.amount !== undefined ? Math.round(dto.amount * 100) : existing.amountCents;
+      dto.amount !== undefined ? amountToCents(dto.amount) : existing.amountCents;
     if (amountCents <= 0) throw new BadRequestException('Payment amount must be greater than zero');
 
     if (dto.paymentMethod) {

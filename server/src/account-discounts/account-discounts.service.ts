@@ -8,6 +8,7 @@ import { UpdateAccountDiscountDto } from './dto/update-account-discount.dto';
 import { VoidAccountDiscountDto } from './dto/void-account-discount.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { localTodayIso } from '../common/local-date.util';
+import { amountToCents, centsToAmount } from '../common/money.util';
 
 @Injectable()
 export class AccountDiscountsService {
@@ -24,7 +25,7 @@ export class AccountDiscountsService {
     }
     const discount = this.discountsRepo.create({
       patientId: dto.patientId,
-      amountCents: Math.round(dto.amount * 100),
+      amountCents: amountToCents(dto.amount),
       date: dto.date ?? localTodayIso(),
       note: dto.note ?? null,
       recordedById: currentUser.id,
@@ -35,7 +36,7 @@ export class AccountDiscountsService {
       entityType: 'account_discount',
       entityId: discount.id,
       patientId: dto.patientId,
-      description: `Account discount recorded: ${(discount.amountCents / 100).toFixed(2)}`,
+      description: `Account discount recorded: ${centsToAmount(discount.amountCents).toFixed(2)}`,
       userId: currentUser.id,
     });
     return discount;
@@ -48,7 +49,7 @@ export class AccountDiscountsService {
       throw new BadRequestException('Cannot edit a voided discount');
     }
     const updated = this.discountsRepo.update(id, {
-      amountCents: dto.amount !== undefined ? Math.round(dto.amount * 100) : undefined,
+      amountCents: dto.amount !== undefined ? amountToCents(dto.amount) : undefined,
       date: dto.date,
       note: dto.note !== undefined ? dto.note.trim() || null : undefined,
     });
@@ -59,7 +60,7 @@ export class AccountDiscountsService {
       entityType: 'account_discount',
       entityId: id,
       patientId: existing.patientId,
-      description: `Account discount updated: ${(updated.amountCents / 100).toFixed(2)}`,
+      description: `Account discount updated: ${centsToAmount(updated.amountCents).toFixed(2)}`,
       userId: currentUser.id,
     });
     return updated;

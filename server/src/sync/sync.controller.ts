@@ -34,6 +34,7 @@ import {
   PairingCompleteDto,
   PairingPreviewDto,
   PushChangesDto,
+  RegisterDeviceKeyDto,
   ResolveConflictDto,
 } from './dto/sync.dto';
 import { PlatformService } from '../platform/platform.service';
@@ -111,7 +112,7 @@ export class SyncController {
     const key = `sync-token:${requestClientIp(req)}:${dto.deviceId}`;
     this.rateLimit.assertAllowed(key, 20, 15 * 60 * 1000);
     try {
-      const result = this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret);
+      const result = this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret, req);
       this.rateLimit.recordSuccess(key);
       return result;
     } catch (err) {
@@ -182,6 +183,16 @@ export class SyncController {
 
   @UseGuards(DeviceAuthGuard)
   @SkipSubscriptionGuard()
+  @Post('device/register-key')
+  registerDeviceKey(
+    @Req() req: Request & { syncDevice?: SyncDevicePrincipal },
+    @Body() dto: RegisterDeviceKeyDto,
+  ) {
+    return this.pairing.registerDevicePublicKey(req.syncDevice!.deviceId, dto.devicePublicKey, req);
+  }
+
+  @UseGuards(DeviceAuthGuard)
+  @SkipSubscriptionGuard()
   @Post('device/revoke-self')
   revokeSelf(@Req() req: Request & { syncDevice?: SyncDevicePrincipal }) {
     const device = req.syncDevice!;
@@ -219,11 +230,13 @@ export class SyncController {
   @SkipSubscriptionGuard()
   @Get('snapshot')
   snapshot(
+    @Req() req: Request & { syncDevice?: SyncDevicePrincipal },
     @Query('afterEntity') afterEntity?: string,
     @Query('afterId') afterIdRaw?: string,
     @Query('limit') limitRaw?: string,
   ) {
     return this.engine.snapshotPage(
+      req.syncDevice!.deviceId,
       afterEntity,
       Number(afterIdRaw ?? 0) || 0,
       Math.min(100, Number(limitRaw ?? 80) || 80),
@@ -234,6 +247,7 @@ export class SyncController {
   @SkipSubscriptionGuard()
   @Post('files')
   async uploadFile(
+    @Req() req: Request & { syncDevice?: SyncDevicePrincipal },
     @Body() body: { relativePath: string; contentBase64: string; mimeType?: string },
   ) {
     if (!body?.relativePath || !body.contentBase64) throw new BadRequestException('File payload required');
@@ -245,8 +259,9 @@ export class SyncController {
       if (bytes.length > FILE_INLINE_MAX_BYTES) {
         throw new BadRequestException('File is too large for a single request. Upload it in 256 KiB chunks.');
       }
-      return await this.engine.putFileFromDevice(body.relativePath, bytes, body.mimeType);
+      return await this.engine.putFileFromDevice(req.syncDevice!.deviceId, body.relativePath, bytes, body.mimeType);
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       throw new BadRequestException((err as Error).message || 'File store failed');
     }
   }
@@ -254,10 +269,17 @@ export class SyncController {
   @UseGuards(DeviceAuthGuard)
   @SkipSubscriptionGuard()
   @Post('files/begin')
-  async beginFile(@Body() body: FileBeginDto) {
+  async beginFile(@Req() req: Request & { syncDevice?: SyncDevicePrincipal }, @Body() body: FileBeginDto) {
     try {
-      return await this.engine.beginFileFromDevice(body.relativePath, body.byteSize, body.mimeType, body.sha256);
+      return await this.engine.beginFileFromDevice(
+        req.syncDevice!.deviceId,
+        body.relativePath,
+        body.byteSize,
+        body.mimeType,
+        body.sha256,
+      );
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       throw new BadRequestException((err as Error).message || 'File upload could not start');
     }
   }
@@ -265,11 +287,12 @@ export class SyncController {
   @UseGuards(DeviceAuthGuard)
   @SkipSubscriptionGuard()
   @Post('files/chunk')
-  async chunkFile(@Body() body: FileChunkDto) {
+  async chunkFile(@Req() req: Request & { syncDevice?: SyncDevicePrincipal }, @Body() body: FileChunkDto) {
     try {
       const bytes = decodeFileChunkBase64(body.contentBase64);
-      return await this.engine.putFileChunkFromDevice(body.relativePath, body.offset, bytes);
+      return await this.engine.putFileChunkFromDevice(req.syncDevice!.deviceId, body.relativePath, body.offset, bytes);
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       throw new BadRequestException((err as Error).message || 'File chunk failed');
     }
   }
@@ -277,10 +300,16 @@ export class SyncController {
   @UseGuards(DeviceAuthGuard)
   @SkipSubscriptionGuard()
   @Post('files/finish')
-  async finishFile(@Body() body: FileFinishDto) {
+  async finishFile(@Req() req: Request & { syncDevice?: SyncDevicePrincipal }, @Body() body: FileFinishDto) {
     try {
-      return await this.engine.finishFileFromDevice(body.relativePath, body.sha256, body.mimeType);
+      return await this.engine.finishFileFromDevice(
+        req.syncDevice!.deviceId,
+        body.relativePath,
+        body.sha256,
+        body.mimeType,
+      );
     } catch (err) {
+      if (err instanceof BadRequestException) throw err;
       throw new BadRequestException((err as Error).message || 'File upload could not finish');
     }
   }

@@ -49,7 +49,12 @@ async function bootstrap() {
     // and otherwise surface as opaque 500 "Unexpected server error".
     bodyParser: false,
   });
-  app.useBodyParser('json', { limit: '48mb' });
+  app.useBodyParser('json', {
+    limit: '48mb',
+    verify: (req: Request & { rawBody?: Buffer }, _res: Response, buf: Buffer) => {
+      req.rawBody = buf;
+    },
+  });
   app.useBodyParser('urlencoded', { limit: '48mb', extended: true });
 
   const deployment = app.get(DeploymentService);

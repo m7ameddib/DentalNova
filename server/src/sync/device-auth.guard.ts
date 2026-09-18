@@ -10,6 +10,7 @@ import {
   protocolVersionFromHeaders,
   SYNC_PROTOCOL_MISMATCH,
 } from './sync-protocol.util';
+import { DEVICE_SIGNATURE_INVALID, DEVICE_SIGNATURE_INVALID_CODE, verifyExpressDeviceRequest } from './device-trust.util';
 
 export interface SyncDevicePrincipal {
   deviceId: string;
@@ -48,6 +49,13 @@ export class DeviceAuthGuard implements CanActivate {
     const device = this.platform.findSyncDevice(payload.deviceId);
     if (!device || device.revokedAt || device.clinicId !== payload.clinicId) {
       throw new UnauthorizedException();
+    }
+    if (device.publicKey && !verifyExpressDeviceRequest(req, device.publicKey)) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: DEVICE_SIGNATURE_INVALID,
+        code: DEVICE_SIGNATURE_INVALID_CODE,
+      });
     }
     if (!this.platform.canUseSystem(device.clinicId)) {
       throw new UnauthorizedException('Clinic subscription is not active');

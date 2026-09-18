@@ -27,7 +27,7 @@ import { FinancialActionDto } from './dto/financial-action.dto';
 import { AppointmentsService } from '../appointments/appointments.service';
 
 import { addLocalDays, localTodayIso } from '../common/local-date.util';
-import { remainingCents } from '../common/money.util';
+import { remainingCents, amountToCents, centsToAmount } from '../common/money.util';
 import { DatabaseService } from '../database/database.service';
 import { AuditService } from '../audit/audit.service';
 
@@ -672,7 +672,7 @@ export class FollowUpsService {
       const payment = this.db.connection.transaction(() => {
         const created = this.paymentsRepo.create({
           patientId: existing.patientId,
-          amountCents: Math.round(dto.payment!.amount * 100),
+          amountCents: amountToCents(dto.payment!.amount),
           method: dto.payment!.method,
           date: dto.payment!.date ?? todayIso(),
           note: dto.payment!.note ?? null,
@@ -684,7 +684,7 @@ export class FollowUpsService {
           entityType: 'payment',
           entityId: created.id,
           patientId: existing.patientId,
-          description: `Payment recorded from follow-up: ${(created.amountCents / 100).toFixed(2)}`,
+          description: `Payment recorded from follow-up: ${centsToAmount(created.amountCents).toFixed(2)}`,
           userId: user.id,
         });
         this.followUpsRepo.addHistory({

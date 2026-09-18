@@ -6,7 +6,7 @@ import { UploadsService } from '../common/uploads.service';
 import { DeploymentService } from '../common/deployment.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { createHash } from 'crypto';
-import { r2ObjectKey, withRetries, isObjectNotFoundError } from './object-storage.util';
+import { r2ObjectKey, withRetries, isObjectNotFoundError, partialReceivedHighWater, keepLocalCopyAfterRemoteFailure } from './object-storage.util';
 
 const DEFAULT_BUCKET = 'dentalnova-files';
 
@@ -79,10 +79,18 @@ export class ObjectStorageService implements OnModuleInit {
           );
         });
       } catch (err) {
-        this.logger.warn(`R2 put failed; local copy kept: ${(err as Error).message}`);
+        this.logger.warn(`R2 put failed: ${(err as Error).message}`);
         if (this.deployment.isOnline()) {
+          if (!keepLocalCopyAfterRemoteFailure(true)) {
+            try {
+              fs.unlinkSync(local);
+            } catch {
+              /* best-effort orphan cleanup */
+            }
+          }
           throw err;
         }
+        this.logger.warn('R2 put failed; Offline local copy kept.');
       }
     }
   }
@@ -174,13 +182,14 @@ export class ObjectStorageService implements OnModuleInit {
       fs.closeSync(fd);
     }
     const metaFile = `${part}.meta.json`;
-    let received = chunk.length;
+    let previous = chunk.length;
     try {
       const meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8')) as { received?: number };
-      received = (Number(meta.received) || 0) + chunk.length;
+      previous = Number(meta.received) || 0;
     } catch {
-      /* first chunk */
+      previous = 0;
     }
+    const received = partialReceivedHighWater(previous, offset, chunk.length);
     fs.writeFileSync(metaFile, JSON.stringify({ relativePath, byteSize: expectedSize, received }));
     return { received };
   }
@@ -195,6 +204,9 @@ export class ObjectStorageService implements OnModuleInit {
     if (digest !== sha256) {
       throw new Error('File checksum did not match');
     }
+    if (this.s3 && this.deployment.isOnline()) {
+      await this.putRemoteObject(relativePath, bytes, mimeType);
+    }
     fs.mkdirSync(path.dirname(local), { recursive: true });
     fs.renameSync(part, local);
     try {
@@ -202,8 +214,28 @@ export class ObjectStorageService implements OnModuleInit {
     } catch {
       /* ignore */
     }
-    await this.putObject(relativePath, bytes, mimeType);
+    if (this.s3 && !this.deployment.isOnline()) {
+      try {
+        await this.putRemoteObject(relativePath, bytes, mimeType);
+      } catch (err) {
+        this.logger.warn(`R2 put failed; Offline local copy kept: ${(err as Error).message}`);
+      }
+    }
     return { bytes: bytes.length, sha256: digest };
+  }
+
+  partialByteSize(relativePath: string): number {
+    const part = this.partialPath(relativePath);
+    if (!part || !fs.existsSync(part)) throw new Error('File upload has not started');
+    const metaFile = `${part}.meta.json`;
+    try {
+      const meta = JSON.parse(fs.readFileSync(metaFile, 'utf-8')) as { byteSize?: number };
+      const n = Number(meta.byteSize);
+      if (Number.isFinite(n) && n > 0) return n;
+    } catch {
+      /* fall through to stat */
+    }
+    return fs.statSync(part).size;
   }
 
   private partialPath(relativePath: string): string | null {
