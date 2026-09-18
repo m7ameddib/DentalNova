@@ -23,7 +23,7 @@ import { SyncChangePayload, SYNC_ENTITY_BY_NAME, IDENTITY_RECONCILE_ENTITY_SET }
 import { ObjectStorageService } from '../storage/object-storage.service';
 import { getTenantClinicId } from '../platform/tenant-context';
 import { clinicOperationalCensus, OPERATIONAL_TABLES, POPULATED_OFFLINE_CODE, populatedOfflineMessage } from './clinic-census.util';
-import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished, snapshotOpeningCheckpoint } from './bootstrap.util';
+import { BOOTSTRAP_PAGE_SIZE, MAX_BOOTSTRAP_PAGES, bootstrapSnapshotFinished, snapshotOpeningCheckpoint, DEVICE_BOOTSTRAP_REQUIRED_CODE, DEVICE_BOOTSTRAP_REQUIRED_MESSAGE, initialSnapshotCursor, normalizeSnapshotCursor, snapshotRequestMatchesCursor } from './bootstrap.util';
 import { ackPreBootstrapHoldOutbound } from './sync-schema';
 import {
   describeOnlineReachabilityError,
@@ -127,6 +127,7 @@ export class SyncEngineService {
     if (getTenantClinicId() !== clinicId) {
       throw new Error('CROSS_CLINIC');
     }
+    this.assertDeviceMayUpload(deviceId);
     const result = applyChanges(this.db.connection, changes, deviceId);
     return result;
   }
@@ -138,7 +139,7 @@ export class SyncEngineService {
     return { changes, until, hasMore: changes.length >= limit };
   }
 
-  snapshotPage(afterEntity?: string, afterId?: number, limit = 80) {
+  snapshotPage(deviceId: string | undefined, afterEntity?: string, afterId?: number, limit = 80) {
     const checkpoint = snapshotOpeningCheckpoint(maxSeq(this.db.connection));
     const { changes, nextAfterEntity, nextAfterId } = clinicSnapshot(
       this.db.connection,
@@ -146,10 +147,12 @@ export class SyncEngineService {
       afterId ?? 0,
       limit,
     );
+    const hasMore = changes.length >= limit;
+    if (deviceId) this.noteSnapshotProgress(deviceId, afterEntity, afterId, nextAfterEntity, nextAfterId, hasMore);
     return {
       changes,
       checkpoint,
-      hasMore: changes.length >= limit,
+      hasMore,
       nextAfterEntity,
       nextAfterId,
     };
@@ -158,6 +161,38 @@ export class SyncEngineService {
   ackDeviceCheckpoint(deviceId: string, seq: number) {
     this.platform.setDeviceCheckpoint(deviceId, seq);
     return { checkpoint: seq };
+  }
+
+  private assertDeviceMayUpload(deviceId: string): void {
+    if (this.platform.isDeviceBootstrapComplete(deviceId)) return;
+    throw new BadRequestException({
+      statusCode: 400,
+      message: DEVICE_BOOTSTRAP_REQUIRED_MESSAGE,
+      code: DEVICE_BOOTSTRAP_REQUIRED_CODE,
+    });
+  }
+
+  private noteSnapshotProgress(
+    deviceId: string,
+    afterEntity: string | undefined,
+    afterId: number | undefined,
+    nextAfterEntity: string | undefined,
+    nextAfterId: number | undefined,
+    hasMore: boolean,
+  ): void {
+    const device = this.platform.findSyncDevice(deviceId);
+    if (!device || device.bootstrapCompletedAt) return;
+    const requested = normalizeSnapshotCursor(afterEntity, afterId);
+    const expected = normalizeSnapshotCursor(device.snapshotNextEntity, device.snapshotNextId);
+    const start = initialSnapshotCursor();
+    const matchesExpected = snapshotRequestMatchesCursor(requested, expected);
+    const matchesStart = snapshotRequestMatchesCursor(requested, start);
+    if (!matchesExpected && !matchesStart) return;
+    if (!hasMore && (matchesExpected || (matchesStart && snapshotRequestMatchesCursor(expected, start)))) {
+      this.platform.markDeviceBootstrapComplete(deviceId);
+      return;
+    }
+    this.platform.setDeviceSnapshotCursor(deviceId, nextAfterEntity || '', nextAfterId ?? 0);
   }
 
   conflicts() {
@@ -460,14 +495,16 @@ export class SyncEngineService {
     session.issuedAt = Date.now();
   }
 
-  async putFileFromDevice(relativePath: string, bytes: Buffer, mimeType?: string) {
+  async putFileFromDevice(deviceId: string, relativePath: string, bytes: Buffer, mimeType?: string) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
     if (bytes.length > FILE_INLINE_MAX_BYTES) throw new Error('File is too large for a single request');
     await this.objectStorage.putObject(relativePath, bytes, mimeType);
     return { stored: relativePath, bytes: bytes.length, sha256: sha256Hex(bytes) };
   }
 
-  async beginFileFromDevice(relativePath: string, byteSize: number, mimeType?: string, sha256?: string) {
+  async beginFileFromDevice(deviceId: string, relativePath: string, byteSize: number, mimeType?: string, sha256?: string) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
     if (!Number.isFinite(byteSize) || byteSize < 1 || byteSize > FILE_MAX_BYTES) {
       throw new Error('File size is not allowed');
@@ -476,14 +513,16 @@ export class SyncEngineService {
     return { started: relativePath, byteSize, mimeType: mimeType || null, sha256: sha256 || null };
   }
 
-  async putFileChunkFromDevice(relativePath: string, offset: number, bytes: Buffer) {
+  async putFileChunkFromDevice(deviceId: string, relativePath: string, offset: number, bytes: Buffer) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
-    const expected = this.partialExpectedSize(relativePath);
+    const expected = this.objectStorage.partialByteSize(relativePath);
     const result = this.objectStorage.writePartialRange(relativePath, offset, bytes, expected);
     return { stored: relativePath, offset, bytes: bytes.length, received: result.received };
   }
 
-  async finishFileFromDevice(relativePath: string, sha256: string, mimeType?: string) {
+  async finishFileFromDevice(deviceId: string, relativePath: string, sha256: string, mimeType?: string) {
+    this.assertDeviceMayUpload(deviceId);
     if (!relativePath?.trim()) throw new Error('Invalid storage path');
     const result = await this.objectStorage.finalizePartial(relativePath, sha256, mimeType);
     return { stored: relativePath, bytes: result.bytes, sha256: result.sha256 };
@@ -538,13 +577,6 @@ export class SyncEngineService {
       contentBase64: slice.toString('base64'),
       hasMore: offset + slice.length < stat.bytes,
     };
-  }
-
-  private partialExpectedSize(relativePath: string): number {
-    const part = `${relativePath}.part`;
-    const metaPath = this.objectStorage.localStat(part);
-    if (metaPath) return metaPath.bytes;
-    throw new Error('File upload has not started');
   }
 
   private async syncAttachmentBlobs(

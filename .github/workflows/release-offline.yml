@@ -93,6 +93,29 @@ jobs:
       - name: Verify license key rotation compatibility
         run: npm run release:test-licensing && npm run release:test-license-rotation
 
+      - name: Authenticode sign installer (optional)
+        shell: pwsh
+        env:
+          AUTHENTICODE_PFX_BASE64: ${{ secrets.AUTHENTICODE_PFX_BASE64 }}
+          AUTHENTICODE_PFX_PASSWORD: ${{ secrets.AUTHENTICODE_PFX_PASSWORD }}
+        run: |
+          $exe = "release/DNT-Dental-v${{ steps.version.outputs.version }}/DNT-Dental-Main-Clinic-Setup-v${{ steps.version.outputs.version }}.exe"
+          if (-not $env:AUTHENTICODE_PFX_BASE64) {
+            Write-Host 'No AUTHENTICODE_PFX_BASE64 secret — publishing unsigned. The Windows updater refuses unsigned EXEs until a real Authenticode cert is configured.'
+            exit 0
+          }
+          $pfx = Join-Path $env:RUNNER_TEMP 'authenticode.pfx'
+          [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:AUTHENTICODE_PFX_BASE64))
+          $signtool = Get-ChildItem -Path "${env:ProgramFiles(x86)}\Windows Kits","$env:ProgramFiles\Windows Kits" -Recurse -Filter signtool.exe -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\signtool.exe$' } |
+            Select-Object -First 1
+          if (-not $signtool) { throw 'signtool.exe not found on the Windows runner' }
+          & $signtool.FullName sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $pfx /p $env:AUTHENTICODE_PFX_PASSWORD $exe
+          if ($LASTEXITCODE -ne 0) { throw 'Authenticode signing failed' }
+          $sha256 = (Get-FileHash $exe -Algorithm SHA256).Hash.ToLowerInvariant()
+          Set-Content -Path "$exe.sha256" -Value $sha256 -Encoding ASCII
+          Write-Host "Signed installer SHA-256: $sha256"
+
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:

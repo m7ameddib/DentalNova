@@ -1,6 +1,18 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { remainingCents, creditCents, accountBalance } from './money.util';
+import { remainingCents, creditCents, accountBalance, amountToCents, centsToAmount } from './money.util';
+
+test('amountToCents uses decimal-safe rounding instead of IEEE amount * 100', () => {
+  assert.equal(amountToCents(19.99), 1999);
+  assert.equal(amountToCents(1.005), 101);
+  assert.equal(amountToCents(2.675), 268);
+  assert.equal(amountToCents(0.1 + 0.2), 30);
+  assert.equal(amountToCents(35.85), 3585);
+  assert.equal(centsToAmount(1999), 19.99);
+  for (let i = 0; i <= 10_000; i += 1) {
+    assert.equal(amountToCents(i / 100), i, `cents ${i}`);
+  }
+});
 
 test('remainingCents keeps a normal unpaid balance', () => {
   assert.equal(remainingCents(10_000, 4_000), 6_000);

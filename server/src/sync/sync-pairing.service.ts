@@ -237,7 +237,7 @@ export class SyncPairingService {
       emptyClinic: true,
       census: input.census!,
     };
-    if (!verifyCensusProof(compact, proofInput, input.censusProof || '')) {
+    if (!verifyCensusProof(peeked.challenge, proofInput, input.censusProof || '')) {
       throw new BadRequestException({ statusCode: 400, message: CENSUS_PROOF_INVALID, code: 'CENSUS_PROOF_INVALID' });
     }
     let clinicId: string;
@@ -286,7 +286,7 @@ export class SyncPairingService {
       emptyClinic: true,
       census,
     };
-    const censusProof = signCensusProof(compact, proofInput);
+    const censusProof = signCensusProof(preview.challenge, proofInput);
     const res = await this.fetchOnline(
       `${base}/api/sync/pairing/complete`,
       {

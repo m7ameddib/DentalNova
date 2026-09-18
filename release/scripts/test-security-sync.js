@@ -68,7 +68,7 @@ function compactPairingCode(raw) {
     .toUpperCase();
 }
 
-function signCensusProof(pairingCode, input) {
+function signCensusProof(hmacSecret, input) {
   const census = {
     appointments: Number(input.census.appointments) || 0,
     expenses: Number(input.census.expenses) || 0,
@@ -87,7 +87,7 @@ function signCensusProof(pairingCode, input) {
     installationId: String(input.installationId || ''),
     protocolVersion: Number(input.protocolVersion) || 0,
   });
-  return crypto.createHmac('sha256', compactPairingCode(pairingCode)).update(payload).digest('hex');
+  return crypto.createHmac('sha256', String(hmacSecret || '')).update(payload).digest('hex');
 }
 
 function emptyCensus() {
@@ -114,7 +114,7 @@ function pairingCompleteBody(code, extra = {}) {
     census,
     protocolVersion,
     challenge,
-    censusProof: extra.censusProof || signCensusProof(code, proofInput),
+    censusProof: extra.censusProof || signCensusProof(challenge, proofInput),
   };
   if (extra.omitProof) delete body.censusProof;
   if (extra.omitChallenge) delete body.challenge;
@@ -329,6 +329,24 @@ async function main() {
       expected: [200, 201],
     });
     const deviceToken = deviceTok.data.accessToken;
+    const earlyPush = await request('POST', '/sync/push', {
+      token: deviceToken,
+      body: {
+        changes: [
+          {
+            changeId: 'too-early-1',
+            entity: 'patients',
+            recordUid: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            op: 'upsert',
+            row: { fullName: 'Too Early', phone: '0700000999', fileNumber: 'P-EARLY', gender: 'MALE' },
+          },
+        ],
+      },
+    });
+    assert(
+      earlyPush.status === 400,
+      `operational PUSH before snapshot bootstrap must fail (got ${earlyPush.status})`,
+    );
     const oldProtocol = await request('GET', '/sync/changes?since=0', { token: deviceToken, protocol: 1 });
     assert(oldProtocol.status === 400, `incompatible sync protocol must be refused (got ${oldProtocol.status})`);
     assert(

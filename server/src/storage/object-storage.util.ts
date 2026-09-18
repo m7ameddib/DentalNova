@@ -39,3 +39,13 @@ export async function withRetries<T>(
   }
   throw last;
 }
+
+/** High-water mark so a retried chunk does not double-count received bytes. */
+export function partialReceivedHighWater(previousReceived: number, offset: number, chunkLength: number): number {
+  return Math.max(Math.max(0, Number(previousReceived) || 0), offset + chunkLength);
+}
+
+/** Online must not keep a local file that failed to land in R2 (orphan / false cache). */
+export function keepLocalCopyAfterRemoteFailure(isOnline: boolean): boolean {
+  return !isOnline;
+}

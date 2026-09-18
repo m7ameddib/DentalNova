@@ -905,6 +905,16 @@ export class PlatformService implements OnModuleInit {
     this.addColumnIfMissing('clinics', 'trial_type', 'TEXT');
     this.addColumnIfMissing('clinics', 'doctor_name', 'TEXT');
     this.addColumnIfMissing('sync_pairing_codes', 'challenge', 'TEXT');
+    this.addColumnIfMissing('sync_registered_devices', 'bootstrap_completed_at', 'TEXT');
+    this.addColumnIfMissing('sync_registered_devices', 'snapshot_next_entity', 'TEXT');
+    this.addColumnIfMissing('sync_registered_devices', 'snapshot_next_id', 'INTEGER NOT NULL DEFAULT 0');
+    this.db
+      .prepare(
+        `UPDATE sync_registered_devices
+         SET bootstrap_completed_at = COALESCE(bootstrap_completed_at, created_at)
+         WHERE bootstrap_completed_at IS NULL AND pull_checkpoint > 0`,
+      )
+      .run();
     this.migrateTrialPasswords();
   }
 
@@ -1028,6 +1038,9 @@ export class PlatformService implements OnModuleInit {
     installationId: string | null;
     revokedAt: string | null;
     pullCheckpoint: number;
+    bootstrapCompletedAt: string | null;
+    snapshotNextEntity: string;
+    snapshotNextId: number;
   } | null {
     this.assertEnabled();
     const row = this.db.prepare(`SELECT * FROM sync_registered_devices WHERE id = ?`).get(deviceId) as
@@ -1042,6 +1055,9 @@ export class PlatformService implements OnModuleInit {
       installationId: (row.installation_id as string | null) ?? null,
       revokedAt: (row.revoked_at as string | null) ?? null,
       pullCheckpoint: Number(row.pull_checkpoint ?? 0),
+      bootstrapCompletedAt: (row.bootstrap_completed_at as string | null) ?? null,
+      snapshotNextEntity: String(row.snapshot_next_entity ?? ''),
+      snapshotNextId: Number(row.snapshot_next_id ?? 0),
     };
   }
 
@@ -1053,6 +1069,29 @@ export class PlatformService implements OnModuleInit {
   setDeviceCheckpoint(deviceId: string, seq: number): void {
     this.assertEnabled();
     this.db.prepare(`UPDATE sync_registered_devices SET pull_checkpoint = ? WHERE id = ?`).run(seq, deviceId);
+  }
+
+  isDeviceBootstrapComplete(deviceId: string): boolean {
+    const device = this.findSyncDevice(deviceId);
+    return Boolean(device?.bootstrapCompletedAt);
+  }
+
+  markDeviceBootstrapComplete(deviceId: string): void {
+    this.assertEnabled();
+    this.db
+      .prepare(
+        `UPDATE sync_registered_devices
+         SET bootstrap_completed_at = COALESCE(bootstrap_completed_at, datetime('now'))
+         WHERE id = ?`,
+      )
+      .run(deviceId);
+  }
+
+  setDeviceSnapshotCursor(deviceId: string, afterEntity: string, afterId: number): void {
+    this.assertEnabled();
+    this.db
+      .prepare(`UPDATE sync_registered_devices SET snapshot_next_entity = ?, snapshot_next_id = ? WHERE id = ?`)
+      .run(afterEntity || null, Number(afterId) || 0, deviceId);
   }
 
   revokeSyncDevice(clinicId: string, deviceId: string): boolean {

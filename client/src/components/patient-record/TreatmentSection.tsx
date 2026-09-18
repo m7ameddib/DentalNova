@@ -14,7 +14,7 @@ import { patientsApi } from '@/api/patients.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
 import { PatientTreatment, TreatmentStatus, Patient } from '@/types/domain';
-import { centsToAmount, formatMoney } from '@/utils/money';
+import { amountToCents, centsToAmount, formatMoney } from '@/utils/money';
 import { formatDateDisplay, formatDateTimeDisplay, todayIso } from '@/utils/date';
 import { DateField } from '@/components/common/DateField';
 import { getErrorMessage } from '@/utils/errors';
@@ -91,7 +91,7 @@ export function TreatmentSection({ patientId, patient }: { patientId: number; pa
     effectiveScope === 'SINGLE' ? selectedTeeth : teethForScope(effectiveScope);
   const multiplier = priceMultiplier(effectiveScope, effectiveTeeth.length);
   const baseAmountCents = selectedType ? selectedType.defaultPriceCents * multiplier : 0;
-  const discountCents = Math.round((Number(discount) || 0) * 100);
+  const discountCents = amountToCents(Number(discount) || 0);
   const finalAmountCents = Math.max(0, baseAmountCents - discountCents);
 
   const invalidateTreatments = () => {

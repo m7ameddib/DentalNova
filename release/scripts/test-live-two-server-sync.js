@@ -26,7 +26,7 @@ function compactPairingCode(raw) {
     .toUpperCase();
 }
 
-function signCensusProof(pairingCode, input) {
+function signCensusProof(hmacSecret, input) {
   const census = {
     appointments: Number(input.census.appointments) || 0,
     expenses: Number(input.census.expenses) || 0,
@@ -45,7 +45,7 @@ function signCensusProof(pairingCode, input) {
     installationId: String(input.installationId || ''),
     protocolVersion: Number(input.protocolVersion) || 0,
   });
-  return crypto.createHmac('sha256', compactPairingCode(pairingCode)).update(payload).digest('hex');
+  return crypto.createHmac('sha256', String(hmacSecret || '')).update(payload).digest('hex');
 }
 
 function emptyCensus() {
@@ -77,7 +77,7 @@ function pairingCompleteBody(code, extra = {}) {
     challenge,
     censusProof:
       extra.censusProof ||
-      signCensusProof(code, {
+      signCensusProof(challenge, {
         protocolVersion,
         challenge,
         installationId,

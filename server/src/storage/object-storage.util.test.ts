@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { isObjectNotFoundError, r2ObjectKey, withRetries } from './object-storage.util';
+import { isObjectNotFoundError, keepLocalCopyAfterRemoteFailure, partialReceivedHighWater, r2ObjectKey, withRetries } from './object-storage.util';
 
 test('R2 keys are clinic-namespaced and never expose a sibling clinic prefix', () => {
   const a = r2ObjectKey('patients/1/x.png', 'clinic-a');
@@ -47,4 +47,15 @@ test('withRetries does not retry non-retryable errors', async () => {
     /missing/,
   );
   assert.equal(n, 1);
+});
+
+test('partial received uses a high-water mark so retried chunks do not double-count', () => {
+  assert.equal(partialReceivedHighWater(0, 0, 256), 256);
+  assert.equal(partialReceivedHighWater(256, 0, 256), 256);
+  assert.equal(partialReceivedHighWater(256, 256, 256), 512);
+});
+
+test('Online R2 put failure must not keep a local orphan copy', () => {
+  assert.equal(keepLocalCopyAfterRemoteFailure(true), false);
+  assert.equal(keepLocalCopyAfterRemoteFailure(false), true);
 });

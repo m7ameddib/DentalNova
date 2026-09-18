@@ -10,6 +10,7 @@ import { VoidPaymentDto } from './dto/void-payment.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { DatabaseService } from '../database/database.service';
 import { localTodayIso } from '../common/local-date.util';
+import { amountToCents, centsToAmount } from '../common/money.util';
 
 @Injectable()
 export class PaymentsService {
@@ -33,7 +34,7 @@ export class PaymentsService {
     const payment = this.db.connection.transaction(() => {
       const created = this.paymentsRepo.create({
         patientId: dto.patientId,
-        amountCents: Math.round(dto.amount * 100),
+        amountCents: amountToCents(dto.amount),
         method: dto.method,
         date: dto.date ?? localTodayIso(),
         note: dto.note ?? null,
@@ -45,7 +46,7 @@ export class PaymentsService {
         entityType: 'payment',
         entityId: created.id,
         patientId: dto.patientId,
-        description: `Payment recorded: ${(created.amountCents / 100).toFixed(2)}`,
+        description: `Payment recorded: ${centsToAmount(created.amountCents).toFixed(2)}`,
         userId: currentUser.id,
       });
       return created;
@@ -67,7 +68,7 @@ export class PaymentsService {
     }
     const updated = this.db.connection.transaction(() => {
       const next = this.paymentsRepo.update(id, {
-        amountCents: dto.amount !== undefined ? Math.round(dto.amount * 100) : undefined,
+        amountCents: dto.amount !== undefined ? amountToCents(dto.amount) : undefined,
         method: dto.method,
         date: dto.date,
         note: dto.note !== undefined ? dto.note.trim() || null : undefined,
@@ -79,7 +80,7 @@ export class PaymentsService {
         entityType: 'payment',
         entityId: id,
         patientId: existing.patientId,
-        description: `Payment updated: ${(next.amountCents / 100).toFixed(2)}`,
+        description: `Payment updated: ${centsToAmount(next.amountCents).toFixed(2)}`,
         userId: currentUser.id,
       });
       return next;

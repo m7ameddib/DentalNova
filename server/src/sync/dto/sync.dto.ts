@@ -99,7 +99,7 @@ export class PairingCompleteDto {
   @MinLength(16)
   challenge!: string;
 
-  /** HMAC-SHA256 hex of the canonical empty-census payload, keyed by the pairing code. */
+  /** HMAC-SHA256 hex of the canonical empty-census payload, keyed by the pairing challenge. */
   @IsString()
   @MinLength(64)
   censusProof!: string;

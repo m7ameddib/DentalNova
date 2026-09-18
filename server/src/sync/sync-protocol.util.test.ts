@@ -28,22 +28,24 @@ test('sync protocol v2 is required', () => {
   assert.equal(parseSyncProtocolVersion(undefined), 0);
 });
 
-test('census HMAC binds pairing code, challenge, and zero census', () => {
+test('census HMAC is keyed by the pairing challenge, not the short pairing code', () => {
   const input = {
     protocolVersion: 2,
-    challenge: 'abc123',
+    challenge: 'abc123challenge-secret',
     installationId: 'inst-1',
     emptyClinic: true,
     census,
   };
-  const proof = signCensusProof('AB12CD34', input);
-  assert.equal(verifyCensusProof('AB12CD34', input, proof), true);
-  assert.equal(verifyCensusProof('ZZZZZZZZ', input, proof), false);
-  assert.equal(verifyCensusProof('AB12CD34', { ...input, challenge: 'other' }, proof), false);
+  const proof = signCensusProof(input.challenge, input);
+  assert.equal(verifyCensusProof(input.challenge, input, proof), true);
+  assert.equal(verifyCensusProof('other-challenge', input, proof), false);
+  assert.equal(verifyCensusProof(input.challenge, { ...input, challenge: 'other' }, proof), false);
   assert.equal(
-    verifyCensusProof('AB12CD34', { ...input, census: { ...census, patients: 1, total: 1 } }, proof),
+    verifyCensusProof(input.challenge, { ...input, census: { ...census, patients: 1, total: 1 } }, proof),
     false,
   );
+  const pairingCodeKeyed = signCensusProof('AB12CD34', input);
+  assert.equal(verifyCensusProof(input.challenge, input, pairingCodeKeyed), false);
   const payload = JSON.parse(canonicalCensusProofPayload(input));
   assert.equal(payload.census.expenses, 0);
   assert.equal(payload.census.patients, 0);

@@ -4,6 +4,7 @@ import { ExpenseCategoriesRepository } from '../database/repositories/expense-ca
 import { CreateExpenseDto, UpdateExpenseDto } from './dto/create-expense.dto';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { localTodayIso } from '../common/local-date.util';
+import { amountToCents } from '../common/money.util';
 
 function todayIso(): string {
   return localTodayIso();
@@ -34,7 +35,7 @@ export class ExpensesService {
     const category = this.resolveCategory(dto.expenseCategoryId, dto.category);
     return this.expensesRepo.create({
       date: dto.date ?? todayIso(),
-      amountCents: Math.round(dto.amount * 100),
+      amountCents: amountToCents(dto.amount),
       category: category.code,
       expenseCategoryId: category.id,
       paymentMethod: dto.paymentMethod,
@@ -53,7 +54,7 @@ export class ExpensesService {
         : { id: existing.expenseCategoryId, code: existing.category };
     return this.expensesRepo.update(id, {
       date: dto.date,
-      amountCents: dto.amount != null ? Math.round(dto.amount * 100) : undefined,
+      amountCents: dto.amount != null ? amountToCents(dto.amount) : undefined,
       category: category.code,
       expenseCategoryId: category.id ?? undefined,
       paymentMethod: dto.paymentMethod,

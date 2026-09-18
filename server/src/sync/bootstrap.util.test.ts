@@ -4,9 +4,22 @@ import {
   BOOTSTRAP_PAGE_SIZE,
   MAX_BOOTSTRAP_PAGES,
   bootstrapSnapshotFinished,
+  initialSnapshotCursor,
+  normalizeSnapshotCursor,
   shouldFinalizeBootstrap,
   snapshotOpeningCheckpoint,
+  snapshotRequestMatchesCursor,
 } from './bootstrap.util';
+
+test('snapshot bootstrap only advances when the device walks from the start cursor', () => {
+  const start = initialSnapshotCursor();
+  assert.equal(snapshotRequestMatchesCursor(normalizeSnapshotCursor(undefined, 0), start), true);
+  assert.equal(snapshotRequestMatchesCursor(normalizeSnapshotCursor('patients', 999), start), false);
+  assert.equal(
+    snapshotRequestMatchesCursor(normalizeSnapshotCursor('patients', 80), normalizeSnapshotCursor('patients', 80)),
+    true,
+  );
+});
 
 test('incomplete snapshot pages must not be marked bootstrapped', () => {
   assert.equal(bootstrapSnapshotFinished({ changesLength: BOOTSTRAP_PAGE_SIZE, hasMore: true }), false);

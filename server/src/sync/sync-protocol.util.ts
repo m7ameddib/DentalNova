@@ -1,5 +1,4 @@
 import * as crypto from 'crypto';
-import { compactPairingCode } from './pairing-public.util';
 import { EmptyClinicCensusPayload } from './clinic-census.util';
 
 /** Bump when the Offline ↔ Online wire format changes incompatibly. */
@@ -72,15 +71,20 @@ export function canonicalCensusProofPayload(input: CensusProofInput): string {
   });
 }
 
-export function signCensusProof(pairingCode: string, input: CensusProofInput): string {
+/**
+ * HMAC key is the pairing *challenge* (256-bit), never the short pairing code.
+ * Anyone who already has the code can still call preview and sign zeros — emptiness
+ * is enforced by Online refusing operational PUSH until snapshot bootstrap completes.
+ */
+export function signCensusProof(hmacSecret: string, input: CensusProofInput): string {
   return crypto
-    .createHmac('sha256', compactPairingCode(pairingCode))
+    .createHmac('sha256', String(hmacSecret || ''))
     .update(canonicalCensusProofPayload(input))
     .digest('hex');
 }
 
-export function verifyCensusProof(pairingCode: string, input: CensusProofInput, proof: string): boolean {
-  const expected = signCensusProof(pairingCode, input);
+export function verifyCensusProof(hmacSecret: string, input: CensusProofInput, proof: string): boolean {
+  const expected = signCensusProof(hmacSecret, input);
   try {
     const a = Buffer.from(expected, 'hex');
     const b = Buffer.from(String(proof || ''), 'hex');
