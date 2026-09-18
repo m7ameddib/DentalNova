@@ -733,7 +733,7 @@ async function main() {
     } catch {
       Database = require('better-sqlite3');
     }
-    const platformDb = new Database(path.join(dataDir, 'platform.db'));
+    const platformDb = new Database(path.join(dataDir, 'data', 'platform.db'));
     platformDb.prepare(`UPDATE sync_registered_devices SET public_key = NULL WHERE id = ?`).run(completeB.data.deviceId);
     platformDb.close();
     const legacyTok = await request('POST', '/sync/token', {
