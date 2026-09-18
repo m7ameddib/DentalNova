@@ -6589,14 +6589,15 @@ textarea {
 }
 
 .dn-value {
-  max-width: 760px;
-  padding: 36px 28px 8px;
+  max-width: 1180px;
+  padding: 20px 28px 8px;
   margin: 0 auto;
 }
 
 .dn-value h2 {
   font-size: clamp(1.6rem, 3vw, 2.3rem);
   margin-bottom: 12px;
+  max-width: 22ch;
 }
 
 .dn-cap {
@@ -6943,16 +6944,35 @@ textarea {
   font-size: 13px;
 }
 
-.dn-phone-ui--appts b {
+.dn-phone-ui__slot {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   padding: 8px 10px;
   border-radius: 8px;
   background: #eef2ff;
   color: #312e81;
 }
 
-.dn-phone-ui--er {
+.dn-phone-ui__slot b {
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b7280;
+}
+
+.dn-phone-ui__slot span {
+  font-size: 12.5px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.dn-phone-ui__slot--er {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.dn-phone-ui__slot--er b {
   color: #b91c1c;
-  background: #fee2e2 !important;
 }
 
 .dn-phone-ui__chart {
@@ -7007,7 +7027,7 @@ textarea {
 
 .dn-editions,
 .dn-pricing {
-  max-width: 980px;
+  max-width: 1180px;
   margin: 0 auto;
   padding: 64px 28px 16px;
 }
@@ -7016,7 +7036,7 @@ textarea {
 .dn-pricing h2 {
   font-size: clamp(1.5rem, 3vw, 2.2rem);
   margin: 0;
-  max-width: 22ch;
+  max-width: 24ch;
 }
 
 .dn-editions__grid {
@@ -7181,12 +7201,17 @@ textarea {
     flex-basis: 100%;
     flex-direction: column;
     align-items: stretch;
-    gap: 4px;
-    padding-top: 8px;
+    gap: 2px;
+    padding: 10px 0 6px;
+    border-top: 1px solid rgba(23, 32, 51, 0.08);
   }
 
   .dn-landing__nav-links.is-open {
     display: flex;
+  }
+
+  .dn-landing__nav-links a {
+    padding: 10px 4px;
   }
 
   .dn-hero,

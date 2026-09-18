@@ -164,7 +164,7 @@ export function LandingPage() {
             <div className="dn-file-mock__rows">
               <i>{t('landing.agenda.slot2')}</i>
               <i>{t('landing.agenda.slot1')}</i>
-              <i>{t('landing.clinical.window')}</i>
+              <i>{t('landing.cap.files')}</i>
             </div>
           </div>
         </div>
@@ -251,9 +251,17 @@ export function LandingPage() {
           <PhoneFrame title={t('landing.mobile.phoneAppts')}>
             <div className="dn-phone-ui dn-phone-ui--appts">
               <small>{t('common.today')}</small>
-              <b>10:00 · {t('landing.demo.patientB')}</b>
-              <b>10:30 · {t('landing.demo.patientC')}</b>
-              <b className="dn-phone-ui--er">{t('landing.agenda.slot3')}</b>
+              <div className="dn-phone-ui__slot">
+                <b>10:00</b>
+                <span>{t('landing.demo.patientB')}</span>
+              </div>
+              <div className="dn-phone-ui__slot">
+                <b>10:30</b>
+                <span>{t('landing.demo.patientC')}</span>
+              </div>
+              <div className="dn-phone-ui__slot dn-phone-ui__slot--er">
+                <span>{t('landing.agenda.slot3')}</span>
+              </div>
             </div>
           </PhoneFrame>
           <PhoneFrame title={t('landing.mobile.phonePatient')} featured>
