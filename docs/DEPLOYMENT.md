@@ -340,13 +340,13 @@ This Linux/cloud agent cannot run a headed Windows pairing drill. Before the fir
 
 Login, pairing, licensing, and admin API-key limits persist in `{DNT_DATA_DIR}/config/shared-durable.db` (SQLite WAL). Multiple Online app processes that share the same data volume see the same counters. JSON files from earlier builds are imported once. There is no Redis in this stack.
 
-### Pairing empty-clinic attestation
+### Pairing empty-clinic attestation and device trust
 
-Online `/api/sync/pairing/complete` requires `emptyClinic: true`, a zero census, and an HMAC-SHA256 proof **keyed by the pairing challenge** (not the 8-character code). Official Offline fills the census from SQLite.
+Online `/api/sync/pairing/complete` requires protocol **v3**: `emptyClinic: true`, a zero census, an HMAC-SHA256 proof **keyed by the pairing challenge** (not the 8-character code), a DibNova-signed Offline **license** bound to the presented `installationId`, an Ed25519 **device public key**, and a `pairingSignature` over that transcript. Official Offline generates the keypair locally, fills the census from SQLite, and presents its activated license.
 
-A custom client that already has a valid pairing code can still attest zeros. That does **not** grant write access: Online refuses operational PUSH and file uploads until the device has walked the snapshot from the start (`bootstrap_completed_at`). Existing devices with `pull_checkpoint > 0` are backfilled as already bootstrapped.
+A custom HTTP client that only has a pairing code cannot complete pairing. After pairing, key-bound devices must sign token and sync requests (`x-dentalnova-device-ts` / `x-dentalnova-device-sig`). Online still refuses operational PUSH and file uploads until the device has walked the snapshot from the start (`bootstrap_completed_at`). Existing devices with `pull_checkpoint > 0` are backfilled as already bootstrapped. Existing devices without a public key keep using `deviceSecret` until official Offline registers a key (`POST /api/sync/device/register-key`).
 
-After bootstrap, new Offline work is supposed to sync. A modified client can still insert records that look like post-pairing work — Online cannot inspect the Offline disk. Residual risk is a custom/unofficial client, not the shipped Offline Nest.
+A modified client that already possesses a **valid stolen/purchased license** can still generate its own device key and attest zeros — Online cannot inspect the Offline disk, and this stack has no Windows TPM / Authenticode remote attestation. Residual risk is a licensed unofficial client, not pairing-code-only scripts.
 
 ---
 

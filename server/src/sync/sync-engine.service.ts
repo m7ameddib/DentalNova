@@ -48,11 +48,19 @@ import {
   shouldRetryAttachment,
 } from './sync-files.util';
 import { syncProtocolHeaders } from './sync-protocol.util';
+import { deviceTrustHeaders, generateDeviceKeypair } from './device-trust.util';
 
 export type ClinicSyncState = 'SYNCED' | 'SYNCING' | 'PENDING' | 'OFFLINE' | 'ERROR' | 'CONFLICT';
 
 type DeviceSession = { token: string; issuedAt: number };
-type DevicePeer = { onlineBaseUrl: string; deviceId: string; deviceSecret: string };
+type DevicePeer = {
+  onlineBaseUrl: string;
+  deviceId: string;
+  deviceSecret: string;
+  devicePrivateKey?: string;
+  devicePublicKey?: string;
+};
+type OnlinePeer = { onlineBaseUrl: string; devicePrivateKey?: string };
 
 @Injectable()
 export class SyncEngineService {
@@ -213,8 +221,8 @@ export class SyncEngineService {
         error: 'Sync is already running. Try again in a moment.',
       };
     }
-    const peer = this.pairing.readPeerConfig();
-    if (!peer) {
+    const storedPeer = this.pairing.readPeerConfig();
+    if (!storedPeer) {
       return {
         pushed: 0,
         pulled: 0,
@@ -228,6 +236,7 @@ export class SyncEngineService {
     let pulled = 0;
     const cycleStarted = Date.now();
     try {
+      const peer = await this.ensureDeviceKey(storedPeer);
       const session = await this.newDeviceSession(peer);
       if (shouldRunBootstrapBeforeCycle(this.readPeerValue('bootstrapped_at'))) {
         const boot = await this.executeBootstrapUnlocked(peer, session);
@@ -340,8 +349,9 @@ export class SyncEngineService {
     }
     this.running = true;
     try {
-      const session = await this.newDeviceSession(peer);
-      return await this.executeBootstrapUnlocked(peer, session);
+      const bound = await this.ensureDeviceKey(peer);
+      const session = await this.newDeviceSession(bound);
+      return await this.executeBootstrapUnlocked(bound, session);
     } catch (err) {
       if (err instanceof BadRequestException) {
         this.writePeerValue('last_error', this.httpExceptionMessage(err));
@@ -580,7 +590,7 @@ export class SyncEngineService {
   }
 
   private async syncAttachmentBlobs(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     force = false,
   ): Promise<void> {
@@ -597,7 +607,7 @@ export class SyncEngineService {
   }
 
   private async syncOneAttachment(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     row: { storedPath: string; mimeType: string | null },
     force = false,
@@ -627,7 +637,7 @@ export class SyncEngineService {
   }
 
   private async uploadAttachmentBytes(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     row: { storedPath: string; mimeType: string | null },
     local: Buffer,
@@ -687,7 +697,7 @@ export class SyncEngineService {
   }
 
   private async downloadAttachmentBytes(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     row: { storedPath: string; mimeType: string | null },
   ): Promise<void> {
@@ -803,7 +813,7 @@ export class SyncEngineService {
   }
 
   private async reconcileCatalogIdentity(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
   ): Promise<void> {
     if (this.readPeerValue('catalog_uids_reconciled') === '1') return;
@@ -844,7 +854,7 @@ export class SyncEngineService {
   }
 
   private async reportCheckpoint(
-    peer: { onlineBaseUrl: string },
+    peer: OnlinePeer,
     token: string,
     seq: number,
   ): Promise<void> {
@@ -878,13 +888,18 @@ export class SyncEngineService {
       .length;
   }
 
-  private async deviceToken(peer: { onlineBaseUrl: string; deviceId: string; deviceSecret: string }): Promise<string> {
+  private async deviceToken(peer: DevicePeer): Promise<string> {
+    const body = JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret });
     let res: Response;
     try {
       res = await fetch(`${peer.onlineBaseUrl}/api/sync/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...syncProtocolHeaders() },
-        body: JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret }),
+        headers: {
+          'Content-Type': 'application/json',
+          ...syncProtocolHeaders(),
+          ...this.deviceRequestHeaders(peer, 'POST', '/api/sync/token', body),
+        },
+        body,
         signal: AbortSignal.timeout(20_000),
       });
     } catch (err) {
@@ -903,7 +918,8 @@ export class SyncEngineService {
     return data.accessToken;
   }
 
-  private async onlineFetch(peer: { onlineBaseUrl: string }, token: string, path: string, init: RequestInit) {
+  private async onlineFetch(peer: OnlinePeer, token: string, path: string, init: RequestInit) {
+    const body = typeof init.body === 'string' ? init.body : '';
     try {
       return await fetch(`${peer.onlineBaseUrl}${path}`, {
         ...init,
@@ -913,12 +929,51 @@ export class SyncEngineService {
           Authorization: `Bearer ${token}`,
           ...syncProtocolHeaders(),
           ...(init.headers || {}),
+          ...this.deviceRequestHeaders(peer, String(init.method || 'GET'), path, body),
         },
         signal: AbortSignal.timeout(45_000),
       });
     } catch (err) {
       throw new Error(describeOnlineReachabilityError(err));
     }
+  }
+
+  private deviceRequestHeaders(peer: OnlinePeer, method: string, path: string, body: string): Record<string, string> {
+    if (!peer.devicePrivateKey) return {};
+    return deviceTrustHeaders(peer.devicePrivateKey, method, path, body);
+  }
+
+  private async ensureDeviceKey(peer: DevicePeer): Promise<DevicePeer> {
+    if (peer.devicePrivateKey && peer.devicePublicKey) return peer;
+    const keys = generateDeviceKeypair();
+    const stored = this.pairing.persistDeviceKeys(keys.publicKey, keys.privateKey);
+    const upgraded: DevicePeer = {
+      ...peer,
+      devicePublicKey: stored.devicePublicKey,
+      devicePrivateKey: stored.devicePrivateKey,
+    };
+    try {
+      const token = await this.deviceToken(peer);
+      const body = JSON.stringify({ devicePublicKey: keys.publicKey });
+      const res = await fetch(`${peer.onlineBaseUrl}/api/sync/device/register-key`, {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          ...syncProtocolHeaders(),
+          ...deviceTrustHeaders(keys.privateKey, 'POST', '/api/sync/device/register-key', body),
+        },
+        body,
+        signal: AbortSignal.timeout(20_000),
+      });
+      if (!res.ok) {
+        this.logger.warn(`Device key registration returned HTTP ${res.status}`);
+      }
+    } catch (err) {
+      this.logger.warn(`Device key registration deferred: ${(err as Error).message}`);
+    }
+    return upgraded;
   }
 
   private async readOnlineJson<T>(res: Response): Promise<T & { message?: unknown }> {

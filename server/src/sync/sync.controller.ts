@@ -34,6 +34,7 @@ import {
   PairingCompleteDto,
   PairingPreviewDto,
   PushChangesDto,
+  RegisterDeviceKeyDto,
   ResolveConflictDto,
 } from './dto/sync.dto';
 import { PlatformService } from '../platform/platform.service';
@@ -111,7 +112,7 @@ export class SyncController {
     const key = `sync-token:${requestClientIp(req)}:${dto.deviceId}`;
     this.rateLimit.assertAllowed(key, 20, 15 * 60 * 1000);
     try {
-      const result = this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret);
+      const result = this.pairing.issueDeviceToken(dto.deviceId, dto.deviceSecret, req);
       this.rateLimit.recordSuccess(key);
       return result;
     } catch (err) {
@@ -178,6 +179,16 @@ export class SyncController {
     const clinicId = user.clinicId || getTenantClinicId();
     if (!clinicId) throw new ForbiddenException();
     return { revoked: this.platform.revokeSyncDevice(clinicId, id) };
+  }
+
+  @UseGuards(DeviceAuthGuard)
+  @SkipSubscriptionGuard()
+  @Post('device/register-key')
+  registerDeviceKey(
+    @Req() req: Request & { syncDevice?: SyncDevicePrincipal },
+    @Body() dto: RegisterDeviceKeyDto,
+  ) {
+    return this.pairing.registerDevicePublicKey(req.syncDevice!.deviceId, dto.devicePublicKey, req);
   }
 
   @UseGuards(DeviceAuthGuard)

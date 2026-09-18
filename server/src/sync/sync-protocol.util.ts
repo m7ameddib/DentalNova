@@ -2,9 +2,12 @@ import * as crypto from 'crypto';
 import { EmptyClinicCensusPayload } from './clinic-census.util';
 
 /** Bump when the Offline ↔ Online wire format changes incompatibly. */
-export const SYNC_PROTOCOL_VERSION = 2;
+export const SYNC_PROTOCOL_VERSION = 3;
+/** Existing paired devices may still speak v2 until they register a device key. */
 export const SYNC_PROTOCOL_MIN_VERSION = 2;
 export const SYNC_PROTOCOL_HEADER = 'x-dentalnova-sync-protocol';
+/** New pairings must use v3 (device key + license attestation). */
+export const SYNC_PROTOCOL_PAIRING_MIN_VERSION = 3;
 
 export const SYNC_PROTOCOL_MISMATCH =
   'This Offline app and the Online clinic use incompatible sync versions. Update both to the same DentalNova version, then pair again.';
@@ -20,6 +23,8 @@ export type CensusProofInput = {
   installationId: string;
   emptyClinic: boolean;
   census: CensusCounts;
+  devicePublicKey: string;
+  licenseId: string;
 };
 
 export function parseSyncProtocolVersion(raw: unknown): number {
@@ -29,6 +34,10 @@ export function parseSyncProtocolVersion(raw: unknown): number {
 
 export function isCompatibleSyncProtocol(version: number): boolean {
   return version >= SYNC_PROTOCOL_MIN_VERSION && version <= SYNC_PROTOCOL_VERSION;
+}
+
+export function isPairingSyncProtocol(version: number): boolean {
+  return version >= SYNC_PROTOCOL_PAIRING_MIN_VERSION && version <= SYNC_PROTOCOL_VERSION;
 }
 
 export function syncProtocolHeaders(): Record<string, string> {
@@ -65,16 +74,18 @@ export function canonicalCensusProofPayload(input: CensusProofInput): string {
   return JSON.stringify({
     census,
     challenge: String(input.challenge || ''),
+    devicePublicKey: String(input.devicePublicKey || ''),
     emptyClinic: input.emptyClinic === true,
     installationId: String(input.installationId || ''),
+    licenseId: String(input.licenseId || ''),
     protocolVersion: Number(input.protocolVersion) || 0,
   });
 }
 
 /**
  * HMAC key is the pairing *challenge* (256-bit), never the short pairing code.
- * Anyone who already has the code can still call preview and sign zeros — emptiness
- * is enforced by Online refusing operational PUSH until snapshot bootstrap completes.
+ * The payload also binds the Offline Ed25519 device public key and license id.
+ * Pairing still requires a DibNova-signed license and a pairingSignature from that key.
  */
 export function signCensusProof(hmacSecret: string, input: CensusProofInput): string {
   return crypto

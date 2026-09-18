@@ -18,6 +18,8 @@ const stored = {
   onlineClinicId: 'clinic-1',
   clinicName: 'Main Clinic',
   pairedAt: '2026-09-14T00:00:00.000Z',
+  devicePrivateKey: 'super-secret-device-private-key',
+  devicePublicKey: 'device-public-key-spki',
 };
 
 test('public peer info never includes deviceSecret or secretHash', () => {
@@ -30,6 +32,8 @@ test('public peer info never includes deviceSecret or secretHash', () => {
   assert.equal(payloadContainsDeviceSecret(publicInfo), false);
   assert.equal('deviceSecret' in publicInfo, false);
   assert.equal('secretHash' in publicInfo, false);
+  assert.equal('devicePrivateKey' in publicInfo, false);
+  assert.equal('devicePublicKey' in publicInfo, false);
   assert.equal(JSON.stringify(publicInfo).includes('super-secret'), false);
 });
 
@@ -42,6 +46,7 @@ test('toPublicPeerInfo matches publicPeerInfo and strips secrets', () => {
 test('secret detector flags nested deviceSecret keys', () => {
   assert.equal(payloadContainsDeviceSecret({ deviceSecret: 'abc' }), true);
   assert.equal(payloadContainsDeviceSecret({ nested: { secretHash: 'x' } }), true);
+  assert.equal(payloadContainsDeviceSecret({ devicePrivateKey: 'pkcs8' }), true);
   assert.equal(payloadContainsDeviceSecret({ clinicName: 'A', deviceId: 'd' }), false);
 });
 

@@ -17,9 +17,12 @@ import { PathsService } from '../common/paths.service';
 import { JwtSecretService } from '../auth/jwt-secret.service';
 import { InstallationRepository } from '../installation/installation.repository';
 import { ClinicSettingsRepository } from '../database/repositories/clinic-settings.repository';
+import { LicenseService } from '../common/license.service';
+import { isLicenseExpiryDue, reconstructLicenseText } from '../common/license-state.util';
 import { SYNC_DEVICE_JWT_ISSUER } from '../auth/jwt-payload.util';
 import { AuthenticatedUser } from '../auth/auth.types';
 import { getTenantClinicId } from '../platform/tenant-context';
+import { Request } from 'express';
 import {
   censusAttestationFromClinic,
   clinicOperationalCensus,
@@ -44,6 +47,7 @@ import {
   CensusProofInput,
   challengesMatch,
   isCompatibleSyncProtocol,
+  isPairingSyncProtocol,
   parseSyncProtocolVersion,
   signCensusProof,
   SYNC_PROTOCOL_MISMATCH,
@@ -51,6 +55,23 @@ import {
   syncProtocolHeaders,
   verifyCensusProof,
 } from './sync-protocol.util';
+import {
+  canonicalPairingTranscript,
+  DEVICE_INSTALL_ALREADY_PAIRED,
+  DEVICE_INSTALL_ALREADY_PAIRED_CODE,
+  DEVICE_KEY_ALREADY_REGISTERED,
+  DEVICE_KEY_ALREADY_REGISTERED_CODE,
+  DEVICE_SIGNATURE_INVALID,
+  DEVICE_SIGNATURE_INVALID_CODE,
+  DEVICE_TRUST_REQUIRED,
+  DEVICE_TRUST_REQUIRED_CODE,
+  generateDeviceKeypair,
+  isDevicePublicKeyFormat,
+  signWithDeviceKey,
+  verifyDeviceSignature,
+  verifyExpressDeviceRequest,
+  deviceTrustHeaders,
+} from './device-trust.util';
 
 export type { StoredPeerConfig, PublicPeerInfo } from './pairing-public.util';
 
@@ -65,6 +86,7 @@ export class SyncPairingService {
     private readonly jwt: JwtService,
     private readonly installation: InstallationRepository,
     private readonly clinicSettings: ClinicSettingsRepository,
+    private readonly license: LicenseService,
     private readonly config: ConfigService,
   ) {}
 
@@ -201,6 +223,9 @@ export class SyncPairingService {
     protocolVersion?: number;
     challenge?: string;
     censusProof?: string;
+    devicePublicKey?: string;
+    pairingSignature?: string;
+    license?: string;
   }): {
     deviceId: string;
     deviceSecret: string;
@@ -212,13 +237,45 @@ export class SyncPairingService {
     if (!this.deployment.isOnline() || !this.platform.isEnabled()) {
       throw new BadRequestException('Pairing must be completed against the Online server.');
     }
-    if (!isCompatibleSyncProtocol(parseSyncProtocolVersion(input.protocolVersion))) {
+    if (!isPairingSyncProtocol(parseSyncProtocolVersion(input.protocolVersion))) {
       throw new BadRequestException({ statusCode: 400, message: SYNC_PROTOCOL_MISMATCH, code: 'SYNC_PROTOCOL_MISMATCH' });
     }
     if (input.emptyClinic !== true || !isEmptyCensusAttestation(input.census)) {
       throw new BadRequestException(
         'Automatic pairing requires an empty Offline clinic (emptyClinic + zero census). Two populated databases cannot be merged. Online cannot inspect the Offline disk — the official Offline app attests this from SQLite.',
       );
+    }
+    let licensePayload;
+    try {
+      licensePayload = this.license.parseAndVerify(String(input.license || ''));
+    } catch {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    if (isLicenseExpiryDue(licensePayload.expiresAt)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    const installationId = String(input.installationId || '').trim();
+    if (!installationId || licensePayload.installationId !== installationId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    if (!isDevicePublicKeyFormat(input.devicePublicKey)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
     }
     const compact = compactPairingCode(input.code);
     let peeked: { clinicId: string; expiresAt: string; challenge: string };
@@ -233,12 +290,44 @@ export class SyncPairingService {
     const proofInput: CensusProofInput = {
       protocolVersion: parseSyncProtocolVersion(input.protocolVersion),
       challenge: peeked.challenge,
-      installationId: input.installationId || '',
+      installationId,
       emptyClinic: true,
       census: input.census!,
+      devicePublicKey: input.devicePublicKey!,
+      licenseId: licensePayload.licenseId,
     };
     if (!verifyCensusProof(peeked.challenge, proofInput, input.censusProof || '')) {
       throw new BadRequestException({ statusCode: 400, message: CENSUS_PROOF_INVALID, code: 'CENSUS_PROOF_INVALID' });
+    }
+    const transcript = canonicalPairingTranscript({
+      protocolVersion: proofInput.protocolVersion,
+      challenge: peeked.challenge,
+      installationId,
+      licenseId: licensePayload.licenseId,
+      devicePublicKey: input.devicePublicKey!,
+      emptyClinic: true,
+      census: input.census!,
+    });
+    if (!verifyDeviceSignature(input.devicePublicKey!, transcript, input.pairingSignature || '')) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    if (this.platform.findActiveSyncDeviceByInstallation(installationId)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_INSTALL_ALREADY_PAIRED,
+        code: DEVICE_INSTALL_ALREADY_PAIRED_CODE,
+      });
+    }
+    if (this.platform.findActiveSyncDeviceByLicense(licensePayload.licenseId)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_INSTALL_ALREADY_PAIRED,
+        code: DEVICE_INSTALL_ALREADY_PAIRED_CODE,
+      });
     }
     let clinicId: string;
     try {
@@ -253,7 +342,9 @@ export class SyncPairingService {
       clinicId,
       name: input.deviceName?.trim() || 'Offline computer',
       secretHash,
-      installationId: input.installationId ?? null,
+      installationId,
+      publicKey: input.devicePublicKey,
+      licenseId: licensePayload.licenseId,
     });
     this.platform.logEvent(clinicId, 'PAIRING_COMPLETE', deviceId);
     return {
@@ -276,7 +367,10 @@ export class SyncPairingService {
     this.assertEmptyOffline();
     const preview = await this.previewOffline(input);
     const base = preview.onlineUrl;
-    const installationId = this.installation.get().installationId;
+    const installation = this.installation.get();
+    const installationId = installation.installationId;
+    const { license, licenseId } = this.requireOfflineLicense(installationId);
+    const keys = generateDeviceKeypair();
     const census = censusAttestationFromClinic(clinicOperationalCensus(this.db.connection));
     const compact = compactPairingCode(input.pairingCode);
     const proofInput: CensusProofInput = {
@@ -285,8 +379,22 @@ export class SyncPairingService {
       installationId,
       emptyClinic: true,
       census,
+      devicePublicKey: keys.publicKey,
+      licenseId,
     };
     const censusProof = signCensusProof(preview.challenge, proofInput);
+    const pairingSignature = signWithDeviceKey(
+      keys.privateKey,
+      canonicalPairingTranscript({
+        protocolVersion: SYNC_PROTOCOL_VERSION,
+        challenge: preview.challenge,
+        installationId,
+        licenseId,
+        devicePublicKey: keys.publicKey,
+        emptyClinic: true,
+        census,
+      }),
+    );
     const res = await this.fetchOnline(
       `${base}/api/sync/pairing/complete`,
       {
@@ -301,6 +409,9 @@ export class SyncPairingService {
           protocolVersion: SYNC_PROTOCOL_VERSION,
           challenge: preview.challenge,
           censusProof,
+          devicePublicKey: keys.publicKey,
+          pairingSignature,
+          license,
         }),
       },
       20_000,
@@ -324,6 +435,8 @@ export class SyncPairingService {
       onlineClinicId: body.clinicId,
       clinicName: body.clinicName || 'Online clinic',
       pairedAt: new Date().toISOString(),
+      devicePrivateKey: keys.privateKey,
+      devicePublicKey: keys.publicKey,
     };
     this.writePeerConfig(stored);
     return toPublicPeerInfo(stored);
@@ -337,7 +450,11 @@ export class SyncPairingService {
     }
   }
 
-  issueDeviceToken(deviceId: string, deviceSecret: string): { accessToken: string; expiresIn: string; clinicId: string } {
+  issueDeviceToken(
+    deviceId: string,
+    deviceSecret: string,
+    req?: Request,
+  ): { accessToken: string; expiresIn: string; clinicId: string } {
     if (!this.platform.isEnabled()) {
       throw new BadRequestException('Device tokens are issued by the Online server.');
     }
@@ -346,12 +463,67 @@ export class SyncPairingService {
     if (!bcrypt.compareSync(deviceSecret, device.secretHash)) {
       throw new UnauthorizedException('Invalid device credentials.');
     }
+    if (device.publicKey) {
+      this.assertDeviceRequestSignature(req, device.publicKey);
+    }
     this.platform.touchSyncDevice(deviceId);
     const accessToken = this.jwt.sign(
       { sub: 0, username: `device:${deviceId}`, roleName: 'sync_device', clinicId: device.clinicId, typ: 'sync-device', deviceId },
       { secret: this.jwtSecret.getDeviceSecret(), expiresIn: '2h', issuer: SYNC_DEVICE_JWT_ISSUER },
     );
     return { accessToken, expiresIn: '2h', clinicId: device.clinicId };
+  }
+
+  registerDevicePublicKey(deviceId: string, devicePublicKey: string, req: Request): { registered: true } {
+    const device = this.platform.findSyncDevice(deviceId);
+    if (!device || device.revokedAt) throw new UnauthorizedException('Device is not registered.');
+    if (device.publicKey) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_KEY_ALREADY_REGISTERED,
+        code: DEVICE_KEY_ALREADY_REGISTERED_CODE,
+      });
+    }
+    if (!isDevicePublicKeyFormat(devicePublicKey)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    this.assertDeviceRequestSignature(req, devicePublicKey);
+    if (!this.platform.setDevicePublicKey(deviceId, devicePublicKey)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_KEY_ALREADY_REGISTERED,
+        code: DEVICE_KEY_ALREADY_REGISTERED_CODE,
+      });
+    }
+    return { registered: true };
+  }
+
+  persistDeviceKeys(publicKey: string, privateKey: string): StoredPeerConfig {
+    const current = this.readPeerConfig();
+    if (!current) {
+      throw new BadRequestException('This Offline installation is not paired.');
+    }
+    const stored: StoredPeerConfig = {
+      ...current,
+      devicePublicKey: publicKey,
+      devicePrivateKey: privateKey,
+    };
+    this.writePeerConfig(stored);
+    return stored;
+  }
+
+  assertDeviceRequestSignature(req: Request | undefined, publicKey: string): void {
+    if (!verifyExpressDeviceRequest(req, publicKey)) {
+      throw new UnauthorizedException({
+        statusCode: 401,
+        message: DEVICE_SIGNATURE_INVALID,
+        code: DEVICE_SIGNATURE_INVALID_CODE,
+      });
+    }
   }
 
   readPeerConfig(): StoredPeerConfig | null {
@@ -368,10 +540,15 @@ export class SyncPairingService {
     const peer = this.readPeerConfig();
     if (peer) {
       try {
+        const tokenBody = JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret });
         const tokenRes = await fetch(`${peer.onlineBaseUrl}/api/sync/token`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', ...syncProtocolHeaders() },
-          body: JSON.stringify({ deviceId: peer.deviceId, deviceSecret: peer.deviceSecret }),
+          headers: {
+            'Content-Type': 'application/json',
+            ...syncProtocolHeaders(),
+            ...this.peerTrustHeaders(peer, 'POST', '/api/sync/token', tokenBody),
+          },
+          body: tokenBody,
           signal: AbortSignal.timeout(10_000),
         });
         const data = (await tokenRes.json().catch(() => ({}))) as { accessToken?: string };
@@ -382,6 +559,7 @@ export class SyncPairingService {
               Authorization: `Bearer ${data.accessToken}`,
               'Content-Type': 'application/json',
               ...syncProtocolHeaders(),
+              ...this.peerTrustHeaders(peer, 'POST', '/api/sync/device/revoke-self', ''),
             },
             signal: AbortSignal.timeout(10_000),
           });
@@ -401,6 +579,53 @@ export class SyncPairingService {
 
   private peerFile(): string {
     return path.join(this.paths.configDir(), 'sync-device.json');
+  }
+
+  private peerTrustHeaders(
+    peer: StoredPeerConfig,
+    method: string,
+    path: string,
+    body: string,
+  ): Record<string, string> {
+    if (!peer.devicePrivateKey) return {};
+    return deviceTrustHeaders(peer.devicePrivateKey, method, path, body);
+  }
+
+  private requireOfflineLicense(installationId: string): { license: string; licenseId: string } {
+    const row = this.installation.get();
+    if (!row.licensePayload || !row.licenseSignature) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    const license = reconstructLicenseText(row.licensePayload, row.licenseSignature);
+    let payload;
+    try {
+      payload = this.license.parseAndVerify(license);
+    } catch {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    if (payload.installationId !== installationId || payload.installationId !== row.installationId) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    if (isLicenseExpiryDue(payload.expiresAt)) {
+      throw new BadRequestException({
+        statusCode: 400,
+        message: DEVICE_TRUST_REQUIRED,
+        code: DEVICE_TRUST_REQUIRED_CODE,
+      });
+    }
+    return { license, licenseId: payload.licenseId };
   }
 
   private assertEmptyOffline(): void {

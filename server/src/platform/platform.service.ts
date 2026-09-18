@@ -877,6 +877,8 @@ export class PlatformService implements OnModuleInit {
         name TEXT,
         secret_hash TEXT NOT NULL,
         installation_id TEXT,
+        public_key TEXT,
+        license_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
         last_seen_at TEXT,
         revoked_at TEXT,
@@ -908,6 +910,20 @@ export class PlatformService implements OnModuleInit {
     this.addColumnIfMissing('sync_registered_devices', 'bootstrap_completed_at', 'TEXT');
     this.addColumnIfMissing('sync_registered_devices', 'snapshot_next_entity', 'TEXT');
     this.addColumnIfMissing('sync_registered_devices', 'snapshot_next_id', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumnIfMissing('sync_registered_devices', 'public_key', 'TEXT');
+    this.addColumnIfMissing('sync_registered_devices', 'license_id', 'TEXT');
+    try {
+      this.db.exec(`
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_devices_active_install
+          ON sync_registered_devices(installation_id)
+          WHERE revoked_at IS NULL AND installation_id IS NOT NULL AND installation_id != '';
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_devices_active_license
+          ON sync_registered_devices(license_id)
+          WHERE revoked_at IS NULL AND license_id IS NOT NULL AND license_id != '';
+      `);
+    } catch (err) {
+      this.logger.warn(`Sync device uniqueness indexes were skipped: ${(err as Error).message}`);
+    }
     this.db
       .prepare(
         `UPDATE sync_registered_devices
@@ -1018,15 +1034,25 @@ export class PlatformService implements OnModuleInit {
     name: string;
     secretHash: string;
     installationId?: string | null;
+    publicKey?: string | null;
+    licenseId?: string | null;
   }): string {
     this.assertEnabled();
     const id = crypto.randomUUID();
     this.db
       .prepare(
-        `INSERT INTO sync_registered_devices (id, clinic_id, name, secret_hash, installation_id)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO sync_registered_devices (id, clinic_id, name, secret_hash, installation_id, public_key, license_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, input.clinicId, input.name, input.secretHash, input.installationId ?? null);
+      .run(
+        id,
+        input.clinicId,
+        input.name,
+        input.secretHash,
+        input.installationId ?? null,
+        input.publicKey ?? null,
+        input.licenseId ?? null,
+      );
     return id;
   }
 
@@ -1036,6 +1062,8 @@ export class PlatformService implements OnModuleInit {
     name: string;
     secretHash: string;
     installationId: string | null;
+    publicKey: string | null;
+    licenseId: string | null;
     revokedAt: string | null;
     pullCheckpoint: number;
     bootstrapCompletedAt: string | null;
@@ -1047,12 +1075,56 @@ export class PlatformService implements OnModuleInit {
       | Record<string, unknown>
       | undefined;
     if (!row) return null;
+    return this.mapSyncDevice(row);
+  }
+
+  findActiveSyncDeviceByInstallation(installationId: string): { id: string; clinicId: string } | null {
+    this.assertEnabled();
+    const id = String(installationId || '').trim();
+    if (!id) return null;
+    const row = this.db
+      .prepare(
+        `SELECT id, clinic_id FROM sync_registered_devices
+         WHERE installation_id = ? AND revoked_at IS NULL LIMIT 1`,
+      )
+      .get(id) as { id: string; clinic_id: string } | undefined;
+    return row ? { id: row.id, clinicId: row.clinic_id } : null;
+  }
+
+  findActiveSyncDeviceByLicense(licenseId: string): { id: string; clinicId: string } | null {
+    this.assertEnabled();
+    const id = String(licenseId || '').trim();
+    if (!id) return null;
+    const row = this.db
+      .prepare(
+        `SELECT id, clinic_id FROM sync_registered_devices
+         WHERE license_id = ? AND revoked_at IS NULL LIMIT 1`,
+      )
+      .get(id) as { id: string; clinic_id: string } | undefined;
+    return row ? { id: row.id, clinicId: row.clinic_id } : null;
+  }
+
+  setDevicePublicKey(deviceId: string, publicKey: string): boolean {
+    this.assertEnabled();
+    const result = this.db
+      .prepare(
+        `UPDATE sync_registered_devices
+         SET public_key = ?
+         WHERE id = ? AND revoked_at IS NULL AND (public_key IS NULL OR public_key = '')`,
+      )
+      .run(publicKey, deviceId);
+    return result.changes > 0;
+  }
+
+  private mapSyncDevice(row: Record<string, unknown>) {
     return {
       id: String(row.id),
       clinicId: String(row.clinic_id),
       name: String(row.name ?? ''),
       secretHash: String(row.secret_hash),
       installationId: (row.installation_id as string | null) ?? null,
+      publicKey: (row.public_key as string | null) ?? null,
+      licenseId: (row.license_id as string | null) ?? null,
       revokedAt: (row.revoked_at as string | null) ?? null,
       pullCheckpoint: Number(row.pull_checkpoint ?? 0),
       bootstrapCompletedAt: (row.bootstrap_completed_at as string | null) ?? null,

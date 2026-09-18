@@ -68,9 +68,9 @@ export class PairingCompleteDto {
   @IsString()
   deviceName!: string;
 
-  @IsOptional()
   @IsString()
-  installationId?: string;
+  @MinLength(4)
+  installationId!: string;
 
   /** Offline must attest it has no operational clinic records. Online cannot inspect the Offline DB. */
   @IsBoolean()
@@ -103,6 +103,21 @@ export class PairingCompleteDto {
   @IsString()
   @MinLength(64)
   censusProof!: string;
+
+  /** Ed25519 SPKI DER, base64url. Generated on official Offline at pair time. */
+  @IsString()
+  @MinLength(40)
+  devicePublicKey!: string;
+
+  /** Ed25519 signature of the canonical pairing transcript, proving possession of the device key. */
+  @IsString()
+  @MinLength(64)
+  pairingSignature!: string;
+
+  /** DibNova-signed Offline license bound to this installationId. */
+  @IsString()
+  @MinLength(32)
+  license!: string;
 }
 
 export class ConnectOnlineDto {
@@ -124,6 +139,12 @@ export class DeviceTokenDto {
 
   @IsString()
   deviceSecret!: string;
+}
+
+export class RegisterDeviceKeyDto {
+  @IsString()
+  @MinLength(40)
+  devicePublicKey!: string;
 }
 
 export class PushChangesDto {
