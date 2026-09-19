@@ -12,7 +12,7 @@ import {
   PrintTotals,
 } from '@/components/common/PrintLayout';
 import { formatMoney, centsToAmount } from '@/utils/money';
-import { todayIso, formatDateDisplay, formatDateTimeDisplay, calculateAge } from '@/utils/date';
+import { todayIso, formatDateDisplay, formatDateTimeDisplay, formatDobDisplay, calculateAge } from '@/utils/date';
 import { ClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import {
   AccountDiscount,
@@ -327,7 +327,7 @@ export function PatientFilePrintable({
               {patient.dateOfBirth && (
                 <PrintMetaItem
                   label={t('patientRecord.patient.dob')}
-                  value={formatDateDisplay(patient.dateOfBirth, language)}
+                  value={formatDobDisplay(patient.dateOfBirth)}
                 />
               )}
               {age != null && (
@@ -717,7 +717,7 @@ export function PatientRecordPrintable({
             {patient.dateOfBirth && (
               <tr>
                 <td>{t('patientRecord.patient.dob')}</td>
-                <td>{formatDateDisplay(patient.dateOfBirth, language)}</td>
+                <td>{formatDobDisplay(patient.dateOfBirth)}</td>
               </tr>
             )}
             {patient.address && (
@@ -990,7 +990,7 @@ export function PatientRecordCompactPrintable({
             {patient.dateOfBirth && (
               <tr>
                 <td>{t('patientRecord.patient.dob')}</td>
-                <td>{formatDateDisplay(patient.dateOfBirth, language)}</td>
+                <td>{formatDobDisplay(patient.dateOfBirth)}</td>
               </tr>
             )}
             {patient.address && (

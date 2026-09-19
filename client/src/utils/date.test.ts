@@ -1,6 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { addDaysIso, calculateAge, formatDateTimeDisplay, formatReminderClockTime, localAddDaysIso, localMonthStartIso } from './date';
+import {
+  addDaysIso,
+  calculateAge,
+  formatDateTimeDisplay,
+  formatDobDisplay,
+  formatReminderClockTime,
+  localAddDaysIso,
+  localMonthStartIso,
+  maskDobInput,
+  parseDobDisplay,
+} from './date';
 
 test('addDaysIso stays on the local calendar and matches localAddDaysIso', () => {
   assert.equal(addDaysIso('2026-03-08', 1), '2026-03-09');
@@ -37,6 +47,20 @@ test('formatReminderClockTime never throws on missing or odd clock values', () =
   assert.equal(formatReminderClockTime(''), '');
   assert.equal(formatReminderClockTime('  '), '');
   assert.equal(formatReminderClockTime(16 as unknown as string), '16');
+});
+
+test('formatDobDisplay and parseDobDisplay round-trip ISO dates as DD/MM/YYYY', () => {
+  assert.equal(formatDobDisplay('1990-03-15'), '15/03/1990');
+  assert.equal(parseDobDisplay('15/03/1990'), '1990-03-15');
+  assert.equal(parseDobDisplay('5/3/1990'), '1990-03-05');
+  assert.equal(parseDobDisplay('31/02/1990'), null);
+  assert.equal(parseDobDisplay('15-03-1990'), null);
+});
+
+test('maskDobInput formats digits into DD/MM/YYYY', () => {
+  assert.equal(maskDobInput('15031990'), '15/03/1990');
+  assert.equal(maskDobInput('15/03/1990'), '15/03/1990');
+  assert.equal(maskDobInput('15abc03def1990'), '15/03/1990');
 });
 
 test('calculateAge uses the local calendar date of birth', () => {

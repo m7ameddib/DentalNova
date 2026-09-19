@@ -1,10 +1,72 @@
-import { InputHTMLAttributes, useEffect } from 'react';
-import { localTodayIso } from '@/utils/date';
+import { InputHTMLAttributes, useEffect, useState } from 'react';
+import { formatDobDisplay, localTodayIso, maskDobInput, parseDobDisplay } from '@/utils/date';
 
 type DateFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> & {
   value: string;
   onChange: (value: string) => void;
 };
+
+type DobFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange'> & {
+  value: string;
+  onChange: (value: string) => void;
+};
+
+/** Single text input for patient DOB — displays and edits DD/MM/YYYY, stores ISO YYYY-MM-DD. */
+export function DobField({ value, onChange, onFocus, onBlur, placeholder = 'DD/MM/YYYY', ...rest }: DobFieldProps) {
+  const [text, setText] = useState('');
+  const [focused, setFocused] = useState(false);
+
+  useEffect(() => {
+    if (!focused) {
+      setText(value ? formatDobDisplay(value) : '');
+    }
+  }, [value, focused]);
+
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      autoComplete="bday"
+      dir="ltr"
+      className="dob-field"
+      placeholder={placeholder}
+      value={text}
+      onChange={(e) => {
+        const masked = maskDobInput(e.target.value);
+        setText(masked);
+        if (!masked) {
+          onChange('');
+          return;
+        }
+        if (masked.length === 10) {
+          const iso = parseDobDisplay(masked);
+          if (iso) onChange(iso);
+        }
+      }}
+      onFocus={(e) => {
+        setFocused(true);
+        onFocus?.(e);
+      }}
+      onBlur={(e) => {
+        setFocused(false);
+        if (!text.trim()) {
+          onChange('');
+          setText('');
+        } else {
+          const iso = parseDobDisplay(text);
+          if (iso) {
+            setText(formatDobDisplay(iso));
+            onChange(iso);
+          } else {
+            setText(value ? formatDobDisplay(value) : '');
+          }
+        }
+        onBlur?.(e);
+      }}
+      {...rest}
+    />
+  );
+}
 
 /** Native date input that opens on today's month when the field is empty. */
 export function DateField({ value, onChange, onFocus, ...rest }: DateFieldProps) {

@@ -10,7 +10,7 @@ import { Modal } from '@/components/common/Modal';
 import { PatientSearchBox } from '@/components/patient-record/PatientSearchBox';
 import { AreaPicker } from '@/components/patient-record/AreaPicker';
 import { PatientRecordCompactPrintable, PatientRecordPrintable } from '@/components/patient-record/PrintableTemplates';
-import { DateField } from '@/components/common/DateField';
+import { DobField } from '@/components/common/DateField';
 import type { ToothTreatmentBadge } from '@/components/patient-record/odontogram/types';
 import { patientsApi, CreatePatientPayload, UpdatePatientPayload } from '@/api/patients.api';
 import { clinicalApi } from '@/api/clinical.api';
@@ -495,12 +495,13 @@ export function PatientSection({
 
             <div className="inline-form__row">
               <FormField label={t('patientRecord.patient.dob')} className="inline-form__col">
-                <DateField
+                <DobField
                   value={dateOfBirth}
                   onChange={(next) => {
                     setDateOfBirth(next);
                     if (next) setApproxAge('');
                   }}
+                  placeholder={t('patientRecord.patient.dobPlaceholder') ?? 'DD/MM/YYYY'}
                 />
               </FormField>
               <FormField label={t('patientRecord.patient.age')} className="inline-form__col inline-form__col--small">

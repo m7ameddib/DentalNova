@@ -647,7 +647,7 @@
       "restorePatient": "Restore patient",
       "fullNamePlaceholder": "Enter full name",
       "phonePlaceholder": "Enter phone number",
-      "dobPlaceholder": "Select date of birth",
+      "dobPlaceholder": "DD/MM/YYYY",
       "agePlaceholder": "Age",
       "addressPlaceholder": "Enter address",
       "medicalNotesPlaceholder": "Allergies, conditions, medications...",

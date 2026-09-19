@@ -108,6 +108,30 @@ export function formatDobDisplay(dateIso: string): string {
   return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
 }
 
+/** Parse DD/MM/YYYY (or D/M/YYYY) into stored ISO YYYY-MM-DD. Returns null when invalid. */
+export function parseDobDisplay(dmy: string): string | null {
+  const trimmed = dmy.trim();
+  if (!trimmed) return null;
+  const match = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(trimmed);
+  if (!match) return null;
+  const day = Number(match[1]);
+  const month = Number(match[2]);
+  const year = Number(match[3]);
+  if (!Number.isInteger(day) || !Number.isInteger(month) || !Number.isInteger(year)) return null;
+  if (year < 1900 || year > 2100 || month < 1 || month > 12) return null;
+  const lastDay = new Date(year, month, 0).getDate();
+  if (day < 1 || day > lastDay) return null;
+  return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
+/** Mask typed digits into DD/MM/YYYY for a single date-of-birth input. */
+export function maskDobInput(raw: string): string {
+  const digits = raw.replace(/\D/g, '').slice(0, 8);
+  if (digits.length <= 2) return digits;
+  if (digits.length <= 4) return `${digits.slice(0, 2)}/${digits.slice(2)}`;
+  return `${digits.slice(0, 2)}/${digits.slice(2, 4)}/${digits.slice(4)}`;
+}
+
 /** Formats a full ISO timestamp (e.g. a treatment's createdAt) for display. */
 export function formatDateTimeDisplay(isoTimestamp: string, locale: string): string {
   if (!isoTimestamp) return '';
