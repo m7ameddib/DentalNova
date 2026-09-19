@@ -55,6 +55,14 @@ export interface AiStatusResponse {
   configured: boolean;
   model: string;
   visionModel: string;
+  aiCredits?: {
+    aiEnabled: boolean;
+    allowance: number;
+    used: number;
+    balance: number;
+    geminiCostUsd: number;
+  } | null;
+  aiBlockedReason?: 'NO_CREDITS' | 'AI_DISABLED' | null;
 }
 
 export const aiAssistantApi = {

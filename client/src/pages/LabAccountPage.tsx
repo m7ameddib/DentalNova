@@ -7,6 +7,7 @@ import { labCasesApi } from '@/api/lab-cases.api';
 import { paymentMethodsApi } from '@/api/settings.api';
 import { Modal } from '@/components/common/Modal';
 import { LabStatementPrintable } from '@/components/lab-accounts/LabStatementPrintable';
+import { LabPaymentReceiptPrintable } from '@/components/lab-accounts/LabPaymentReceiptPrintable';
 import { LabOrderPrintable } from '@/components/patient-record/PrintableTemplates';
 import { LabCaseWithDetails } from '@/types/domain';
 import { usePermission } from '@/hooks/usePermission';
@@ -188,6 +189,20 @@ export function LabAccountPage() {
         orders={orders}
         payments={payments.filter((p) => p.status !== 'VOID')}
         statement={statement}
+        clinic={clinic}
+        language={language}
+      />,
+    );
+  }
+
+  async function handlePrintPayment(payment: LabAccountPaymentRow) {
+    if (!summary) return;
+    const clinic = await loadClinicPrintInfo();
+    print(
+      <LabPaymentReceiptPrintable
+        labName={summary.labName}
+        payment={payment}
+        remainingCents={summary.remainingCents}
         clinic={clinic}
         language={language}
       />,
@@ -394,6 +409,11 @@ export function LabAccountPage() {
                       </td>
                       <td>
                         <div className="table-row-actions">
+                          {p.status !== 'VOID' && (
+                            <button type="button" className="btn btn--ghost btn--small" onClick={() => void handlePrintPayment(p)}>
+                              <Printer size={14} /> {t('common.print')}
+                            </button>
+                          )}
                           {p.status !== 'VOID' && p.editable && (
                             <button type="button" className="btn btn--ghost btn--small" onClick={() => openEdit(p)}>
                               {t('common.edit')}

@@ -27,6 +27,7 @@ import { useOfflineStatusStore } from './status.store';
 import { axiosRequestUrl } from './requestUrl';
 import { flushOutbox } from './sync';
 import { probeApiHealth } from './health';
+import { scheduleClinicSyncAfterWrite } from '@/utils/syncAfterWrite';
 import { chooseSessionPersistTarget, FALLBACK_TOKEN_KEY, FALLBACK_USER_KEY } from './session-persist';
 
 function asAxiosResponse<T>(data: T, config: InternalAxiosRequestConfig, status = 200): AxiosResponse<T> {
@@ -74,6 +75,19 @@ function fallbackOfflineAxiosError(config: InternalAxiosRequestConfig): AxiosErr
 export function installOfflineFallback(api: AxiosInstance): void {
   if (installed) return;
   installed = true;
+
+  api.interceptors.response.use(
+    (response) => {
+      const method = (response.config.method || 'get').toUpperCase();
+      const url = axiosRequestUrl(response.config);
+      if (isWriteMethod(method) && !url.includes('/sync/') && !url.includes('/auth/')) {
+        scheduleClinicSyncAfterWrite();
+      }
+      return response;
+    },
+    (error) => Promise.reject(error),
+  );
+
   api.interceptors.request.use((config) => {
     const state = useOfflineStatusStore.getState();
     if (state.enabled) {

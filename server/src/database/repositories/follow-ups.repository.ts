@@ -438,6 +438,20 @@ export class FollowUpsRepository {
   }
 
   /** Deletes follow-ups created from a patient treatment (hard delete). */
+  findByTreatmentId(treatmentId: number): FollowUp[] {
+    const rows = this.db.connection
+      .prepare(`SELECT * FROM follow_ups WHERE patient_treatment_id = ?`)
+      .all(treatmentId) as Record<string, unknown>[];
+    return toCamelList<FollowUp>(rows);
+  }
+
+  findActiveByPatient(patientId: number): FollowUp[] {
+    const rows = this.db.connection
+      .prepare(`SELECT * FROM follow_ups WHERE patient_id = ? AND status = 'ACTIVE'`)
+      .all(patientId) as Record<string, unknown>[];
+    return toCamelList<FollowUp>(rows);
+  }
+
   deleteByTreatmentId(treatmentId: number): void {
     const ids = this.db.connection
       .prepare(`SELECT id FROM follow_ups WHERE patient_treatment_id = ?`)

@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { Building2 } from 'lucide-react';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { AdminClinicScopeBanner } from '@/components/admin/AdminClinicScopeBanner';
 import { useAdminDashboard } from '@/components/admin/AdminDashboardContext';
 import { ADMIN_PATHS } from '@/components/admin/admin-utils';
 import { dibnovaAdminApi } from '@/api/dibnova-admin.api';
@@ -44,6 +45,7 @@ export function AdminSubscriptionPage() {
 
   return (
     <div className="admin-page">
+      <AdminClinicScopeBanner clinicName={selectedClinic?.clinicName} />
       <AdminPageHeader
         title={t('dibnovaAdmin.subscriptionManagement')}
         description={t('dibnovaAdmin.subscriptionHint')}

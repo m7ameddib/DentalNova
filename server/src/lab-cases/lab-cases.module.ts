@@ -11,8 +11,10 @@ import { ClinicExpensesRepository } from '../database/repositories/clinic-expens
 import { PaymentMethodsRepository } from '../database/repositories/payment-methods.repository';
 import { LabServiceCostsRepository } from '../database/repositories/lab-service-costs.repository';
 import { LabAccountPaymentsRepository } from '../database/repositories/lab-account-payments.repository';
+import { FollowUpsModule } from '../follow-ups/follow-ups.module';
 
 @Module({
+  imports: [FollowUpsModule],
   controllers: [LabCasesController],
   providers: [
     LabCasesService,

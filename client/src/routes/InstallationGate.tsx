@@ -28,6 +28,14 @@ export function InstallationGate({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (serverUp !== null) return;
+    const timeout = window.setTimeout(() => {
+      setServerUp((current) => (current === null ? false : current));
+    }, 20_000);
+    return () => window.clearTimeout(timeout);
+  }, [serverUp]);
+
+  useEffect(() => {
     let cancelled = false;
     void (async () => {
       const cached = (await getCachedInstallation()) as InstallationStatus | null;

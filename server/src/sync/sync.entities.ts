@@ -50,7 +50,6 @@ export const SYNC_ENTITIES: SyncEntityDef[] = [
     table: 'users',
     fks: {},
     conflict: 'review',
-    skipColumns: ['password_hash', 'role_id'],
   },
   { name: 'family_groups', table: 'family_groups', fks: {}, conflict: 'lww-safe' },
   {

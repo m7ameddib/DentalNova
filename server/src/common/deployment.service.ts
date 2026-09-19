@@ -49,13 +49,12 @@ export class DeploymentService implements OnModuleInit {
   }
 
   /**
-   * Online clinic self-signup. Production defaults to invite-only.
+   * Online clinic self-signup. Production defaults to open registration (admin approval via subscription).
    * Set ONLINE_CLINIC_SIGNUP=open|invite|disabled to override.
    */
   clinicSignupMode(): ClinicSignupMode {
     const raw = (this.config.get<string>('ONLINE_CLINIC_SIGNUP') || '').trim().toLowerCase();
     if (raw === 'open' || raw === 'invite' || raw === 'disabled') return raw;
-    if (this.isOnline() && this.isProduction()) return 'invite';
     return 'open';
   }
 

@@ -35,18 +35,8 @@ export function FollowUpsSection({ patientId }: { patientId: number }) {
       {activeCount === 0 ? (
         <p className="muted">{t('followUp.patientEmpty')}</p>
       ) : (
-        <ul className="compact-follow-up-list">
-          <li className="follow-ups-compact">
-            <span className="follow-ups-compact__count">
-              {t('followUp.activeCount', { count: activeCount })}
-            </span>
-            {nextDate && (
-              <span className="follow-ups-compact__next">
-                {t('followUp.nextDate')}: {formatDateDisplay(nextDate, language)}
-              </span>
-            )}
-          </li>
-          {activeItems.map((fu) => (
+        <ul className="compact-follow-up-list compact-follow-up-list--dense">
+          {activeItems.slice(0, 3).map((fu) => (
             <li key={fu.id}>
               <button
                 type="button"
@@ -58,6 +48,14 @@ export function FollowUpsSection({ patientId }: { patientId: number }) {
               </button>
             </li>
           ))}
+          {activeCount > 3 && (
+            <li className="follow-ups-compact follow-ups-compact--inline">
+              <span className="muted">
+                {t('followUp.activeCount', { count: activeCount })}
+                {nextDate ? ` · ${t('followUp.nextDate')}: ${formatDateDisplay(nextDate, language)}` : ''}
+              </span>
+            </li>
+          )}
         </ul>
       )}
     </SectionCard>

@@ -183,14 +183,18 @@ test('user apply links by username and never writes password_hash or role_id', (
   db.close();
 });
 
-test('unknown remote usernames are not inserted', () => {
+test('unknown remote usernames are inserted with password hash', () => {
   const db = new Database(':memory:');
   db.exec(`
+    CREATE TABLE roles (id INTEGER PRIMARY KEY, name TEXT NOT NULL);
+    INSERT INTO roles (id, name) VALUES (1, 'doctor');
     CREATE TABLE users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       username TEXT NOT NULL UNIQUE,
       password_hash TEXT NOT NULL,
-      role_id INTEGER NOT NULL
+      role_id INTEGER NOT NULL,
+      full_name TEXT,
+      is_active INTEGER NOT NULL DEFAULT 1
     );
     CREATE TABLE patients (id INTEGER PRIMARY KEY AUTOINCREMENT, full_name TEXT);
     CREATE TABLE payments (id INTEGER PRIMARY KEY AUTOINCREMENT, patient_id INTEGER);
@@ -210,9 +214,12 @@ test('unknown remote usernames are not inserted', () => {
     ],
     'device-a',
   );
-  assert.equal(result.conflicts.some((c) => c.reason === 'user-unlinked'), true);
-  const count = db.prepare(`SELECT COUNT(*) AS c FROM users`).get() as { c: number };
-  assert.equal(count.c, 0);
+  assert.equal(result.accepted.includes('user-new'), true);
+  const user = db.prepare(`SELECT username, password_hash AS hash FROM users WHERE username = 'stranger'`).get() as {
+    username: string;
+    hash: string;
+  };
+  assert.equal(user.hash, 'x');
   db.close();
 });
 

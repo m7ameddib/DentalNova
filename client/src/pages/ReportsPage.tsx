@@ -2,7 +2,11 @@ import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useQuery } from '@tanstack/react-query';
-import { ScrollText } from 'lucide-react';
+import { Printer, ScrollText } from 'lucide-react';
+import { ReportPrintable } from '@/components/reports/ReportPrintable';
+import { usePrintStore } from '@/store/print.store';
+import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
+import { useUiStore } from '@/store/ui.store';
 import { reportsApi } from '@/api/reports.api';
 import { usePermission } from '@/hooks/usePermission';
 import { PERMISSIONS } from '@/constants/permissions';
@@ -29,6 +33,8 @@ const APPOINTMENT_STATUS_KEYS: { key: 'scheduled' | 'waiting' | 'inTreatment' | 
 
 export function ReportsPage() {
   const { t } = useTranslation();
+  const { language } = useUiStore();
+  const print = usePrintStore((s) => s.print);
   const canViewFinancial = usePermission(PERMISSIONS.REPORTS_FINANCIAL_VIEW);
   const [period, setPeriod] = useState<PeriodOption>('today');
   const [customFrom, setCustomFrom] = useState(todayIso());
@@ -50,6 +56,29 @@ export function ReportsPage() {
 
   const financial = summary?.financial;
 
+  async function handlePrintSummary() {
+    if (!financial) return;
+    const clinic = await loadClinicPrintInfo();
+    print(
+      <ReportPrintable
+        title={t('reports.title')}
+        periodLabel={periodLabel}
+        clinic={clinic}
+        language={language}
+        columns={[t('reports.print.metric'), t('reports.print.value')]}
+        rows={[
+          [t('reports.financial.netCash'), formatMoney(financial.netCashCents ?? 0)],
+          [t('reports.financial.totalCollected'), formatMoney(financial.totalCollectedCents ?? 0)],
+          [t('reports.financial.outstandingBalance'), formatMoney(financial.outstandingBalanceCents ?? 0)],
+          [t('reports.financial.totalExpenses'), formatMoney(financial.totalExpensesCents ?? 0)],
+          [t('reports.financial.totalTreatmentValue'), formatMoney(financial.totalTreatmentValueCents ?? 0)],
+          [t('reports.financial.totalDiscounts'), formatMoney(financial.totalDiscountCents ?? 0)],
+        ]}
+        orientation="portrait"
+      />,
+    );
+  }
+
   return (
     <div className="ops-shell reports-page">
       <header className="ops-page-head">
@@ -58,6 +87,11 @@ export function ReportsPage() {
           <p>{t('reports.pageHint')}</p>
         </div>
         <div className="ops-page-head-actions">
+          {canViewFinancial && (
+            <button type="button" className="btn btn--ghost" onClick={() => void handlePrintSummary()} disabled={!financial}>
+              <Printer size={14} /> {t('common.print')}
+            </button>
+          )}
           <Link to="/daily-report" className="page-feature-link page-feature-link--report">
             <span className="page-feature-link__icon" aria-hidden="true">
               <ScrollText size={16} />

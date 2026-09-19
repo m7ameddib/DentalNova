@@ -361,6 +361,7 @@ export class PlatformService implements OnModuleInit {
          WHERE id = ?`,
       )
       .run(now.toISOString(), expires.toISOString(), adminNotes ?? null, clinicId);
+    this.grantSubscriptionAiCredits(clinicId);
   }
 
   extendSubscription(clinicId: string, adminNotes?: string | null): void {
@@ -906,6 +907,22 @@ export class PlatformService implements OnModuleInit {
     `);
     this.addColumnIfMissing('clinics', 'trial_type', 'TEXT');
     this.addColumnIfMissing('clinics', 'doctor_name', 'TEXT');
+    this.addColumnIfMissing('clinics', 'ai_enabled', 'INTEGER NOT NULL DEFAULT 1');
+    this.addColumnIfMissing('clinics', 'ai_credits_allowance', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumnIfMissing('clinics', 'ai_credits_used', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumnIfMissing('clinics', 'ai_credits_balance', 'INTEGER NOT NULL DEFAULT 0');
+    this.addColumnIfMissing('clinics', 'ai_gemini_cost_usd', 'REAL NOT NULL DEFAULT 0');
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS platform_ai_settings (
+        id INTEGER PRIMARY KEY CHECK (id = 1),
+        subscription_ai_credits INTEGER NOT NULL DEFAULT 500,
+        renewal_package_credits INTEGER NOT NULL DEFAULT 100,
+        renewal_package_price_cents INTEGER NOT NULL DEFAULT 2000
+      );
+      INSERT OR IGNORE INTO platform_ai_settings (id) VALUES (1);
+    `);
+    this.addColumnIfMissing('ai_usage_events', 'credits_used', 'INTEGER NOT NULL DEFAULT 1');
+    this.addColumnIfMissing('ai_usage_events', 'estimated_cost_usd', 'REAL');
     this.addColumnIfMissing('sync_pairing_codes', 'challenge', 'TEXT');
     this.addColumnIfMissing('sync_registered_devices', 'bootstrap_completed_at', 'TEXT');
     this.addColumnIfMissing('sync_registered_devices', 'snapshot_next_entity', 'TEXT');
@@ -1190,20 +1207,158 @@ export class PlatformService implements OnModuleInit {
       .all(clinicId);
   }
 
+  getAiSettings() {
+    this.assertEnabled();
+    return this.db
+      .prepare(
+        `SELECT subscription_ai_credits AS subscriptionAiCredits,
+                renewal_package_credits AS renewalPackageCredits,
+                renewal_package_price_cents AS renewalPackagePriceCents
+         FROM platform_ai_settings WHERE id = 1`,
+      )
+      .get() as {
+      subscriptionAiCredits: number;
+      renewalPackageCredits: number;
+      renewalPackagePriceCents: number;
+    };
+  }
+
+  updateAiSettings(input: {
+    subscriptionAiCredits?: number;
+    renewalPackageCredits?: number;
+    renewalPackagePriceCents?: number;
+  }) {
+    this.assertEnabled();
+    const current = this.getAiSettings();
+    this.db
+      .prepare(
+        `UPDATE platform_ai_settings SET
+          subscription_ai_credits = ?,
+          renewal_package_credits = ?,
+          renewal_package_price_cents = ?
+         WHERE id = 1`,
+      )
+      .run(
+        input.subscriptionAiCredits ?? current.subscriptionAiCredits,
+        input.renewalPackageCredits ?? current.renewalPackageCredits,
+        input.renewalPackagePriceCents ?? current.renewalPackagePriceCents,
+      );
+    return this.getAiSettings();
+  }
+
+  getClinicAiCredits(clinicId: string) {
+    this.assertEnabled();
+    const row = this.db
+      .prepare(
+        `SELECT ai_enabled AS aiEnabled, ai_credits_allowance AS allowance,
+                ai_credits_used AS used, ai_credits_balance AS balance,
+                ai_gemini_cost_usd AS geminiCostUsd
+         FROM clinics WHERE id = ?`,
+      )
+      .get(clinicId) as Record<string, unknown> | undefined;
+    if (!row) throw new NotFoundException('Unknown clinic');
+    return {
+      aiEnabled: Number(row.aiEnabled ?? 1) === 1,
+      allowance: Number(row.allowance ?? 0),
+      used: Number(row.used ?? 0),
+      balance: Number(row.balance ?? 0),
+      geminiCostUsd: Number(row.geminiCostUsd ?? 0),
+    };
+  }
+
+  private grantSubscriptionAiCredits(clinicId: string) {
+    const settings = this.getAiSettings();
+    const credits = Math.max(0, settings.subscriptionAiCredits);
+    if (credits <= 0) return;
+    this.db
+      .prepare(
+        `UPDATE clinics SET
+          ai_credits_allowance = ai_credits_allowance + ?,
+          ai_credits_balance = ai_credits_balance + ?
+         WHERE id = ?`,
+      )
+      .run(credits, credits, clinicId);
+  }
+
+  addAiCredits(clinicId: string, credits: number, asAllowance = false) {
+    this.assertEnabled();
+    const amount = Math.max(0, Math.floor(credits));
+    if (amount <= 0) throw new BadRequestException('Credits must be positive.');
+    this.db
+      .prepare(
+        `UPDATE clinics SET
+          ai_credits_balance = ai_credits_balance + ?,
+          ai_credits_allowance = ai_credits_allowance + ?
+         WHERE id = ?`,
+      )
+      .run(amount, asAllowance ? amount : 0, clinicId);
+    return this.getClinicAiCredits(clinicId);
+  }
+
+  applyAiRenewalPackage(clinicId: string) {
+    const settings = this.getAiSettings();
+    return this.addAiCredits(clinicId, settings.renewalPackageCredits, true);
+  }
+
+  setAiEnabled(clinicId: string, enabled: boolean) {
+    this.assertEnabled();
+    this.db.prepare(`UPDATE clinics SET ai_enabled = ? WHERE id = ?`).run(enabled ? 1 : 0, clinicId);
+    return this.getClinicAiCredits(clinicId);
+  }
+
+  assertAiCreditsAvailable(clinicId: string | null): { allowed: boolean; reason?: string; credits?: ReturnType<PlatformService['getClinicAiCredits']> } {
+    if (!this.isEnabled() || !clinicId) return { allowed: true };
+    const credits = this.getClinicAiCredits(clinicId);
+    if (!credits.aiEnabled) {
+      return { allowed: false, reason: 'AI_DISABLED', credits };
+    }
+    if (credits.balance <= 0) {
+      return { allowed: false, reason: 'NO_CREDITS', credits };
+    }
+    return { allowed: true, credits };
+  }
+
+  consumeAiCredit(clinicId: string | null, estimatedCostUsd?: number): void {
+    if (!this.isEnabled() || !clinicId) return;
+    this.db
+      .prepare(
+        `UPDATE clinics SET
+          ai_credits_used = ai_credits_used + 1,
+          ai_credits_balance = CASE WHEN ai_credits_balance > 0 THEN ai_credits_balance - 1 ELSE 0 END,
+          ai_gemini_cost_usd = ai_gemini_cost_usd + COALESCE(?, 0)
+         WHERE id = ?`,
+      )
+      .run(estimatedCostUsd ?? 0, clinicId);
+  }
+
   recordAiUsage(input: {
     clinicId: string | null;
     model: string;
     durationMs: number;
     rounds: number;
     hasImage: boolean;
+    creditsUsed?: number;
+    estimatedCostUsd?: number;
   }): void {
     if (!this.isEnabled()) return;
+    const creditsUsed = input.creditsUsed ?? 1;
     this.db
       .prepare(
-        `INSERT INTO ai_usage_events (clinic_id, model, duration_ms, rounds, has_image)
-         VALUES (?, ?, ?, ?, ?)`,
+        `INSERT INTO ai_usage_events (clinic_id, model, duration_ms, rounds, has_image, credits_used, estimated_cost_usd)
+         VALUES (?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(input.clinicId, input.model, input.durationMs, input.rounds, input.hasImage ? 1 : 0);
+      .run(
+        input.clinicId,
+        input.model,
+        input.durationMs,
+        input.rounds,
+        input.hasImage ? 1 : 0,
+        creditsUsed,
+        input.estimatedCostUsd ?? null,
+      );
+    if (input.clinicId) {
+      this.consumeAiCredit(input.clinicId, input.estimatedCostUsd);
+    }
   }
 
   listAiUsage(clinicId?: string) {
@@ -1211,23 +1366,57 @@ export class PlatformService implements OnModuleInit {
     const rows = clinicId
       ? (this.db
           .prepare(
-            `SELECT clinic_id AS clinicId, COUNT(*) AS calls, COALESCE(SUM(duration_ms), 0) AS durationMs,
-                    COALESCE(SUM(has_image), 0) AS imageCalls
-             FROM ai_usage_events WHERE clinic_id = ? GROUP BY clinic_id`,
+            `SELECT e.clinic_id AS clinicId, c.name AS clinicName,
+                    COUNT(*) AS calls, COALESCE(SUM(e.duration_ms), 0) AS durationMs,
+                    COALESCE(SUM(e.has_image), 0) AS imageCalls,
+                    COALESCE(SUM(e.credits_used), 0) AS creditsUsed,
+                    COALESCE(SUM(e.estimated_cost_usd), 0) AS estimatedCostUsd,
+                    c.ai_credits_allowance AS allowance, c.ai_credits_used AS used,
+                    c.ai_credits_balance AS balance, c.ai_enabled AS aiEnabled,
+                    c.ai_gemini_cost_usd AS geminiCostUsd
+             FROM ai_usage_events e
+             LEFT JOIN clinics c ON c.id = e.clinic_id
+             WHERE e.clinic_id = ?
+             GROUP BY e.clinic_id`,
           )
           .all(clinicId) as Array<Record<string, unknown>>)
       : (this.db
           .prepare(
-            `SELECT clinic_id AS clinicId, COUNT(*) AS calls, COALESCE(SUM(duration_ms), 0) AS durationMs,
-                    COALESCE(SUM(has_image), 0) AS imageCalls
-             FROM ai_usage_events GROUP BY clinic_id ORDER BY calls DESC LIMIT 200`,
+            `SELECT c.id AS clinicId, c.name AS clinicName,
+                    COALESCE(u.calls, 0) AS calls,
+                    COALESCE(u.durationMs, 0) AS durationMs,
+                    COALESCE(u.imageCalls, 0) AS imageCalls,
+                    COALESCE(u.creditsUsed, 0) AS creditsUsed,
+                    COALESCE(u.estimatedCostUsd, 0) AS estimatedCostUsd,
+                    c.ai_credits_allowance AS allowance, c.ai_credits_used AS used,
+                    c.ai_credits_balance AS balance, c.ai_enabled AS aiEnabled,
+                    c.ai_gemini_cost_usd AS geminiCostUsd
+             FROM clinics c
+             LEFT JOIN (
+               SELECT clinic_id,
+                      COUNT(*) AS calls,
+                      COALESCE(SUM(duration_ms), 0) AS durationMs,
+                      COALESCE(SUM(has_image), 0) AS imageCalls,
+                      COALESCE(SUM(credits_used), 0) AS creditsUsed,
+                      COALESCE(SUM(estimated_cost_usd), 0) AS estimatedCostUsd
+               FROM ai_usage_events GROUP BY clinic_id
+             ) u ON u.clinic_id = c.id
+             ORDER BY calls DESC LIMIT 200`,
           )
           .all() as Array<Record<string, unknown>>);
     return rows.map((row) => ({
       clinicId: (row.clinicId as string | null) ?? null,
+      clinicName: (row.clinicName as string | null) ?? null,
       calls: Number(row.calls ?? 0),
       durationMs: Number(row.durationMs ?? 0),
       imageCalls: Number(row.imageCalls ?? 0),
+      creditsUsed: Number(row.creditsUsed ?? 0),
+      estimatedCostUsd: Number(row.estimatedCostUsd ?? 0),
+      allowance: Number(row.allowance ?? 0),
+      used: Number(row.used ?? 0),
+      balance: Number(row.balance ?? 0),
+      aiEnabled: Number(row.aiEnabled ?? 1) === 1,
+      geminiCostUsd: Number(row.geminiCostUsd ?? 0),
     }));
   }
 

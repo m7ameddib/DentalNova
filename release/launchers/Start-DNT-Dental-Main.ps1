@@ -4,6 +4,31 @@ $ErrorActionPreference = 'Stop'
 # Launchers are installed in the DNT Dental root (e.g. C:\Program Files\DibNova\DNTDental\)
 $AppRoot = $PSScriptRoot
 
+$launcherMutex = New-Object System.Threading.Mutex($false, 'Global\DNTDentalNovaMainLauncher')
+$ownsLauncherMutex = $false
+try {
+  $ownsLauncherMutex = $launcherMutex.WaitOne(0, $false)
+} catch {
+  $ownsLauncherMutex = $false
+}
+if (-not $ownsLauncherMutex) {
+  $PortEarly = if ($env:PORT) { $env:PORT } else { '4000' }
+  try {
+    $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 3 "http://127.0.0.1:$PortEarly/api/health"
+    if ($r.StatusCode -eq 200) {
+      Start-Process "http://127.0.0.1:$PortEarly"
+      exit 0
+    }
+  } catch {}
+  [System.Windows.Forms.MessageBox]::Show(
+    'DentalNova is already starting on this computer.`nPlease wait a moment and try again.',
+    'DentalNova',
+    'OK',
+    'Information'
+  ) | Out-Null
+  exit 0
+}
+
 $DataDir = Join-Path $env:ProgramData 'DibNova\DNTDental'
 $Port = if ($env:PORT) { $env:PORT } else { '4000' }
 $NodeExe = Join-Path $AppRoot 'runtime\node\node.exe'
@@ -141,3 +166,6 @@ if (-not (Test-DntHealth)) {
 }
 
 Start-Process "http://127.0.0.1:$Port"
+if ($ownsLauncherMutex) {
+  $launcherMutex.ReleaseMutex() | Out-Null
+}

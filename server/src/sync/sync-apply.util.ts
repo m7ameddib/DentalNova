@@ -234,6 +234,13 @@ export function withRemoteApply<T>(db: Database.Database, fn: () => T): T {
   }
 }
 
+function clearOpenConflictsForRecord(db: Database.Database, entity: string, recordUid: string): void {
+  db.prepare(
+    `UPDATE sync_conflicts SET resolved_at = datetime('now'), resolution = 'synced'
+     WHERE resolved_at IS NULL AND entity = ? AND record_uid = ?`,
+  ).run(entity, recordUid);
+}
+
 function recordConflict(
   db: Database.Database,
   entity: string,
@@ -273,6 +280,9 @@ export function applyChanges(
           const result = applyRow();
           if (result === 'accepted' || result === 'file-number-collision') {
             accepted.push(change.changeId);
+            if (result === 'accepted') {
+              clearOpenConflictsForRecord(db, change.entity, change.recordUid);
+            }
             if (result === 'file-number-collision') {
               conflicts.push(conflictPayload(db, change, result));
             }
@@ -697,6 +707,34 @@ function appendRemoteLog(
   ).run(change.changeId, change.entity, change.recordUid, localId, change.op, deviceId);
 }
 
+function insertUserFromRemote(db: Database.Database, change: SyncChangePayload): number | null {
+  const row = change.row ?? {};
+  const username = String(row.username ?? '').trim();
+  const passwordHash = String(row.passwordHash ?? row.password_hash ?? '').trim();
+  const fullName = String(row.fullName ?? row.full_name ?? username).trim();
+  const phone = String(row.phone ?? '').trim() || null;
+  const phoneNormalized = String(row.phoneNormalized ?? row.phone_normalized ?? phone ?? '').trim() || null;
+  const roleId = Number(row.roleId ?? row.role_id ?? 0);
+  if (!username || !passwordHash || !Number.isFinite(roleId) || roleId <= 0) return null;
+  const roleExists = db.prepare(`SELECT id FROM roles WHERE id = ?`).get(roleId) as { id: number } | undefined;
+  if (!roleExists) return null;
+  const result = db
+    .prepare(
+      `INSERT INTO users (username, password_hash, role_id, full_name, phone, phone_normalized, is_active)
+       VALUES (?, ?, ?, ?, ?, ?, COALESCE(?, 1))`,
+    )
+    .run(
+      username,
+      passwordHash,
+      roleId,
+      fullName,
+      phone,
+      phoneNormalized,
+      row.isActive ?? row.is_active ?? 1,
+    );
+  return Number(result.lastInsertRowid);
+}
+
 function applyUserLinkOnly(
   db: Database.Database,
   change: SyncChangePayload,
@@ -717,9 +755,19 @@ function applyUserLinkOnly(
     | { id: number }
     | undefined;
   if (!local) {
-    recordConflict(db, 'users', change.recordUid, 'user-unlinked', { username }, change.row ?? null);
-    appendRemoteLog(db, change, deviceId, null);
-    return 'user-unlinked';
+    const insertedId = insertUserFromRemote(db, change);
+    if (insertedId == null) {
+      recordConflict(db, 'users', change.recordUid, 'user-unlinked', { username }, change.row ?? null);
+      appendRemoteLog(db, change, deviceId, null);
+      return 'user-unlinked';
+    }
+    db.prepare('INSERT OR IGNORE INTO sync_id_map (entity, local_id, record_uid) VALUES (?, ?, ?)').run(
+      'users',
+      insertedId,
+      change.recordUid,
+    );
+    appendRemoteLog(db, change, deviceId, insertedId);
+    return 'accepted';
   }
   const mappedUid = db
     .prepare(`SELECT record_uid AS recordUid FROM sync_id_map WHERE entity = 'users' AND local_id = ?`)
@@ -825,10 +873,13 @@ export function resolveConflict(
       ).run(newChangeId(), row.entity, row.record_uid, localId);
     }
   }
-  db.prepare(`UPDATE sync_conflicts SET resolved_at = datetime('now'), resolution = ? WHERE conflict_id = ?`).run(
-    resolution,
-    conflictId,
-  );
+  const reasonRow = db.prepare(`SELECT reason FROM sync_conflicts WHERE conflict_id = ?`).get(conflictId) as
+    | { reason: string }
+    | undefined;
+  db.prepare(
+    `UPDATE sync_conflicts SET resolved_at = datetime('now'), resolution = ?
+     WHERE resolved_at IS NULL AND entity = ? AND record_uid = ? AND reason = ?`,
+  ).run(resolution, row.entity, row.record_uid, reasonRow?.reason ?? '');
 }
 
 export function clinicSnapshot(

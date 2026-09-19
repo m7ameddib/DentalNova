@@ -51,6 +51,8 @@ test('secret detector flags nested deviceSecret keys', () => {
 });
 
 test('normalizeOnlineBaseUrl keeps http(s) origin and rejects credentials', () => {
+  assert.equal(normalizeOnlineBaseUrl('https://dental.dibnova.com'), 'https://dentalnova.dibnova.com');
+  assert.equal(normalizeOnlineBaseUrl('https://dental.dibnova.com/settings'), 'https://dentalnova.dibnova.com');
   assert.equal(normalizeOnlineBaseUrl('https://dentalnova.dibnova.com/setup'), 'https://dentalnova.dibnova.com');
   assert.equal(normalizeOnlineBaseUrl('http://127.0.0.1:4000/'), 'http://127.0.0.1:4000');
   assert.equal(normalizeOnlineBaseUrl('http://localhost:4000/'), 'http://localhost:4000');
