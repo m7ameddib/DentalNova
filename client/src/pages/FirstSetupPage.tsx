@@ -2,7 +2,10 @@ import { FormEvent, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link, useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Building2 } from 'lucide-react';
+import { ArrowLeft, Building2, Clock } from 'lucide-react';
+import { WhatsAppIcon } from '@/components/common/WhatsAppIcon';
+import { DIBNOVA_WHATSAPP_PHONE } from '@/constants/dibnova-contact';
+import { buildWhatsAppUrl } from '@/utils/whatsapp';
 import { BrandLogo } from '@/components/common/BrandLogo';
 import { installationApi } from '@/api/installation.api';
 import { useUiStore } from '@/store/ui.store';
@@ -18,8 +21,7 @@ export function FirstSetupPage() {
     queryFn: installationApi.status,
   });
   const isOnline = installStatus?.deploymentMode === 'online';
-  const needsInvite = Boolean(installStatus?.requiresInviteToken);
-  const [inviteToken, setInviteToken] = useState('');
+  const whatsappUrl = buildWhatsAppUrl(DIBNOVA_WHATSAPP_PHONE) ?? 'https://wa.me/96170793486';
   const [clinicName, setClinicName] = useState('');
   const [doctorName, setDoctorName] = useState('');
   const [clinicPhone, setClinicPhone] = useState('');
@@ -55,7 +57,6 @@ export function FirstSetupPage() {
         adminPhone: adminPhone.trim() || doctorPhone.trim(),
         adminPassword,
         address: address.trim() || undefined,
-        inviteToken: needsInvite ? inviteToken.trim() : undefined,
       });
       if (result.accessToken && result.user) {
         setSession(result.accessToken, result.user);
@@ -111,6 +112,18 @@ export function FirstSetupPage() {
         <p className="login-card__subtitle">
           {isOnline ? t('installation.setupSubtitleTrial') : t('installation.setupSubtitle')}
         </p>
+
+        {isOnline && (
+          <div className="subscription-status-card subscription-status-card--inline">
+            <div className="subscription-status-card__icon">
+              <Clock size={24} aria-hidden="true" />
+            </div>
+            <p className="subscription-status-card__message">{t('installation.pendingReviewNotice')}</p>
+            <a className="btn btn--whatsapp btn--small" href={whatsappUrl} target="_blank" rel="noreferrer">
+              <WhatsAppIcon size={16} /> {t('subscription.contactWhatsApp')}
+            </a>
+          </div>
+        )}
 
         <div className="setup-grid">
           <label className="form-field">
@@ -170,13 +183,6 @@ export function FirstSetupPage() {
             <span className="form-field__label">{t('installation.confirmPassword')}</span>
             <input type="password" value={adminPasswordConfirm} onChange={(e) => setAdminPasswordConfirm(e.target.value)} required minLength={8} autoComplete="new-password" />
           </label>
-          {needsInvite && (
-            <label className="form-field setup-grid__full">
-              <span className="form-field__label">{t('installation.inviteToken')}</span>
-              <input value={inviteToken} onChange={(e) => setInviteToken(e.target.value)} required autoComplete="off" />
-              <span className="form-field__hint muted">{t('installation.inviteTokenHint')}</span>
-            </label>
-          )}
         </div>
 
         {error && <div className="form-error-banner">{error}</div>}

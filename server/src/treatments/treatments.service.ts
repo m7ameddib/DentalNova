@@ -127,15 +127,17 @@ export class TreatmentsService {
       this.patientTreatmentsRepo.updateStatus(created.id, 'COMPLETED', currentUser.id);
     }
 
-    const treatmentDate = dto.treatmentDate ?? created.createdAt.slice(0, 10);
-    this.followUpsService.createClinicalFollowUpsFromTreatment(
-      dto.patientId,
-      created.id,
-      type,
-      treatmentDate,
-      currentUser.id,
-      followUpDaysFromType,
-    );
+    if (dto.status === 'COMPLETED') {
+      const completionDate = (created.completedAt ?? dto.treatmentDate ?? created.createdAt).slice(0, 10);
+      this.followUpsService.scheduleClinicalFollowUpsOnCompletion(
+        dto.patientId,
+        created.id,
+        type,
+        completionDate,
+        currentUser.id,
+        followUpDaysFromType,
+      );
+    }
     this.followUpsService.onPaymentChanged(dto.patientId);
 
     this.audit.log({
@@ -183,6 +185,21 @@ export class TreatmentsService {
 
     if (dto.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
       this.patientTreatmentsRepo.updateStatus(id, 'COMPLETED', currentUser.id);
+      const updatedRow = this.patientTreatmentsRepo.findById(id)!;
+      const followUpDays = [
+        updatedRow.followUp1Days ?? type.followUp1Days ?? type.followUpDays ?? null,
+        updatedRow.followUp2Days ?? type.followUp2Days ?? null,
+        updatedRow.followUp3Days ?? type.followUp3Days ?? null,
+      ];
+      const completionDate = (updatedRow.completedAt ?? updatedRow.treatmentDate ?? localTodayIso()).slice(0, 10);
+      this.followUpsService.scheduleClinicalFollowUpsOnCompletion(
+        existing.patientId,
+        id,
+        type,
+        completionDate,
+        currentUser.id,
+        followUpDays,
+      );
     }
 
     this.followUpsService.onPaymentChanged(existing.patientId);
@@ -241,6 +258,26 @@ export class TreatmentsService {
 
     const updated = this.patientTreatmentsRepo.updateStatus(id, dto.status, currentUser.id);
     if (!updated) throw new NotFoundException('Treatment entry not found');
+
+    if (dto.status === 'COMPLETED' && existing.status !== 'COMPLETED') {
+      const type = this.treatmentTypesRepo.findById(updated.treatmentTypeId);
+      if (type) {
+        const followUpDays = [
+          updated.followUp1Days ?? type.followUp1Days ?? type.followUpDays ?? null,
+          updated.followUp2Days ?? type.followUp2Days ?? null,
+          updated.followUp3Days ?? type.followUp3Days ?? null,
+        ];
+        const completionDate = (updated.completedAt ?? updated.treatmentDate ?? localTodayIso()).slice(0, 10);
+        this.followUpsService.scheduleClinicalFollowUpsOnCompletion(
+          updated.patientId,
+          id,
+          type,
+          completionDate,
+          currentUser.id,
+          followUpDays,
+        );
+      }
+    }
 
     this.followUpsService.onPaymentChanged(updated.patientId);
 

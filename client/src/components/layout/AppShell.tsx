@@ -1,6 +1,5 @@
 import { Outlet } from 'react-router-dom';
 import { TopNav } from './TopNav';
-import { BottomNav } from './BottomNav';
 import { SessionRefresh } from './SessionRefresh';
 import { PrintPortal } from '@/components/common/PrintPortal';
 
@@ -12,7 +11,6 @@ export function AppShell() {
       <main className="app-shell__content">
         <Outlet />
       </main>
-      <BottomNav />
       <PrintPortal />
     </div>
   );

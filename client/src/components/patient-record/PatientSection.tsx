@@ -10,7 +10,7 @@ import { Modal } from '@/components/common/Modal';
 import { PatientSearchBox } from '@/components/patient-record/PatientSearchBox';
 import { AreaPicker } from '@/components/patient-record/AreaPicker';
 import { PatientRecordCompactPrintable, PatientRecordPrintable } from '@/components/patient-record/PrintableTemplates';
-import { DmyDateField } from '@/components/common/DateField';
+import { DateField } from '@/components/common/DateField';
 import type { ToothTreatmentBadge } from '@/components/patient-record/odontogram/types';
 import { patientsApi, CreatePatientPayload, UpdatePatientPayload } from '@/api/patients.api';
 import { clinicalApi } from '@/api/clinical.api';
@@ -26,7 +26,7 @@ import { usePrintStore } from '@/store/print.store';
 import { useAuthStore } from '@/store/auth.store';
 import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { openWhatsApp } from '@/utils/whatsapp';
-import { calculateAge, formatDateDisplay } from '@/utils/date';
+import { calculateAge, formatDobDisplay } from '@/utils/date';
 import { getErrorMessage } from '@/utils/errors';
 import { getAreaTextForEdit, getPatientAreaDisplay, resolveAreaFields } from '@/utils/patientArea';
 import { loadRecentPatients, rememberRecentPatient } from '@/utils/recentPatients';
@@ -495,7 +495,7 @@ export function PatientSection({
 
             <div className="inline-form__row">
               <FormField label={t('patientRecord.patient.dob')} className="inline-form__col">
-                <DmyDateField
+                <DateField
                   value={dateOfBirth}
                   onChange={(next) => {
                     setDateOfBirth(next);
@@ -660,7 +660,7 @@ export function PatientSection({
             {p.dateOfBirth && (
               <div>
                 <dt>{t('patientRecord.patient.dob')}</dt>
-                <dd>{formatDateDisplay(p.dateOfBirth, language)}</dd>
+                <dd>{formatDobDisplay(p.dateOfBirth)}</dd>
               </div>
             )}
             {age != null && (

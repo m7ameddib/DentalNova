@@ -1,7 +1,10 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Plus, Printer, Trash2 } from 'lucide-react';
+import { ExpensesPrintable } from '@/components/expenses/ExpensesPrintable';
+import { usePrintStore } from '@/store/print.store';
+import { loadClinicPrintInfo } from '@/utils/clinicPrintInfo';
 import { expensesApi, UpdateExpensePayload } from '@/api/expenses.api';
 import { expenseCategoriesApi } from '@/api/expense-categories.api';
 import { paymentMethodsApi } from '@/api/settings.api';
@@ -32,6 +35,7 @@ function categoryLabel(categories: ExpenseCategoryEntity[], expense: ClinicExpen
 export function ClinicExpensesPage() {
   const { t } = useTranslation();
   const { language } = useUiStore();
+  const print = usePrintStore((s) => s.print);
   const queryClient = useQueryClient();
   const canManageExpenses = usePermission(PERMISSIONS.EXPENSES_MANAGE);
   const [period, setPeriod] = useState<PeriodOption>('month');
@@ -84,6 +88,24 @@ export function ClinicExpensesPage() {
 
   function methodLabel(code: string) {
     return paymentMethods.find((m) => m.code === code)?.label ?? code;
+  }
+
+  async function handlePrint() {
+    const clinic = await loadClinicPrintInfo();
+    const periodLabel = from === to ? from : `${from} — ${to}`;
+    print(
+      <ExpensesPrintable
+        expenses={expenses.map((e) => ({
+          ...e,
+          categoryLabel: categoryLabel(categories, e),
+          paymentMethod: methodLabel(e.paymentMethod),
+        }))}
+        periodLabel={periodLabel}
+        categoryTotals={categoryTotals.map(([label, totalCents]) => ({ label, totalCents }))}
+        clinic={clinic}
+        language={language}
+      />,
+    );
   }
 
   const invalidate = () => {
@@ -251,6 +273,9 @@ export function ClinicExpensesPage() {
           <p>{t('reports.expenses.pageHint')}</p>
         </div>
         <div className="ops-page-head-actions">
+          <button type="button" className="btn btn--ghost" onClick={() => void handlePrint()} disabled={expenses.length === 0}>
+            <Printer size={14} /> {t('common.print')}
+          </button>
           {canManageExpenses && (
             <button
               type="button"

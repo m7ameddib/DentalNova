@@ -31,6 +31,7 @@ import {
 import { AuthenticatedUser } from '../auth/auth.types';
 import { localTodayIso } from '../common/local-date.util';
 import { amountToCents, centsToAmount } from '../common/money.util';
+import { FollowUpsService } from '../follow-ups/follow-ups.service';
 
 @Injectable()
 export class LabCasesService {
@@ -47,6 +48,7 @@ export class LabCasesService {
     private readonly paymentMethodsRepo: PaymentMethodsRepository,
     private readonly db: DatabaseService,
     private readonly audit: AuditService,
+    private readonly followUpsService: FollowUpsService,
   ) {}
 
   listWorkTypes() {
@@ -198,6 +200,11 @@ export class LabCasesService {
     });
 
     this.recordUpdateHistory(existing.id, existing.patientId, prevStatus, updated!, user.id, dto);
+    if (dto.status === 'RECEIVED_FROM_LAB' && prevStatus !== 'RECEIVED_FROM_LAB') {
+      const label = `${updated!.labName} — ${updated!.workTypeCustom ?? updated!.workTypeCode}`;
+      const receivedDate = (dto.receivedDate ?? updated!.receivedDate ?? localTodayIso()).slice(0, 10);
+      this.followUpsService.createLabArrivalFollowUp(existing.patientId, label, receivedDate, user.id);
+    }
     return this.enrichFinancials(updated!);
   }
 

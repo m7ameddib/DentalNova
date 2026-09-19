@@ -132,6 +132,46 @@ export class PatientsRepository {
     return row.total;
   }
 
+  /** Patients with balance from completed treatments only (financial follow-ups). */
+  findOutstandingFromCompleted(): (Patient & { totalCostCents: number; totalPaidCents: number; remainingCents: number; latestCompletedAt: string | null })[] {
+    const rows = this.db.connection
+      .prepare(
+        `SELECT p.*,
+           COALESCE(t.cost_cents, 0) - COALESCE(d.discount_cents, 0) AS total_cost_cents,
+           COALESCE(pay.paid_cents, 0) AS total_paid_cents,
+           t.latest_completed_at AS latest_completed_at
+         FROM patients p
+         LEFT JOIN (
+           SELECT patient_id, SUM(final_amount_cents) AS cost_cents,
+                  MAX(COALESCE(completed_at, treatment_date, created_at)) AS latest_completed_at
+           FROM patient_treatments
+           WHERE status = 'COMPLETED'
+           GROUP BY patient_id
+         ) t ON t.patient_id = p.id
+         LEFT JOIN (
+           SELECT patient_id, SUM(amount_cents) AS discount_cents
+           FROM account_discounts
+           WHERE COALESCE(status, 'ACTIVE') != 'VOID'
+           GROUP BY patient_id
+         ) d ON d.patient_id = p.id
+         LEFT JOIN (
+           SELECT patient_id, SUM(amount_cents) AS paid_cents
+           FROM payments
+           WHERE COALESCE(status, 'ACTIVE') != 'VOID'
+           GROUP BY patient_id
+         ) pay ON pay.patient_id = p.id
+         WHERE p.archived_at IS NULL
+           AND COALESCE(t.cost_cents, 0) > 0
+           AND (COALESCE(t.cost_cents, 0) - COALESCE(d.discount_cents, 0) - COALESCE(pay.paid_cents, 0)) > 0
+         ORDER BY (COALESCE(t.cost_cents, 0) - COALESCE(d.discount_cents, 0) - COALESCE(pay.paid_cents, 0)) DESC`,
+      )
+      .all() as Record<string, unknown>[];
+    return rows.map((row) => {
+      const mapped = toCamel<Patient & { totalCostCents: number; totalPaidCents: number; latestCompletedAt: string | null }>(row);
+      return { ...mapped, remainingCents: remainingCents(mapped.totalCostCents, mapped.totalPaidCents) };
+    });
+  }
+
   /** Patients with a positive remaining balance (Reports > Outstanding Balance drill-down). */
   findOutstanding(): (Patient & { totalCostCents: number; totalPaidCents: number; remainingCents: number })[] {
     const rows = this.db.connection

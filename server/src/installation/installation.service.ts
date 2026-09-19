@@ -265,18 +265,6 @@ export class InstallationService {
     if (signupMode === 'disabled') {
       throw new ConflictException('Online clinic signup is disabled. Contact DibNova support.');
     }
-    if (signupMode === 'invite') {
-      const token = dto.inviteToken?.trim();
-      if (!token) {
-        throw new BadRequestException('A clinic invite token is required.');
-      }
-      try {
-        this.platform.consumeSignupInvite(token);
-      } catch {
-        throw new BadRequestException('Invalid or expired invite token.');
-      }
-    }
-
     const username = dto.adminUsername.trim();
     const phoneNormalized = normalizePhone(dto.adminPhone);
 

@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { AdminPageHeader } from '@/components/admin/AdminPageHeader';
+import { AdminClinicScopeBanner } from '@/components/admin/AdminClinicScopeBanner';
 import { useAdminDashboard } from '@/components/admin/AdminDashboardContext';
 import { ADMIN_PATHS, formatAdminBytes } from '@/components/admin/admin-utils';
 
@@ -9,6 +10,7 @@ export function AdminOperationsPage() {
 
   return (
     <div className="admin-page">
+      <AdminClinicScopeBanner clinicName={selectedClinic?.clinicName ?? clinicOps?.clinicName} />
       <AdminPageHeader
         title={t('dibnovaAdmin.opsTitle')}
         description={t('dibnovaAdmin.opsHint')}

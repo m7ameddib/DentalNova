@@ -24,6 +24,12 @@ export interface PublicPeerInfo {
 
 export const INVALID_ONLINE_URL = 'INVALID_ONLINE_URL';
 
+/** Legacy/marketing hostnames that resolve to the canonical online clinic origin. */
+const ONLINE_CLINIC_ORIGIN_ALIASES: Record<string, string> = {
+  'https://dental.dibnova.com': 'https://dentalnova.dibnova.com',
+  'http://dental.dibnova.com': 'https://dentalnova.dibnova.com',
+};
+
 const SECRET_KEYS = new Set([
   'deviceSecret',
   'devicesecret',
@@ -60,7 +66,8 @@ export function normalizeOnlineBaseUrl(raw: string): string {
   if (!parsed.hostname) {
     throw new Error(INVALID_ONLINE_URL);
   }
-  return parsed.origin;
+  const origin = parsed.origin;
+  return ONLINE_CLINIC_ORIGIN_ALIASES[origin] ?? origin;
 }
 
 /** Doctor-facing connect/status payloads must never include device credentials. */

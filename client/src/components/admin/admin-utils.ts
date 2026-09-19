@@ -69,4 +69,5 @@ export const CLINIC_SCOPED_PATHS = new Set<string>([
   ADMIN_PATHS.operations,
   ADMIN_PATHS.history,
   ADMIN_PATHS.audit,
+  ADMIN_PATHS.ai,
 ]);

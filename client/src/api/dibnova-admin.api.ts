@@ -303,6 +303,36 @@ export const dibnovaAdminApi = {
       .get<AdminAiUsage[]>('/dibnova-admin/ai-usage', { params: { clinicId } })
       .then((r) => r.data),
 
+  aiSettings: () =>
+    adminClient()
+      .get<AdminAiSettings>('/dibnova-admin/ai-settings')
+      .then((r) => r.data),
+
+  updateAiSettings: (payload: Partial<AdminAiSettings>) =>
+    adminClient()
+      .post<AdminAiSettings>('/dibnova-admin/ai-settings', payload)
+      .then((r) => r.data),
+
+  clinicAiCredits: (clinicId: string) =>
+    adminClient()
+      .get<AdminClinicAiCredits>(`/dibnova-admin/clinics/${clinicId}/ai-credits`)
+      .then((r) => r.data),
+
+  addClinicAiCredits: (clinicId: string, credits: number) =>
+    adminClient()
+      .post<AdminClinicAiCredits>(`/dibnova-admin/clinics/${clinicId}/ai-credits/add`, { credits })
+      .then((r) => r.data),
+
+  applyAiRenewalPackage: (clinicId: string) =>
+    adminClient()
+      .post<AdminClinicAiCredits>(`/dibnova-admin/clinics/${clinicId}/ai-credits/renewal-package`)
+      .then((r) => r.data),
+
+  setClinicAiEnabled: (clinicId: string, enabled: boolean) =>
+    adminClient()
+      .post<AdminClinicAiCredits>(`/dibnova-admin/clinics/${clinicId}/ai-enabled`, { enabled })
+      .then((r) => r.data),
+
   revokeOfflineLicenseSlot: (id: number) =>
     adminClient()
       .post<{ id: number; status: string }>(`/dibnova-admin/offline-license/slots/${id}/revoke`)
@@ -343,9 +373,31 @@ export interface AdminClinicOps {
 
 export interface AdminAiUsage {
   clinicId: string | null;
+  clinicName?: string | null;
   calls: number;
   durationMs: number;
   imageCalls: number;
+  creditsUsed?: number;
+  estimatedCostUsd?: number;
+  allowance?: number;
+  used?: number;
+  balance?: number;
+  aiEnabled?: boolean;
+  geminiCostUsd?: number;
+}
+
+export interface AdminAiSettings {
+  subscriptionAiCredits: number;
+  renewalPackageCredits: number;
+  renewalPackagePriceCents: number;
+}
+
+export interface AdminClinicAiCredits {
+  aiEnabled: boolean;
+  allowance: number;
+  used: number;
+  balance: number;
+  geminiCostUsd: number;
 }
 
 export interface AdminAuditEvent {

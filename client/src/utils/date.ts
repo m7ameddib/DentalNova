@@ -100,6 +100,14 @@ export function formatDateDisplay(dateIso: string, locale: string): string {
   }
 }
 
+/** Patient date of birth display — always DD/MM/YYYY regardless of UI locale. */
+export function formatDobDisplay(dateIso: string): string {
+  if (!dateIso) return '';
+  const [year, month, day] = dateIso.split('-');
+  if (!year || !month || !day) return dateIso;
+  return `${day.padStart(2, '0')}/${month.padStart(2, '0')}/${year}`;
+}
+
 /** Formats a full ISO timestamp (e.g. a treatment's createdAt) for display. */
 export function formatDateTimeDisplay(isoTimestamp: string, locale: string): string {
   if (!isoTimestamp) return '';

@@ -39,7 +39,7 @@ export function ClinicSyncSection({ mode }: { mode: 'online' | 'offline' }) {
     queryKey: ['clinic-sync-conflicts'],
     queryFn: syncApi.conflicts,
     refetchInterval: 20_000,
-    enabled: (status?.conflicts ?? 0) > 0 || mode === 'offline',
+    enabled: (status?.conflicts ?? 0) > 0 || status?.state === 'CONFLICT' || mode === 'offline',
   });
 
   function rememberError(err: unknown | null) {
@@ -55,6 +55,13 @@ export function ClinicSyncSection({ mode }: { mode: 'online' | 'offline' }) {
   }
 
   async function refreshSync() {
+    try {
+      if (mode === 'offline' && status?.paired) {
+        await syncApi.syncNow();
+      }
+    } catch {
+      /* status refetch below still runs */
+    }
     await queryClient.invalidateQueries({ queryKey: ['clinic-sync-status'] });
     await queryClient.invalidateQueries({ queryKey: ['clinic-sync-conflicts'] });
     await refetch();

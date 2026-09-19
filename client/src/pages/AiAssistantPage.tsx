@@ -211,7 +211,7 @@ export function AiAssistantPage() {
   const isLoading = chatMutation.isPending || executeMutation.isPending;
   const isFresh = messages.length <= 1 && !activeConfirmation;
   const aiUi = resolveAiUiState({ fallbackOffline, configured: status?.configured });
-  const composerEnabled = isAiComposerEnabled(aiUi, isLoading);
+  const composerEnabled = isAiComposerEnabled(aiUi, isLoading) && status?.aiBlockedReason !== 'NO_CREDITS' && status?.aiBlockedReason !== 'AI_DISABLED';
 
   function handleSend() {
     if (!input.trim() && !pendingImage) return;
@@ -248,19 +248,34 @@ export function AiAssistantPage() {
           <h1>{t('aiAssistant.title')}</h1>
           <p>{t('aiAssistant.subtitle')}</p>
         </div>
-        {(aiUi === 'offline' || status) && (
-          <span className={`ops-status-chip${aiUi === 'ready' ? ' on' : ''}`}>
-            {aiUi === 'offline'
-              ? t('aiAssistant.statusOffline')
-              : aiUi === 'ready'
-                ? t('aiAssistant.statusOn')
-                : t('aiAssistant.statusNotConfigured')}
-          </span>
-        )}
+        <div className="ops-page-head-actions">
+          {status?.aiCredits && (
+            <div className="ai-credits-panel" role="status">
+              <span>{t('aiAssistant.creditsUsed')}: {status.aiCredits.used}</span>
+              <span>{t('aiAssistant.creditsRemaining')}: {status.aiCredits.balance}</span>
+              <span>{t('aiAssistant.creditsAllowance')}: {status.aiCredits.allowance}</span>
+            </div>
+          )}
+          {(aiUi === 'offline' || status) && (
+            <span className={`ops-status-chip${aiUi === 'ready' ? ' on' : ''}`}>
+              {aiUi === 'offline'
+                ? t('aiAssistant.statusOffline')
+                : aiUi === 'ready'
+                  ? t('aiAssistant.statusOn')
+                  : t('aiAssistant.statusNotConfigured')}
+            </span>
+          )}
+        </div>
       </header>
 
       {aiUi === 'offline' && <div className="ops-banner is-warn">{t('aiAssistant.unavailableOffline')}</div>}
       {aiUi === 'not-configured' && <div className="ops-banner is-warn">{t('aiAssistant.configureHint')}</div>}
+      {status?.aiBlockedReason === 'NO_CREDITS' && (
+        <div className="ops-banner is-warn">{t('aiAssistant.creditsExhausted')}</div>
+      )}
+      {status?.aiBlockedReason === 'AI_DISABLED' && (
+        <div className="ops-banner is-warn">{t('aiAssistant.configureHint')}</div>
+      )}
 
       <div className="ops-ai-layout">
         <div className="ops-ai-thread">

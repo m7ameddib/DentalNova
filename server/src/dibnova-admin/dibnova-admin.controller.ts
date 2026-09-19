@@ -260,6 +260,43 @@ export class DibNovaAdminController {
     return this.platform.isEnabled() ? this.platform.listAiUsage(clinicId) : [];
   }
 
+  @Get('ai-settings')
+  aiSettings() {
+    return this.platform.isEnabled() ? this.platform.getAiSettings() : null;
+  }
+
+  @Post('ai-settings')
+  updateAiSettings(
+    @Body()
+    dto: {
+      subscriptionAiCredits?: number;
+      renewalPackageCredits?: number;
+      renewalPackagePriceCents?: number;
+    },
+  ) {
+    return this.platform.updateAiSettings(dto);
+  }
+
+  @Get('clinics/:clinicId/ai-credits')
+  clinicAiCredits(@Param('clinicId') clinicId: string) {
+    return this.platform.getClinicAiCredits(clinicId);
+  }
+
+  @Post('clinics/:clinicId/ai-credits/add')
+  addClinicAiCredits(@Param('clinicId') clinicId: string, @Body() dto: { credits: number }) {
+    return this.platform.addAiCredits(clinicId, dto.credits, true);
+  }
+
+  @Post('clinics/:clinicId/ai-credits/renewal-package')
+  applyAiRenewalPackage(@Param('clinicId') clinicId: string) {
+    return this.platform.applyAiRenewalPackage(clinicId);
+  }
+
+  @Post('clinics/:clinicId/ai-enabled')
+  setClinicAiEnabled(@Param('clinicId') clinicId: string, @Body() dto: { enabled: boolean }) {
+    return this.platform.setAiEnabled(clinicId, dto.enabled);
+  }
+
   @Get('clinics/:clinicId/users')
   listClinicUsers(@Param('clinicId') clinicId: string) {
     if (!this.platform.isEnabled()) return [];

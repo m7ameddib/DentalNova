@@ -75,7 +75,7 @@ export class FollowUpsService {
 
   syncFinancialFollowUps() {
 
-    const outstanding = this.patientsRepo.findOutstanding();
+    const outstanding = this.patientsRepo.findOutstandingFromCompleted();
 
     const outstandingIds = new Set(outstanding.map((p) => p.id));
 
@@ -87,6 +87,8 @@ export class FollowUpsService {
 
       if (!existing) {
 
+        const anchorDate = (patient.latestCompletedAt ?? todayIso()).slice(0, 10);
+
         this.followUpsRepo.create({
 
           patientId: patient.id,
@@ -95,7 +97,7 @@ export class FollowUpsService {
 
           reason: 'Outstanding balance',
 
-          followUpDate: todayIso(),
+          followUpDate: anchorDate,
 
           details: null,
 
@@ -822,6 +824,49 @@ export class FollowUpsService {
 
     this.syncFinancialFollowUps();
 
+  }
+
+  /** Schedule clinical follow-ups when a treatment becomes COMPLETED (not at creation). */
+  scheduleClinicalFollowUpsOnCompletion(
+    patientId: number,
+    patientTreatmentId: number,
+    treatmentType: TreatmentType,
+    completionDate: string,
+    userId: number,
+    followUpDays: (number | null)[],
+  ) {
+    const existing = this.followUpsRepo.findByTreatmentId(patientTreatmentId);
+    if (existing.length > 0) return;
+    this.createClinicalFollowUpsFromTreatment(
+      patientId,
+      patientTreatmentId,
+      treatmentType,
+      completionDate,
+      userId,
+      followUpDays,
+    );
+  }
+
+  /** Reminder when a lab case is received back from the laboratory. */
+  createLabArrivalFollowUp(
+    patientId: number,
+    labCaseLabel: string,
+    receivedDate: string,
+    userId: number,
+  ) {
+    const reason = `Lab case received: ${labCaseLabel}`;
+    const active = this.followUpsRepo.findActiveByPatient(patientId).filter(
+      (fu) => fu.type === 'CLINICAL' && fu.reason === reason,
+    );
+    if (active.length > 0) return;
+    this.followUpsRepo.create({
+      patientId,
+      type: 'CLINICAL',
+      reason,
+      followUpDate: receivedDate.slice(0, 10),
+      details: labCaseLabel,
+      createdById: userId,
+    });
   }
 
 }
